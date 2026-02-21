@@ -51,7 +51,8 @@ _TOOL_DESCRIPTION_HINTS = {
     ),
     "play_music":      (
         " Use ONLY to play a specific song, artist, or playlist. "
-        "Requires 'song' (string, the name of the song or playlist)."
+        "Requires 'song' (string: set this to exactly the genre/song/playlist phrase the user named, "
+        "e.g. 'jazz', 'classical music', 'lo-fi beats', 'summer hits', 'Bohemian Rhapsody')."
     ),
     "get_weather":     (
         " Use ONLY to get the current weather or forecast for a city. "
@@ -59,11 +60,15 @@ _TOOL_DESCRIPTION_HINTS = {
     ),
 }
 
-# Action verbs that strongly signal a distinct tool call is needed
-_ACTION_VERB_PATTERNS = re.compile(
-    r'\b(set|send|text|message|play|check|get|find|look up|remind|create|wake|search|call)\b',
-    re.IGNORECASE
-)
+# Imperative action verbs that appear at the START of a clause (not as nouns)
+# Split by connectors/punctuation then check the first word of each clause
+_CLAUSE_SPLIT = re.compile(r'[,;]|\b(and|also|then|plus)\b', re.IGNORECASE)
+
+# These are tools' primary action verbs — used to detect clauses that map to a tool call
+_TOOL_ACTION_VERBS = {
+    "set", "send", "text", "play", "check", "get", "find", "look",
+    "remind", "create", "wake", "search", "call",
+}
 
 
 def _enrich_tools(tools):
@@ -78,14 +83,22 @@ def _enrich_tools(tools):
 
 
 def _count_actions(messages) -> int:
-    """Count distinct actions by matching action verbs — more robust than connector counting."""
+    """Count distinct actions by splitting on connectors and checking each clause for an action verb."""
     text = " ".join(m["content"] for m in messages if m["role"] == "user")
-    matches = _ACTION_VERB_PATTERNS.findall(text)
-    # Deduplicate consecutive identical verbs, count unique action verb occurrences
-    unique_actions = len(set(m.lower() for m in matches))
-    # Also check for classic multi-action connectors as a fallback signal
-    connectors = len(re.findall(r'\b(and|also|then|plus)\b', text, re.IGNORECASE))
-    return max(unique_actions, connectors + 1, 1)
+    # Split on connectors and punctuation to get individual clauses
+    clauses = [c.strip() for c in _CLAUSE_SPLIT.split(text) if c and c.strip()]
+    # Filter: count only clauses that start with (or contain early) a recognised action verb
+    action_count = 0
+    for clause in clauses:
+        words = clause.lower().split()
+        if not words:
+            continue
+        # Check if first 1-2 words are an action verb
+        if words[0] in _TOOL_ACTION_VERBS:
+            action_count += 1
+        elif len(words) > 1 and f"{words[0]} {words[1]}" in _TOOL_ACTION_VERBS:
+            action_count += 1
+    return max(action_count, 1)
 
 
 def _expected_call_count(messages, tools) -> int:
@@ -104,7 +117,17 @@ def _build_system_prompt(messages, tools) -> str:
         "You are a precise function-calling assistant. "
         "You MUST call functions using ONLY the tools provided — never invent tool names. "
         "Use exact argument types (string, integer) as defined in each tool's schema. "
-        "Extract argument values verbatim from the user's message where possible."
+        "For string arguments: extract the value verbatim from the user's message. "
+        "Strip only leading articles ('the', 'a', 'an') that immediately precede the core noun phrase, "
+        "and strip trailing sentence punctuation (periods, commas). "
+        "Preserve all other words including 'the' when it is part of the core phrase. "
+        "For the 'song' parameter: strip a trailing standalone genre word 'music' only when it directly "
+        "follows a genre name adjective (e.g. 'jazz music' → song='jazz'), "
+        "but keep 'music' when it is part of a full title (e.g. 'classical music' → song='classical music'). "
+        "Examples: 'about the meeting' → title='meeting'; "
+        "'to call the dentist' → title='call the dentist'; "
+        "'saying I\\'ll be late.' → message='I\\'ll be late'; "
+        "'some jazz music' → song='jazz'; 'classical music' → song='classical music'."
     )
 
     if expected_calls >= 2:
@@ -167,8 +190,11 @@ def generate_cactus(messages, tools):
 
 
 def generate_cloud(messages, tools):
-    """Run function calling via Gemini Cloud API."""
+    """Run function calling via Gemini Cloud API with multi-call retry."""
     client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+
+    # Enrich tool descriptions with clarifying hints (same as Cactus path)
+    enriched_tools = _enrich_tools(tools)
 
     gemini_tools = [
         types.Tool(function_declarations=[
@@ -184,34 +210,83 @@ def generate_cloud(messages, tools):
                     required=t["parameters"].get("required", []),
                 ),
             )
-            for t in tools
+            for t in enriched_tools
         ])
     ]
 
-    contents = [m["content"] for m in messages if m["role"] == "user"]
+    expected_calls = _expected_call_count(messages, tools)
+
+    # Base instruction for argument extraction quality
+    arg_instruction = (
+        "For string arguments: extract the value verbatim from the user's message. "
+        "Strip only a leading article ('the', 'a', 'an') that immediately precedes the core noun, "
+        "and strip trailing sentence punctuation (periods, commas). "
+        "Preserve 'the' when it is part of the core phrase (e.g. 'call the dentist' stays as-is). "
+        "Examples: 'about the meeting' → title='meeting'; "
+        "'to call the dentist' → title='call the dentist'; "
+        "'saying I\\'ll be late.' → message='I\\'ll be late'."
+    )
+
+    # Build contents: include a system-like instruction + all user messages
+    user_text = " ".join(m["content"] for m in messages if m["role"] == "user")
+    if expected_calls >= 2:
+        instruction = (
+            f"The user is asking you to perform {expected_calls} separate actions. "
+            f"You MUST call ALL {expected_calls} required functions in your response. "
+            f"Do not skip any action. {arg_instruction}"
+        )
+        contents = [instruction + "\n\n" + user_text]
+    else:
+        contents = [arg_instruction + "\n\n" + user_text]
 
     start_time = time.time()
 
-    try:
-        gemini_response = client.models.generate_content(
+    # System instruction for Gemini (passed separately for best compliance)
+    system_prompt = _build_system_prompt(messages, tools)
+
+    def _call_gemini(contents_in):
+        return client.models.generate_content(
             model="gemini-2.5-flash",
-            contents=contents,
-            config=types.GenerateContentConfig(tools=gemini_tools),
+            contents=contents_in,
+            config=types.GenerateContentConfig(
+                tools=gemini_tools,
+                system_instruction=system_prompt,
+            ),
         )
+
+    def _extract_calls(response):
+        calls = []
+        for candidate in response.candidates:
+            for part in candidate.content.parts:
+                if part.function_call:
+                    calls.append({
+                        "name": part.function_call.name,
+                        "arguments": dict(part.function_call.args),
+                    })
+        return calls
+
+    try:
+        response = _call_gemini(contents)
+        function_calls = _extract_calls(response)
+
+        # Retry once if we got fewer calls than expected for multi-action queries
+        if expected_calls >= 2 and len(function_calls) < expected_calls:
+            retry_instruction = (
+                f"You must call EXACTLY {expected_calls} functions for this request. "
+                f"You only called {len(function_calls)} — call the remaining ones too. "
+                "Request: " + user_text
+            )
+            retry_response = _call_gemini([retry_instruction])
+            retry_calls = _extract_calls(retry_response)
+            # Use retry result if it returned more calls
+            if len(retry_calls) > len(function_calls):
+                function_calls = retry_calls
+
     except Exception as e:
         print(f"WARNING: Gemini API call failed: {e}", file=sys.stderr)
         return {"function_calls": [], "total_time_ms": (time.time() - start_time) * 1000}
 
     total_time_ms = (time.time() - start_time) * 1000
-
-    function_calls = []
-    for candidate in gemini_response.candidates:
-        for part in candidate.content.parts:
-            if part.function_call:
-                function_calls.append({
-                    "name": part.function_call.name,
-                    "arguments": dict(part.function_call.args),
-                })
 
     return {
         "function_calls": function_calls,
