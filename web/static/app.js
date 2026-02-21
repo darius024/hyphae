@@ -12,61 +12,197 @@ let isRecording = false;
 let mediaRecorder = null;
 let isBusy = false;
 
-const HISTORY_KEY = "hyphae_chat_history";
+// ── Multi-chat state ────────────────────────────────────────────────
+const CHATS_KEY = "hyphae_chats";
+const ACTIVE_CHAT_KEY = "hyphae_active_chat";
+const OLD_HISTORY_KEY = "hyphae_chat_history";
 
-function saveHistory() {
+let activeChatId = null;
+let chats = [];
+
+function generateChatId() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+const WELCOME_HTML = `<div class="message assistant">
+    <div class="bubble">
+        <strong>Welcome back, researcher.</strong> Your documents are loaded and ready. Ask questions,
+        search your corpus, compare papers, or generate hypotheses.
+        <span class="privacy-note">Confidential data stays on-device — cloud is only used when you need external resources.</span>
+    </div>
+</div>`;
+
+function loadChatsFromStorage() {
     try {
-        const msgs = [];
-        messagesEl.querySelectorAll(".message").forEach(el => {
-            if (el.id === "thinking" || el.classList.contains("tool-details")) return;
-            const role = el.classList.contains("user") ? "user" : "assistant";
-            const bubble = el.querySelector(".bubble");
-            if (!bubble) return;
-            const meta = {};
-            const routeBadge = el.querySelector(".badge.local, .badge.cloud");
-            const confBadge = el.querySelector(".badge.conf-high, .badge.conf-med, .badge.conf-low");
-            const metaSpan = el.querySelector(".meta span:last-child");
-            if (routeBadge) meta.source = routeBadge.classList.contains("local") ? "on-device" : "cloud";
-            if (metaSpan) meta.routing_ms = metaSpan.textContent.replace("ms", "");
-            if (confBadge) {
-                if (confBadge.classList.contains("conf-high")) meta.confidence = 1;
-                else if (confBadge.classList.contains("conf-med")) meta.confidence = 0.5;
-                else meta.confidence = 0.1;
+        const raw = localStorage.getItem(CHATS_KEY);
+        chats = raw ? JSON.parse(raw) : [];
+    } catch { chats = []; }
+
+    if (!chats.length) {
+        try {
+            const old = localStorage.getItem(OLD_HISTORY_KEY);
+            if (old) {
+                const msgs = JSON.parse(old);
+                if (msgs.length) {
+                    const first = msgs.find(m => m.role === "user");
+                    const title = first ? first.text.slice(0, 40) : "Previous chat";
+                    chats.push({ id: generateChatId(), title, createdAt: Date.now(), messages: msgs });
+                }
+                localStorage.removeItem(OLD_HISTORY_KEY);
             }
-            msgs.push({ role, text: bubble.textContent, html: bubble.innerHTML, meta: Object.keys(meta).length ? meta : null });
-        });
-        localStorage.setItem(HISTORY_KEY, JSON.stringify(msgs));
-    } catch {}
+        } catch {}
+    }
+
+    if (!chats.length) {
+        chats.push({ id: generateChatId(), title: "New chat", createdAt: Date.now(), messages: [] });
+    }
+
+    activeChatId = localStorage.getItem(ACTIVE_CHAT_KEY) || chats[0].id;
+    if (!chats.find(c => c.id === activeChatId)) activeChatId = chats[0].id;
+
+    saveChats();
+    renderChatTabs();
+    renderActiveChat();
 }
 
-function loadHistory() {
+function saveChats() {
     try {
-        const raw = localStorage.getItem(HISTORY_KEY);
-        if (!raw) return;
-        const msgs = JSON.parse(raw);
-        if (!msgs.length) return;
-        messagesEl.innerHTML = "";
-        for (const m of msgs) {
-            const div = document.createElement("div");
-            div.className = `message ${m.role}`;
-            let html = `<div class="bubble">${m.html || escapeHtml(m.text)}</div>`;
-            html += buildMetaHtml(m.meta);
-            div.innerHTML = html;
-            messagesEl.appendChild(div);
-        }
-        scrollToBottom();
+        localStorage.setItem(CHATS_KEY, JSON.stringify(chats));
+        localStorage.setItem(ACTIVE_CHAT_KEY, activeChatId);
     } catch {}
 }
 
-function clearHistory() {
-    localStorage.removeItem(HISTORY_KEY);
-    messagesEl.innerHTML = `<div class="message assistant">
-        <div class="bubble">
-            <strong>Welcome back, researcher.</strong> Your documents are loaded and ready. Ask questions,
-            search your corpus, compare papers, or generate hypotheses.
-            <span class="privacy-note">Confidential data stays on-device — cloud is only used when you need external resources.</span>
+function getActiveChat() {
+    return chats.find(c => c.id === activeChatId);
+}
+
+function saveActiveMessages() {
+    const chat = getActiveChat();
+    if (!chat) return;
+
+    const msgs = [];
+    messagesEl.querySelectorAll(".message").forEach(el => {
+        if (el.id === "thinking" || el.classList.contains("tool-details")) return;
+        const role = el.classList.contains("user") ? "user" : "assistant";
+        const bubble = el.querySelector(".bubble");
+        if (!bubble) return;
+        const meta = {};
+        const routeBadge = el.querySelector(".badge.local, .badge.cloud");
+        const confBadge = el.querySelector(".badge.conf-high, .badge.conf-med, .badge.conf-low");
+        const metaSpan = el.querySelector(".meta span:last-child");
+        if (routeBadge) meta.source = routeBadge.classList.contains("local") ? "on-device" : "cloud";
+        if (metaSpan) meta.routing_ms = metaSpan.textContent.replace("ms", "");
+        if (confBadge) {
+            if (confBadge.classList.contains("conf-high")) meta.confidence = 1;
+            else if (confBadge.classList.contains("conf-med")) meta.confidence = 0.5;
+            else meta.confidence = 0.1;
+        }
+        msgs.push({ role, text: bubble.textContent, html: bubble.innerHTML, meta: Object.keys(meta).length ? meta : null });
+    });
+
+    chat.messages = msgs;
+
+    if (chat.title === "New chat") {
+        const first = msgs.find(m => m.role === "user");
+        if (first) chat.title = first.text.slice(0, 40) + (first.text.length > 40 ? "…" : "");
+    }
+
+    saveChats();
+    renderChatTabs();
+}
+
+function renderActiveChat() {
+    const chat = getActiveChat();
+    if (!chat || !chat.messages.length) {
+        messagesEl.innerHTML = WELCOME_HTML;
+        scrollToBottom();
+        return;
+    }
+    messagesEl.innerHTML = "";
+    for (const m of chat.messages) {
+        const div = document.createElement("div");
+        div.className = `message ${m.role}`;
+        let html = `<div class="bubble">${m.html || escapeHtml(m.text)}</div>`;
+        html += buildMetaHtml(m.meta);
+        div.innerHTML = html;
+        messagesEl.appendChild(div);
+    }
+    scrollToBottom();
+}
+
+function createNewChat() {
+    saveActiveMessages();
+    const chat = { id: generateChatId(), title: "New chat", createdAt: Date.now(), messages: [] };
+    chats.unshift(chat);
+    activeChatId = chat.id;
+    saveChats();
+    renderChatTabs();
+    renderActiveChat();
+    queryInput.focus();
+}
+
+function switchChat(id) {
+    if (id === activeChatId) return;
+    saveActiveMessages();
+    activeChatId = id;
+    saveChats();
+    renderChatTabs();
+    renderActiveChat();
+}
+
+function deleteChat(id) {
+    const idx = chats.findIndex(c => c.id === id);
+    if (idx === -1) return;
+    chats.splice(idx, 1);
+    if (!chats.length) {
+        chats.push({ id: generateChatId(), title: "New chat", createdAt: Date.now(), messages: [] });
+    }
+    if (activeChatId === id) {
+        activeChatId = chats[0].id;
+        renderActiveChat();
+    }
+    saveChats();
+    renderChatTabs();
+}
+
+function clearActiveChat() {
+    const chat = getActiveChat();
+    if (!chat) return;
+    chat.messages = [];
+    chat.title = "New chat";
+    saveChats();
+    renderChatTabs();
+    renderActiveChat();
+}
+
+function renderChatTabs() {
+    const container = document.getElementById("chat-tabs");
+    if (!container) return;
+
+    container.innerHTML = chats.map(c => `
+        <div class="chat-tab${c.id === activeChatId ? " active" : ""}" data-id="${c.id}">
+            <svg class="chat-tab-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <span class="chat-tab-title">${escapeHtml(c.title)}</span>
+            <button class="chat-tab-close" data-id="${c.id}" title="Delete chat">&times;</button>
         </div>
-    </div>`;
+    `).join("");
+
+    container.querySelectorAll(".chat-tab").forEach(el => {
+        el.addEventListener("click", (e) => {
+            if (e.target.classList.contains("chat-tab-close")) return;
+            switchChat(el.dataset.id);
+        });
+    });
+
+    container.querySelectorAll(".chat-tab-close").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            deleteChat(btn.dataset.id);
+        });
+    });
+
+    const active = container.querySelector(".chat-tab.active");
+    if (active) active.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
 }
 
 function setBusy(busy) {
@@ -132,7 +268,7 @@ function addMessage(role, content, meta) {
     div.innerHTML = html;
     messagesEl.appendChild(div);
     scrollToBottom();
-    saveHistory();
+    saveActiveMessages();
     return div;
 }
 
@@ -684,7 +820,8 @@ uploadBtn.addEventListener("drop", (e) => {
     if (e.dataTransfer.files.length > 0) uploadFiles(e.dataTransfer.files);
 });
 
-document.getElementById("clear-btn").addEventListener("click", clearHistory);
+document.getElementById("clear-btn").addEventListener("click", clearActiveChat);
+document.getElementById("chat-new-btn").addEventListener("click", createNewChat);
 
 // ── Route prediction indicator ──────────────────────────────────────
 
@@ -876,7 +1013,7 @@ menuBtn.addEventListener("click", toggleSidebar);
 sidebarOverlay.addEventListener("click", toggleSidebar);
 
 // ── Init ────────────────────────────────────────────────────────────
-loadHistory();
+loadChatsFromStorage();
 loadDocuments();
 loadTools();
 loadNotebooks();
