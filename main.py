@@ -4,14 +4,24 @@ sys.path.insert(0, "cactus/python/src")
 functiongemma_path = "cactus/weights/functiongemma-270m-it"
 
 import json, os, time
-from cactus import cactus_init, cactus_complete, cactus_destroy
+from cactus import cactus_init, cactus_complete, cactus_destroy, cactus_reset
 from google import genai
 from google.genai import types
+
+_cactus_model = None
+
+
+def _get_cactus_model():
+    global _cactus_model
+    if _cactus_model is None:
+        _cactus_model = cactus_init(functiongemma_path)
+    return _cactus_model
 
 
 def generate_cactus(messages, tools):
     """Run function calling on-device via FunctionGemma + Cactus."""
-    model = cactus_init(functiongemma_path)
+    model = _get_cactus_model()
+    cactus_reset(model)
 
     cactus_tools = [{
         "type": "function",
@@ -26,8 +36,6 @@ def generate_cactus(messages, tools):
         max_tokens=256,
         stop_sequences=["<|im_end|>", "<end_of_turn>"],
     )
-
-    cactus_destroy(model)
 
     try:
         raw = json.loads(raw_str)
@@ -94,11 +102,29 @@ def generate_cloud(messages, tools):
     }
 
 
+def _is_multi_action(messages):
+    """Detect if the user query requests multiple actions (e.g. 'set alarm and check weather')."""
+    text = " ".join(m["content"] for m in messages if m["role"] == "user").lower()
+    connectors = [" and ", " also ", " then ", " plus ", " as well "]
+    return sum(text.count(c) for c in connectors) >= 1
+
+
+def _calls_match_tools(function_calls, tools):
+    """Check that every returned call name exists in the provided tool definitions."""
+    valid_names = {t["name"] for t in tools}
+    return all(fc["name"] in valid_names for fc in function_calls)
+
+
 def generate_hybrid(messages, tools, confidence_threshold=0.99):
-    """Baseline hybrid inference strategy; fall back to cloud if Cactus Confidence is below threshold."""
+    """Hybrid inference with complexity-aware routing and tool validation."""
+    if _is_multi_action(messages):
+        cloud = generate_cloud(messages, tools)
+        cloud["source"] = "cloud (fallback)"
+        return cloud
+
     local = generate_cactus(messages, tools)
 
-    if local["confidence"] >= confidence_threshold:
+    if local["function_calls"] and _calls_match_tools(local["function_calls"], tools):
         local["source"] = "on-device"
         return local
 
