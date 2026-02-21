@@ -41,7 +41,7 @@ def extract_pdf_text(pdf_path: str) -> str:
     return "\n\n".join(pages)
 
 
-def add_file(filepath: str) -> bool:
+def add_file(filepath: str, dest_name: str = None) -> bool:
     """Add a single file to the corpus. Returns True on success."""
     path = Path(filepath)
     if not path.exists():
@@ -49,7 +49,8 @@ def add_file(filepath: str) -> bool:
         return False
 
     os.makedirs(CORPUS_DIR, exist_ok=True)
-    dest_name = path.stem + ".txt"
+    if dest_name is None:
+        dest_name = path.stem + ".txt"
     dest = Path(CORPUS_DIR) / dest_name
 
     if path.suffix.lower() == ".pdf":

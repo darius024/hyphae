@@ -93,12 +93,13 @@ def api_upload():
         if not f.filename:
             continue
 
+        original_name = Path(f.filename).name
         with tempfile.NamedTemporaryFile(delete=False, suffix=Path(f.filename).suffix) as tmp:
             f.save(tmp.name)
             tmp_path = tmp.name
 
         try:
-            success = add_file(tmp_path)
+            success = add_file(tmp_path, dest_name=Path(original_name).stem + ".txt")
             results.append({"filename": f.filename, "added": bool(success)})
         finally:
             os.unlink(tmp_path)
