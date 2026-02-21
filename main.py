@@ -1,11 +1,13 @@
 
-import sys, os
+import sys, os, logging
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
 
 from config import CACTUS_SRC, FUNCTIONGEMMA_PATH
 functiongemma_path = FUNCTIONGEMMA_PATH
 
 import json, time
+
+log = logging.getLogger(__name__)
 
 try:
     from cactus import cactus_init, cactus_complete, cactus_destroy
@@ -25,7 +27,7 @@ except ImportError:
 
 _GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 if not _GEMINI_API_KEY:
-    print("WARNING: GEMINI_API_KEY is not set. Cloud calls will fail.", file=sys.stderr)
+    log.warning("GEMINI_API_KEY is not set. Cloud calls will fail.")
 
 
 import re
@@ -295,7 +297,7 @@ def generate_cloud(messages, tools):
                 function_calls = retry_calls
 
     except Exception as e:
-        print(f"WARNING: Gemini API call failed: {e}", file=sys.stderr)
+        log.warning("Gemini API call failed: %s", e)
         return {"function_calls": [], "total_time_ms": (time.time() - start_time) * 1000}
 
     total_time_ms = (time.time() - start_time) * 1000
@@ -354,7 +356,7 @@ def generate_hybrid(messages, tools, confidence_threshold=0.99):
         cloud["source"] = "cloud (fallback)"
         return cloud
     except Exception as e:
-        print(f"WARNING: Cloud fallback failed: {e}", file=sys.stderr)
+        log.warning("Cloud fallback failed: %s", e)
         retry["source"] = "on-device (best-effort)"
         return retry
 

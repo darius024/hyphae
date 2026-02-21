@@ -265,7 +265,12 @@ def api_voice():
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%H:%M:%S",
+    )
     port = int(os.environ.get("PORT", 5000))
     debug = os.environ.get("FLASK_DEBUG", "0") == "1"
-    print(f"Hyphae server starting on http://localhost:{port}")
+    log.info("Hyphae server starting on http://localhost:%d", port)
     app.run(host="0.0.0.0", port=port, debug=debug)

@@ -15,6 +15,7 @@ Usage:
 """
 
 import argparse
+import logging
 import os
 import shutil
 import sys
@@ -22,14 +23,16 @@ from pathlib import Path
 
 from config import CORPUS_DIR
 
+log = logging.getLogger(__name__)
+
 
 def extract_pdf_text(pdf_path: str) -> str:
     """Extract text from a PDF using PyMuPDF."""
     try:
         import fitz
     except ImportError:
-        print("ERROR: pymupdf is required for PDF ingestion. Install with: pip install pymupdf", file=sys.stderr)
-        sys.exit(1)
+        log.error("pymupdf is required for PDF ingestion. Install with: pip install pymupdf")
+        raise ImportError("pymupdf is required for PDF ingestion")
 
     doc = fitz.open(pdf_path)
     pages = []
