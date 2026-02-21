@@ -191,6 +191,23 @@ def api_remove_document(name):
     return jsonify({"removed": name})
 
 
+def _convert_to_wav(input_path):
+    """Convert any audio file to 16kHz mono WAV via ffmpeg. Returns WAV path."""
+    if input_path.endswith(".wav"):
+        return input_path
+    wav_path = input_path.rsplit(".", 1)[0] + ".wav"
+    try:
+        import subprocess
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", input_path, "-ar", "16000", "-ac", "1", "-sample_fmt", "s16", wav_path],
+            check=True, capture_output=True,
+        )
+        return wav_path
+    except (FileNotFoundError, subprocess.CalledProcessError) as e:
+        log.warning("ffmpeg conversion failed: %s", e)
+        return input_path
+
+
 @app.route("/api/voice", methods=["POST"])
 def api_voice():
     """Accept audio upload, transcribe with Whisper, then run query."""
@@ -198,17 +215,27 @@ def api_voice():
         return jsonify({"error": "No audio file provided"}), 400
 
     audio = request.files["audio"]
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+    suffix = Path(audio.filename).suffix if audio.filename else ".webm"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         audio.save(tmp.name)
         tmp_path = tmp.name
 
+    wav_path = _convert_to_wav(tmp_path)
+    cleanup = [tmp_path]
+    if wav_path != tmp_path:
+        cleanup.append(wav_path)
+
     try:
         from voice import transcribe_file
-        transcript = transcribe_file(tmp_path)
+        transcript = transcribe_file(wav_path)
     except Exception as e:
         return jsonify({"error": f"Transcription failed: {e}"}), 500
     finally:
-        os.unlink(tmp_path)
+        for p in cleanup:
+            try:
+                os.unlink(p)
+            except OSError:
+                pass
 
     if not transcript.strip():
         return jsonify({"error": "Could not transcribe audio"}), 400

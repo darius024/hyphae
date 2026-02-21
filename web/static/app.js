@@ -195,14 +195,21 @@ async function toggleVoice() {
 
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorder = new MediaRecorder(stream);
+        const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+            ? "audio/webm;codecs=opus"
+            : MediaRecorder.isTypeSupported("audio/mp4") ? "audio/mp4" : "";
+        mediaRecorder = mimeType
+            ? new MediaRecorder(stream, { mimeType })
+            : new MediaRecorder(stream);
         const chunks = [];
 
         mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
         mediaRecorder.onstop = async () => {
             stream.getTracks().forEach(t => t.stop());
-            const blob = new Blob(chunks, { type: "audio/wav" });
-            await sendVoice(blob);
+            const actualMime = mediaRecorder.mimeType || "audio/webm";
+            const ext = actualMime.includes("mp4") ? ".mp4" : ".webm";
+            const blob = new Blob(chunks, { type: actualMime });
+            await sendVoice(blob, ext);
         };
 
         mediaRecorder.start();
@@ -223,10 +230,10 @@ function stopRecording() {
     voiceBtn.textContent = "🎤";
 }
 
-async function sendVoice(blob) {
+async function sendVoice(blob, ext = ".webm") {
     const thinking = addThinking();
     const form = new FormData();
-    form.append("audio", blob, "recording.wav");
+    form.append("audio", blob, `recording${ext}`);
 
     try {
         const res = await fetch("/api/voice", { method: "POST", body: form });
