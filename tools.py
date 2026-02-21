@@ -100,6 +100,20 @@ TOOL_SEARCH_LITERATURE = {
     },
 }
 
+TOOL_COMPARE_DOCUMENTS = {
+    "name": "compare_documents",
+    "description": "Compare two local documents on a specific topic. Runs entirely on-device via RAG — no raw data is sent to cloud.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "doc_a": {"type": "string", "description": "Name or keyword identifying the first document"},
+            "doc_b": {"type": "string", "description": "Name or keyword identifying the second document"},
+            "topic": {"type": "string", "description": "Topic or aspect to compare on"},
+        },
+        "required": ["doc_a", "doc_b", "topic"],
+    },
+}
+
 ALL_TOOLS = [
     TOOL_SEARCH_PAPERS,
     TOOL_SUMMARISE_NOTES,
@@ -107,9 +121,10 @@ ALL_TOOLS = [
     TOOL_LIST_DOCUMENTS,
     TOOL_GENERATE_HYPOTHESIS,
     TOOL_SEARCH_LITERATURE,
+    TOOL_COMPARE_DOCUMENTS,
 ]
 
-LOCAL_ONLY_TOOLS = {"search_papers", "summarise_notes", "create_note", "list_documents"}
+LOCAL_ONLY_TOOLS = {"search_papers", "summarise_notes", "create_note", "list_documents", "compare_documents"}
 CLOUD_SAFE_TOOLS = {"generate_hypothesis", "search_literature"}
 
 
@@ -124,6 +139,7 @@ def execute_tool(name, arguments):
         "list_documents": _exec_list_documents,
         "generate_hypothesis": _exec_generate_hypothesis,
         "search_literature": _exec_search_literature,
+        "compare_documents": _exec_compare_documents,
     }
     fn = dispatch.get(name)
     if fn is None:
@@ -241,3 +257,43 @@ def _exec_search_literature(query):
         "results": response.text,
         "source": "cloud",
     }
+
+
+def _exec_compare_documents(doc_a, doc_b, topic):
+    """Compare two documents on a topic using local RAG. No data leaves the device."""
+    model = _get_rag_model()
+
+    chunks_a = cactus_rag_query(model, f"{doc_a} {topic}", top_k=3)
+    chunks_b = cactus_rag_query(model, f"{doc_b} {topic}", top_k=3)
+
+    if not chunks_a and not chunks_b:
+        return {"comparison": "No relevant content found in either document.", "source": "local"}
+
+    context_a = "\n".join(c["text"] for c in chunks_a) if chunks_a else "(no matches)"
+    context_b = "\n".join(c["text"] for c in chunks_b) if chunks_b else "(no matches)"
+
+    cactus_reset(model)
+    prompt = (
+        f"Compare the following two sources on the topic of '{topic}'.\n\n"
+        f"--- Source A ({doc_a}) ---\n{context_a}\n\n"
+        f"--- Source B ({doc_b}) ---\n{context_b}\n\n"
+        f"Provide a concise comparison highlighting similarities and differences."
+    )
+
+    response = cactus_complete(
+        model,
+        [
+            {"role": "system", "content": "You are a research assistant. Compare the provided sources concisely."},
+            {"role": "user", "content": prompt},
+        ],
+        max_tokens=512,
+    )
+
+    try:
+        result = json.loads(response)
+        return {"comparison": result.get("response", ""), "source": "local"}
+    except json.JSONDecodeError:
+        return {
+            "comparison": f"Source A ({doc_a}): {context_a[:300]}\n\nSource B ({doc_b}): {context_b[:300]}",
+            "source": "local",
+        }
