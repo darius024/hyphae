@@ -22,6 +22,65 @@ if not _GEMINI_API_KEY:
     print("WARNING: GEMINI_API_KEY is not set. Cloud calls will fail.", file=sys.stderr)
 
 
+_TOOL_DESCRIPTION_HINTS = {
+    "set_alarm":       " Use this to wake up or be alerted at a specific clock time (e.g. 7:30 AM). NOT for countdowns.",
+    "set_timer":       " Use this for a countdown (e.g. '5 minutes from now'). NOT for a specific clock time.",
+    "send_message":    " Use this to send a text/message to a specific person. NOT for reminders.",
+    "create_reminder": " Use this to create a reminder with a title. NOT for sending messages to people.",
+    "search_contacts": " Use this to look up / find a person in contacts by name.",
+    "play_music":      " Use this to play a song, artist, or playlist by name.",
+    "get_weather":     " Use this to get the current weather or forecast for a city.",
+}
+
+
+def _enrich_tools(tools):
+    """Append clarifying hints to tool descriptions to reduce FunctionGemma confusion."""
+    enriched = []
+    for t in tools:
+        hint = _TOOL_DESCRIPTION_HINTS.get(t["name"], "")
+        if hint:
+            t = {**t, "description": t["description"] + hint}
+        enriched.append(t)
+    return enriched
+
+
+def _count_actions(messages) -> int:
+    """Heuristic: count how many distinct actions the user is asking for."""
+    text = " ".join(m["content"] for m in messages if m["role"] == "user").lower()
+    connectors = [" and ", " also ", ", and ", " then ", " plus ", " as well", " too "]
+    return 1 + sum(text.count(c) for c in connectors)
+
+
+def _build_system_prompt(messages, tools) -> str:
+    """Build a task-specific system prompt based on query complexity."""
+    tool_names = [t["name"] for t in tools]
+    action_count = _count_actions(messages)
+
+    base = (
+        "You are a precise function-calling assistant. "
+        "You must ONLY call functions from the provided list. "
+        "Always use exact argument types as specified (string, integer, etc). "
+        "Never make up function names or arguments not in the schema."
+    )
+
+    if action_count >= 2:
+        multi = (
+            " The user is requesting MULTIPLE actions. "
+            f"You MUST call ALL {action_count} required functions — do not skip any. "
+            "Return all function calls in a single response."
+        )
+        base += multi
+
+    if len(tools) > 2:
+        picker = (
+            f" Available tools: {', '.join(tool_names)}. "
+            "Pick the most specific tool for each action."
+        )
+        base += picker
+
+    return base
+
+
 def generate_cactus(messages, tools):
     """Run function calling on-device via FunctionGemma + Cactus."""
     if not CACTUS_AVAILABLE:
@@ -32,14 +91,16 @@ def generate_cactus(messages, tools):
     cactus_tools = [{
         "type": "function",
         "function": t,
-    } for t in tools]
+    } for t in _enrich_tools(tools)]
+
+    system_prompt = _build_system_prompt(messages, tools)
 
     raw_str = cactus_complete(
         model,
-        [{"role": "system", "content": "You are a helpful assistant that can use tools."}] + messages,
+        [{"role": "system", "content": system_prompt}] + messages,
         tools=cactus_tools,
         force_tools=True,
-        max_tokens=256,
+        max_tokens=512,
         stop_sequences=["<|im_end|>", "<end_of_turn>"],
     )
 
