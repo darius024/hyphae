@@ -89,7 +89,7 @@ def synthesise_answer(user_message, tool_results):
     try:
         client = genai.Client(api_key=api_key)
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-2.5-flash-lite",
             contents=[prompt],
         )
         return response.text

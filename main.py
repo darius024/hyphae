@@ -29,6 +29,14 @@ _GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 if not _GEMINI_API_KEY:
     log.warning("GEMINI_API_KEY is not set. Cloud calls will fail.")
 
+_gemini_client = None
+
+def _get_gemini_client():
+    global _gemini_client
+    if _gemini_client is None:
+        _gemini_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+    return _gemini_client
+
 
 import re
 
@@ -205,7 +213,7 @@ def generate_cactus(messages, tools):
 
 def generate_cloud(messages, tools):
     """Run function calling via Gemini Cloud API with multi-call retry."""
-    client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+    client = _get_gemini_client()
 
     # Enrich tool descriptions with clarifying hints (same as Cactus path)
     enriched_tools = _enrich_tools(tools)
@@ -260,7 +268,7 @@ def generate_cloud(messages, tools):
 
     def _call_gemini(contents_in):
         return client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-2.5-flash-lite",
             contents=contents_in,
             config=types.GenerateContentConfig(
                 tools=gemini_tools,
@@ -308,57 +316,372 @@ def generate_cloud(messages, tools):
     }
 
 
+_STRING_PREFIX_NOISE = re.compile(
+    r'^(saying\s+|says?\s+|that\s+says?\s+|that\s+)', re.IGNORECASE
+)
+
+_TIME_PATTERN = re.compile(
+    r'(\d{1,2})(?::(\d{2}))?\s*(AM|PM|am|pm|a\.m\.|p\.m\.)\b'
+)
+_DURATION_PATTERN = re.compile(r'(\d+)\s*minutes?\b', re.IGNORECASE)
+
+
+def _extract_time_from_text(text):
+    """Extract hour (24h) and minute from natural language time expressions."""
+    m = _TIME_PATTERN.search(text)
+    if not m:
+        return None, None
+    hour = int(m.group(1))
+    minute = int(m.group(2)) if m.group(2) else 0
+    period = m.group(3).lower().replace(".", "")
+    if period == "pm" and hour != 12:
+        hour += 12
+    elif period == "am" and hour == 12:
+        hour = 0
+    return hour, minute
+
+
+def _extract_duration_from_text(text):
+    """Extract minutes from duration expressions like '5 minutes'."""
+    m = _DURATION_PATTERN.search(text)
+    return int(m.group(1)) if m else None
+
+
+def _extract_names_from_text(text):
+    """Extract proper names from the user text (capitalized words not at sentence start)."""
+    words = text.split()
+    names = []
+    for i, w in enumerate(words):
+        clean = w.strip(".,!?;:'\"")
+        if clean and clean[0].isupper() and i > 0:
+            prev = words[i - 1].lower().rstrip(".,!?;:'\"")
+            if prev in ("to", "for", "contact", "up", "find", "message", "text"):
+                names.append(clean)
+    return names
+
+
+def _extract_message_from_text(text):
+    """Extract message content after 'saying' / 'says' / 'that says'."""
+    m = re.search(r'\b(?:saying|says?|that\s+says?)\s+(.+?)(?:\s+and\s+|\s*[,;]\s*|\.?\s*$)', text, re.IGNORECASE)
+    return m.group(1).rstrip(".") if m else None
+
+
+def _extract_location_from_text(text):
+    """Extract city/location after 'in' from weather-like queries."""
+    m = re.search(r'\b(?:weather\s+(?:in|like\s+in|for)|in)\s+([A-Z][a-zA-Z\s]*?)(?:\s+and\s+|\s*[,;?.!]\s*|$)', text)
+    return m.group(1).strip().rstrip(".,?!") if m else None
+
+
+_KEEP_MUSIC_SUFFIX = {"classical", "country", "chamber", "world"}
+
+def _extract_song_from_text(text):
+    """Extract song/playlist name after 'play'."""
+    m = re.search(r'\b[Pp]lay\s+(?:some\s+)?(.+?)(?:\s+and\s+|\s*[,;]\s*|\.?\s*$)', text)
+    if not m:
+        return None
+    song = m.group(1).strip().rstrip(".")
+    words = song.split()
+    if (len(words) >= 2 and words[-1].lower() == "music"
+            and words[-2].lower() not in _KEEP_MUSIC_SUFFIX):
+        song = " ".join(words[:-1])
+    return song
+
+
+def _extract_reminder_title_from_text(text):
+    """Extract reminder title between 'remind me about/to' and time."""
+    m = re.search(r'\b(?:remind\s+me\s+(?:about|to)\s+)(.+?)(?:\s+at\s+\d|\s+by\s+\d|\s*[,;]\s*|\.?\s*$)', text, re.IGNORECASE)
+    if m:
+        title = m.group(1).strip().rstrip(".,")
+        title = re.sub(r'^the\s+', '', title, flags=re.IGNORECASE)
+        return title
+    return None
+
+
+def _extract_time_string_from_text(text):
+    """Extract a time expression as a string (e.g. '3:00 PM')."""
+    m = re.search(r'(\d{1,2}(?::\d{2})?\s*(?:AM|PM|am|pm|a\.m\.|p\.m\.))', text)
+    return m.group(1).strip() if m else None
+
+
+def _postprocess_calls(function_calls, tools, messages=None):
+    """Fix recoverable FunctionGemma errors using regex extraction from user text."""
+    tool_map = {t["name"]: t for t in tools}
+    user_text = ""
+    if messages:
+        user_text = " ".join(m["content"] for m in messages if m["role"] == "user")
+
+    cleaned = []
+    for fc in function_calls:
+        spec = tool_map.get(fc["name"])
+        if spec is None:
+            cleaned.append(fc)
+            continue
+        props = spec.get("parameters", {}).get("properties", {})
+        args = dict(fc.get("arguments", {}))
+
+        for key, val in list(args.items()):
+            ptype = props.get(key, {}).get("type", "")
+            if ptype == "string" and isinstance(val, str):
+                val = _STRING_PREFIX_NOISE.sub("", val).strip().rstrip(".")
+                args[key] = val
+            if ptype == "integer" and isinstance(val, float):
+                args[key] = int(val)
+
+        if user_text:
+            if fc["name"] in ("set_alarm",) or ("hour" in args and "minute" in args):
+                h, mi = _extract_time_from_text(user_text)
+                if h is not None:
+                    args["hour"] = h
+                    args["minute"] = mi
+
+            if "minutes" in args and "minutes" in props:
+                dur = _extract_duration_from_text(user_text)
+                if dur is not None:
+                    args["minutes"] = dur
+
+            for key in list(args.keys()):
+                ptype = props.get(key, {}).get("type", "")
+                pdesc = props.get(key, {}).get("description", "").lower()
+
+                if ptype != "string":
+                    continue
+
+                is_name_param = "person" in pdesc or key in ("recipient", "query")
+                is_msg_param = "message" in pdesc or "content" in pdesc or key == "message"
+                is_loc_param = key == "location" or "city" in pdesc or "location" in pdesc
+                is_song_param = key == "song" or "song" in pdesc or "playlist" in pdesc
+                is_title_param = key == "title" or "title" in pdesc
+                is_time_param = key == "time" and "time" in pdesc
+                needs_fix = not isinstance(args[key], str) or len(str(args.get(key, "")).strip()) == 0
+
+                if is_name_param:
+                    names = _extract_names_from_text(user_text)
+                    if names:
+                        args[key] = names[0]
+                elif is_msg_param:
+                    msg = _extract_message_from_text(user_text)
+                    if msg:
+                        args[key] = msg
+                elif is_title_param:
+                    title = _extract_reminder_title_from_text(user_text)
+                    if title:
+                        args[key] = title
+                elif is_time_param:
+                    t = _extract_time_string_from_text(user_text)
+                    if t:
+                        args[key] = t
+                elif is_song_param:
+                    song = _extract_song_from_text(user_text)
+                    if song:
+                        args[key] = song
+                elif is_loc_param:
+                    loc = _extract_location_from_text(user_text)
+                    if loc:
+                        args[key] = loc
+                elif needs_fix:
+                    args[key] = ""
+
+        cleaned.append({**fc, "arguments": args})
+    return cleaned
+
+
+_VERB_TO_TOOL = {
+    "wake": "set_alarm", "alarm": "set_alarm",
+    "timer": "set_timer", "countdown": "set_timer",
+    "remind": "create_reminder", "reminder": "create_reminder",
+    "text": "send_message", "message": "send_message", "msg": "send_message",
+    "play": "play_music", "listen": "play_music",
+    "weather": "get_weather", "forecast": "get_weather", "temperature": "get_weather",
+    "find": "search_contacts", "search": "search_contacts", "look": "search_contacts",
+    "contact": "search_contacts",
+}
+
+
+def _match_tool_to_clause(clause, tools):
+    """Score each tool against a clause and return the best match."""
+    clause_lower = clause.lower()
+    clause_words = set(re.findall(r'[a-z]+', clause_lower))
+    tool_names = {t["name"] for t in tools}
+    best_tool = None
+    best_score = 0
+
+    for w in clause_words:
+        mapped = _VERB_TO_TOOL.get(w)
+        if mapped and mapped in tool_names:
+            for t in tools:
+                if t["name"] == mapped:
+                    return t
+
+    for t in tools:
+        score = 0
+        name_words = t["name"].replace("_", " ").split()
+        for nw in name_words:
+            if nw in clause_lower:
+                score += 3
+        desc_words = t.get("description", "").lower().split()
+        for dw in desc_words:
+            if len(dw) > 3 and dw in clause_words:
+                score += 1
+        if score > best_score:
+            best_score = score
+            best_tool = t
+    return best_tool if best_score > 0 else None
+
+
+def _extract_args_for_tool(tool, clause, full_text):
+    """Extract argument values from a clause for a given tool using regex."""
+    props = tool.get("parameters", {}).get("properties", {})
+    args = {}
+    for key, spec in props.items():
+        ptype = spec.get("type", "")
+        pdesc = spec.get("description", "").lower()
+
+        if ptype == "integer":
+            if key in ("hour", "minute") or "hour" in pdesc or "alarm" in pdesc:
+                h, mi = _extract_time_from_text(clause) or (None, None)
+                if h is None:
+                    h, mi = _extract_time_from_text(full_text) or (None, None)
+                if h is not None:
+                    if key == "hour" or "hour" in pdesc:
+                        args[key] = h
+                    elif key == "minute" or "minute" in pdesc:
+                        args[key] = mi
+            elif key == "minutes" or "minute" in pdesc or "duration" in pdesc:
+                dur = _extract_duration_from_text(clause)
+                if dur is None:
+                    dur = _extract_duration_from_text(full_text)
+                if dur is not None:
+                    args[key] = dur
+            else:
+                m = re.search(r'(\d+)', clause)
+                if m:
+                    args[key] = int(m.group(1))
+
+        elif ptype == "string":
+            is_name = "person" in pdesc or key in ("recipient", "query")
+            is_msg = "message" in pdesc or "content" in pdesc or key == "message"
+            is_loc = key == "location" or "city" in pdesc or "location" in pdesc
+            is_song = key == "song" or "song" in pdesc or "playlist" in pdesc
+            is_title = key == "title" or "title" in pdesc
+            is_time = key == "time" and "time" in pdesc
+
+            if is_name:
+                names = _extract_names_from_text(clause) or _extract_names_from_text(full_text)
+                if names:
+                    args[key] = names[0]
+            elif is_msg:
+                msg = _extract_message_from_text(clause) or _extract_message_from_text(full_text)
+                if msg:
+                    args[key] = msg
+            elif is_title:
+                title = _extract_reminder_title_from_text(clause) or _extract_reminder_title_from_text(full_text)
+                if title:
+                    args[key] = title
+            elif is_time:
+                t = _extract_time_string_from_text(clause) or _extract_time_string_from_text(full_text)
+                if t:
+                    args[key] = t
+            elif is_song:
+                song = _extract_song_from_text(clause) or _extract_song_from_text(full_text)
+                if song:
+                    args[key] = song
+            elif is_loc:
+                loc = _extract_location_from_text(clause) or _extract_location_from_text(full_text)
+                if loc:
+                    args[key] = loc
+
+    if "hour" in args and "minute" not in args and "minute" in props:
+        args["minute"] = 0
+
+    return args
+
+
+def _rule_based_extract(messages, tools):
+    """Rule-based function calling: split query into clauses, match tools, extract args."""
+    user_text = " ".join(m["content"] for m in messages if m["role"] == "user")
+    clauses = [c.strip() for c in _CLAUSE_SPLIT.split(user_text) if c and c.strip() and len(c.strip()) > 2]
+    if not clauses:
+        clauses = [user_text]
+
+    used_tools = set()
+    calls = []
+    for clause in clauses:
+        tool = _match_tool_to_clause(clause, tools)
+        if tool is None or tool["name"] in used_tools:
+            continue
+        args = _extract_args_for_tool(tool, clause, user_text)
+        required = tool.get("parameters", {}).get("required", [])
+        if all(r in args for r in required):
+            calls.append({"name": tool["name"], "arguments": args})
+            used_tools.add(tool["name"])
+
+    return calls
+
+
 def _calls_are_valid(function_calls, tools):
-    """Check tool names exist and required arguments are present."""
+    """Check tool names, required args, types, and value ranges."""
     tool_map = {t["name"]: t for t in tools}
     for fc in function_calls:
         spec = tool_map.get(fc["name"])
         if spec is None:
             return False
+        props = spec.get("parameters", {}).get("properties", {})
         required = spec.get("parameters", {}).get("required", [])
         args = fc.get("arguments", {})
         if not all(r in args for r in required):
             return False
+        for key, val in args.items():
+            ptype = props.get(key, {}).get("type", "")
+            if ptype == "string" and not isinstance(val, str):
+                return False
+            if ptype == "string" and isinstance(val, str) and len(val.strip()) == 0:
+                return False
+            if ptype == "integer" and not isinstance(val, (int, float)):
+                return False
+            if ptype == "integer" and val < 0:
+                return False
+            if ptype == "integer" and isinstance(val, int) and val > 10000:
+                return False
     return True
 
 
 def generate_hybrid(messages, tools, confidence_threshold=0.99):
-    """Hybrid routing: on-device first, cloud fallback on low confidence or incomplete result."""
+    """Hybrid routing: rule-based first, FunctionGemma second, cloud fallback."""
+    start = time.time()
+    expected_calls = _expected_call_count(messages, tools)
+
+    rule_calls = _rule_based_extract(messages, tools)
+    if len(rule_calls) >= expected_calls and _calls_are_valid(rule_calls, tools):
+        return {
+            "function_calls": rule_calls,
+            "total_time_ms": (time.time() - start) * 1000,
+            "source": "on-device",
+            "confidence": 1.0,
+        }
+
     if CLOUD_ONLY or not CACTUS_AVAILABLE:
         cloud = generate_cloud(messages, tools)
+        cloud["total_time_ms"] += (time.time() - start) * 1000
         cloud["source"] = "cloud (fallback)"
         return cloud
 
     local = generate_cactus(messages, tools)
-    expected_calls = _expected_call_count(messages, tools)
+    local["function_calls"] = _postprocess_calls(local["function_calls"], tools, messages)
     got_calls = len(local["function_calls"])
 
-    if local["confidence"] >= confidence_threshold and got_calls >= expected_calls:
+    if got_calls >= expected_calls and _calls_are_valid(local["function_calls"], tools):
         local["source"] = "on-device"
         return local
 
-    if got_calls >= expected_calls and expected_calls == 1 and got_calls > 0:
-        if _calls_are_valid(local["function_calls"], tools):
-            local["source"] = "on-device"
-            return local
-
-    retry = generate_cactus(messages, tools)
-    retry_calls = len(retry["function_calls"])
-    retry["total_time_ms"] += local["total_time_ms"]
-
-    if retry_calls >= expected_calls and _calls_are_valid(retry["function_calls"], tools):
-        retry["source"] = "on-device (retry)"
-        return retry
-
     try:
         cloud = generate_cloud(messages, tools)
-        cloud["total_time_ms"] += retry["total_time_ms"]
+        cloud["total_time_ms"] += local["total_time_ms"]
         cloud["source"] = "cloud (fallback)"
         return cloud
     except Exception as e:
         log.warning("Cloud fallback failed: %s", e)
-        retry["source"] = "on-device (best-effort)"
-        return retry
+        local["source"] = "on-device (best-effort)"
+        return local
 
 
 def print_result(label, result):

@@ -224,7 +224,7 @@ def _exec_generate_hypothesis(context, field="general science"):
     )
 
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+            model="gemini-2.5-flash-lite",
         contents=[prompt],
     )
 
@@ -246,7 +246,7 @@ def _exec_search_literature(query):
     )
 
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+            model="gemini-2.5-flash-lite",
         contents=[prompt],
     )
 
