@@ -161,16 +161,60 @@ python benchmark.py
 
 ## Usage
 
-The core file is `main.py` with three functions:
-- `generate_cactus(messages, tools)` — on-device inference via FunctionGemma
-- `generate_cloud(messages, tools)` — cloud inference via Gemini
-- `generate_hybrid(messages, tools)` — **the routing strategy we're optimizing**
-
-## Benchmark
+### Interactive text mode
 
 ```bash
 source cactus/venv/bin/activate
 export GEMINI_API_KEY="your-key"
+python cli.py
+```
+
+```
+  > Search my notes about battery capacity retention
+  [LOCAL] routed in 210ms
+  -> search_papers({"query": "battery capacity retention"})  [LOCAL-ONLY]
+     Found 3 passages:
+     1. [0.87] FEC-3 additive shows improved capacity retention vs baseline...
+
+  > Generate hypotheses about why FEC-3 improves cycling stability
+  [CLOUD] routed in 850ms
+  -> generate_hypothesis({"context": "FEC-3 improves cycling stability"})  [CLOUD-SAFE]
+     1. FEC-3 forms a more stable SEI layer...
+```
+
+### Voice mode
+
+```bash
+python cli.py --voice    # speak queries, Whisper transcribes on-device
+```
+
+### One-shot query
+
+```bash
+python cli.py "list all my documents"
+```
+
+## Research Tools
+
+| Tool | Privacy | Description |
+|------|---------|-------------|
+| `search_papers` | LOCAL-ONLY | Search local corpus via Cactus RAG |
+| `summarise_notes` | LOCAL-ONLY | Summarise experiment notes on a topic |
+| `create_note` | LOCAL-ONLY | Save a research note locally |
+| `list_documents` | LOCAL-ONLY | List all local documents |
+| `generate_hypothesis` | CLOUD-SAFE | Generate hypotheses from abstract context |
+| `search_literature` | CLOUD-SAFE | Search scientific literature |
+
+## Privacy
+
+Messages sent to the cloud are automatically sanitised by `privacy.py`:
+- File paths, measurements, sample IDs, and lab codes are stripped
+- Only abstract intent reaches Gemini
+- Tools marked LOCAL-ONLY never send data to cloud
+
+## Benchmark
+
+```bash
 python benchmark.py
 ```
 
@@ -180,6 +224,21 @@ Scoring: F1 accuracy (60%) + speed (15%) + on-device ratio (25%), weighted by di
 
 ```bash
 python submit.py --team "Hyphae" --location "London"
+```
+
+## Project Structure
+
+```
+hyphae/
+  cli.py          # CLI entrypoint (text, voice, one-shot)
+  main.py         # Hybrid routing engine (local-first + cloud fallback)
+  tools.py        # Research tool definitions + execution
+  privacy.py      # Cloud message sanitiser
+  voice.py        # On-device voice input via Whisper
+  benchmark.py    # Hackathon benchmark
+  submit.py       # Leaderboard submission
+  corpus/         # Local research documents (never sent to cloud)
+  setup.sh        # One-command setup for teammates
 ```
 
 ## Team

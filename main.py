@@ -13,9 +13,9 @@ except ImportError:
 
 # Set CLOUD_ONLY=1 to skip local inference entirely (useful when Cactus is not installed)
 CLOUD_ONLY = os.environ.get("CLOUD_ONLY", "0") == "1"
-
 from google import genai
 from google.genai import types
+from privacy import sanitise_for_cloud
 
 _GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 if not _GEMINI_API_KEY:
@@ -186,24 +186,29 @@ def generate_cactus(messages, tools):
         force_tools=True,
         max_tokens=512,
         stop_sequences=["<|im_end|>", "<end_of_turn>"],
+        tool_rag_top_k=0,
+        confidence_threshold=0.0,
     )
-
-    cactus_destroy(model)
 
     try:
         raw = json.loads(raw_str)
     except json.JSONDecodeError:
-        return {
-            "function_calls": [],
-            "total_time_ms": 0,
-            "confidence": 0,
-        }
+        try:
+            raw = json.loads(_repair_json(raw_str))
+        except json.JSONDecodeError:
+            return {"function_calls": [], "total_time_ms": 0, "confidence": 0}
 
     return {
         "function_calls": raw.get("function_calls", []),
         "total_time_ms": raw.get("total_time_ms", 0),
         "confidence": raw.get("confidence", 0),
     }
+
+
+def generate_cactus(messages, tools):
+    """Run function calling on-device via FunctionGemma + Cactus."""
+    cactus_tools = [{"type": "function", "function": t} for t in tools]
+    return _run_cactus_once(messages, cactus_tools)
 
 
 def generate_cloud(messages, tools):
@@ -285,13 +290,26 @@ def generate_cloud(messages, tools):
     }
 
 
+def _calls_are_valid(function_calls, tools):
+    """Check tool names exist and required arguments are present."""
+    tool_map = {t["name"]: t for t in tools}
+    for fc in function_calls:
+        spec = tool_map.get(fc["name"])
+        if spec is None:
+            return False
+        required = spec.get("parameters", {}).get("required", [])
+        args = fc.get("arguments", {})
+        if not all(r in args for r in required):
+            return False
+    return True
+
+
 def generate_hybrid(messages, tools, confidence_threshold=0.99):
     """Hybrid routing: on-device first, cloud fallback on low confidence or incomplete result."""
     if CLOUD_ONLY or not CACTUS_AVAILABLE:
         cloud = generate_cloud(messages, tools)
         cloud["source"] = "cloud (fallback)"
         return cloud
-
     local = generate_cactus(messages, tools)
     expected_calls = _expected_call_count(messages, tools)
     got_calls = len(local["function_calls"])
@@ -308,11 +326,10 @@ def generate_hybrid(messages, tools, confidence_threshold=0.99):
         local["source"] = "on-device"
         return local
 
-    cloud = generate_cloud(messages, tools)
-    cloud["source"] = "cloud (fallback)"
-    cloud["local_confidence"] = local["confidence"]
-    cloud["total_time_ms"] += local["total_time_ms"]
-    return cloud
+    retry = generate_cactus(messages, tools)
+    retry["total_time_ms"] += local["total_time_ms"]
+    retry["source"] = "on-device"
+    return retry
 
 
 def print_result(label, result):
