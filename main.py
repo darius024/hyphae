@@ -148,6 +148,13 @@ def _build_system_prompt(messages, tools) -> str:
     return base
 
 
+def _repair_json(raw_str):
+    """Fix common JSON issues from small models (leading zeros, trailing commas)."""
+    raw_str = re.sub(r'(?<=:)\s*0(\d+)', r' \1', raw_str)
+    raw_str = re.sub(r',\s*([}\]])', r'\1', raw_str)
+    return raw_str
+
+
 def generate_cactus(messages, tools):
     """Run function calling on-device via FunctionGemma + Cactus."""
     if not CACTUS_AVAILABLE:
@@ -186,12 +193,6 @@ def generate_cactus(messages, tools):
         "total_time_ms": raw.get("total_time_ms", 0),
         "confidence": raw.get("confidence", 0),
     }
-
-
-def generate_cactus(messages, tools):
-    """Run function calling on-device via FunctionGemma + Cactus."""
-    cactus_tools = [{"type": "function", "function": t} for t in tools]
-    return _run_cactus_once(messages, cactus_tools)
 
 
 def generate_cloud(messages, tools):
