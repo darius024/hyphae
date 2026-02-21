@@ -3,6 +3,8 @@ const queryInput = document.getElementById("query-input");
 const sendBtn = document.getElementById("send-btn");
 const voiceBtn = document.getElementById("voice-btn");
 const docListEl = document.getElementById("doc-list-items");
+const toolListEl = document.getElementById("tool-list");
+const quickButtonsEl = document.getElementById("quick-buttons");
 const fileInput = document.getElementById("file-input");
 const uploadBtn = document.getElementById("upload-btn");
 
@@ -159,8 +161,10 @@ function formatToolResult(tool, result) {
             if (!items.length) return "No matching passages found.";
             return `<div class="search-results">${items.map((r, i) => {
                 const score = r.score != null ? `<span class="score">${r.score.toFixed(2)}</span>` : "";
-                const text = escapeHtml((r.text || "").slice(0, 200).replace(/\n/g, " "));
-                return `<div class="search-item">${score}<span>${text}</span></div>`;
+                const text = escapeHtml((r.text || "").slice(0, 240).replace(/\n/g, " "));
+                const doc = escapeHtml(r.source || r.path || r.name || "");
+                const cite = doc ? `<span class="doc">[${doc}]</span>` : "";
+                return `<div class="search-item">${score}<span>${text} ${cite}</span></div>`;
             }).join("")}</div>`;
         }
         case "summarise_notes":
@@ -178,6 +182,15 @@ function formatToolResult(tool, result) {
             return renderMarkdown(result.hypotheses || "");
         case "search_literature":
             return renderMarkdown(result.results || "");
+        case "search_text": {
+            const items = result.matches || [];
+            if (!items.length) return "No matches found.";
+            return `<div class="search-results">${items.map(m => {
+                const para = escapeHtml((m.paragraph || m.snippet || "").slice(0, 320));
+                const doc = escapeHtml(m.name || "");
+                return `<div class="search-item"><span class="doc">[${doc}]</span><span>${para}</span></div>`;
+            }).join("")}</div>`;
+        }
         case "compare_documents":
             return renderMarkdown(result.comparison || "");
         default:
@@ -413,6 +426,93 @@ function renderDocuments(docs) {
     });
 }
 
+// ── Tools list (UI helper) ─────────────────────────────────────────
+
+function toolSourceBadge(source) {
+    if (source === "local") return '<span class="badge local">LOCAL</span>';
+    if (source === "cloud") return '<span class="badge cloud">CLOUD</span>';
+    return '<span class="badge hybrid">HYBRID</span>';
+}
+
+async function loadTools() {
+    if (!toolListEl) return;
+    toolListEl.innerHTML = '<div class="doc-skeleton"><div></div><div></div><div></div></div>';
+    try {
+        const res = await fetch("/api/tools");
+        const data = await res.json();
+        renderTools(data.tools || []);
+    } catch (err) {
+        toolListEl.innerHTML = `<div class="doc-empty">Failed to load tools (${escapeHtml(err.message)})</div>`;
+    }
+}
+
+function renderTools(tools) {
+    if (!tools || tools.length === 0) {
+        toolListEl.innerHTML = '<div class="doc-empty">No tools available.</div>';
+        return;
+    }
+
+    toolListEl.innerHTML = tools.map(t => {
+        const params = (t.parameters || []).map(p => {
+            const req = p.required ? '<span style="color:var(--red)">*</span>' : '';
+            return `<div class="tool-param"><strong>${escapeHtml(p.name)}</strong>${req} <span class="param-type">(${escapeHtml(p.type || "string")})</span> — ${escapeHtml(p.description || "")}</div>`;
+        }).join("") || "<div class=\"tool-param\">No parameters</div>";
+        const requiredNames = (t.parameters || []).filter(p => p.required).map(p => p.name);
+        const usage = requiredNames.length ? `${t.name}(${requiredNames.map(n => `${n}: …`).join(", ")})` : `${t.name}()`;
+        return `
+            <div class="tool-item">
+                <div class="tool-name">${escapeHtml(t.name || "tool")}${toolSourceBadge(t.source)}</div>
+                <div class="tool-desc">${escapeHtml(t.description || "")}</div>
+                <div class="tool-params">${params}</div>
+                <div class="tool-usage">Example call: <code>${escapeHtml(usage)}</code></div>
+            </div>
+        `;
+    }).join("");
+}
+
+// ── Quick research prompts ─────────────────────────────────────────
+
+function loadQuickPrompts() {
+    if (!quickButtonsEl) return;
+    const prompts = [
+        {
+            title: "📑 Summary w/ citations",
+            hint: "Scan corpus and cite source filenames",
+            text: "Summarize the corpus notes with inline citations [filename] and highlight gaps to investigate next."
+        },
+        {
+            title: "🔬 Compare documents",
+            hint: "Contrast two files on a topic",
+            text: "Compare polymer_synthesis_notes.txt vs battery_cycling_log.txt on conductive additives; output key differences with citations."
+        },
+        {
+            title: "🧪 Design experiment",
+            hint: "Propose next steps & metrics",
+            text: "Propose the next experiment to improve conductivity >1 S/cm while keeping self-healing >85%; include materials, protocol steps, and measurement plan with citations."
+        },
+        {
+            title: "🌐 Literature + local",
+            hint: "Blend local corpus with web",
+            text: "Search literature on PEDOT:PSS self-healing hydrogels and combine with local corpus findings; cite online papers as [L1], [L2] and local files by name."
+        }
+    ];
+
+    quickButtonsEl.innerHTML = prompts.map(p => `
+        <button class="quick-btn" data-text="${escapeHtml(p.text)}">
+            <strong>${escapeHtml(p.title)}</strong>
+            <span>${escapeHtml(p.hint)}</span>
+        </button>
+    `).join("");
+
+    quickButtonsEl.querySelectorAll(".quick-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+            queryInput.value = btn.dataset.text;
+            queryInput.focus();
+            queryInput.dispatchEvent(new Event("input"));
+        });
+    });
+}
+
 async function removeDoc(name) {
     try {
         await fetch(`/api/documents/${encodeURIComponent(name)}`, { method: "DELETE" });
@@ -573,7 +673,9 @@ sidebarOverlay.addEventListener("click", toggleSidebar);
 // ── Init ────────────────────────────────────────────────────────────
 loadHistory();
 loadDocuments();
+loadTools();
 loadNotebooks();
+loadQuickPrompts();
 
 // ════════════════════════════════════════════════════════════════════════
 //  NOTEBOOK STATE

@@ -88,7 +88,7 @@ from fastapi.staticfiles import StaticFiles
 try:
     # These imports can be heavy or platform-specific; import when available.
     from main   import generate_hybrid          # type: ignore
-    from tools  import ALL_TOOLS, execute_tool  # type: ignore
+    from tools  import ALL_TOOLS, execute_tool, LOCAL_ONLY_TOOLS, CLOUD_SAFE_TOOLS  # type: ignore
     from ingest import add_file, list_documents as list_corpus, remove_document  # type: ignore
     from config import CORPUS_DIR               # type: ignore
 except Exception as _e:
@@ -96,6 +96,8 @@ except Exception as _e:
     logging.getLogger(__name__).warning("Deferred Hyphae core imports: %s", _e)
     generate_hybrid = None
     ALL_TOOLS = []
+    LOCAL_ONLY_TOOLS = set()
+    CLOUD_SAFE_TOOLS = set()
     execute_tool = None
     add_file = None
     list_corpus = None
@@ -257,6 +259,34 @@ def synthesise_answer(user_message: str, tool_results: list) -> Optional[str]:
 # ═══════════════════════════════════════════════════════════════════════════
 # Existing Hyphae corpus endpoints
 # ═══════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/tools")
+async def api_tools():
+    if not ALL_TOOLS:
+        return {"tools": [], "count": 0}
+
+    tools = []
+    for t in ALL_TOOLS:
+        name = t.get("name")
+        param_obj = t.get("parameters", {}).get("properties", {}) or {}
+        required = set(t.get("parameters", {}).get("required", []) or [])
+        params = []
+        for pname, pinfo in param_obj.items():
+            params.append({
+                "name": pname,
+                "description": pinfo.get("description", ""),
+                "type": pinfo.get("type", "string"),
+                "required": pname in required,
+            })
+        source = "local" if name in LOCAL_ONLY_TOOLS else "cloud" if name in CLOUD_SAFE_TOOLS else "hybrid"
+        tools.append({
+            "name": name,
+            "description": t.get("description", ""),
+            "parameters": params,
+            "source": source,
+        })
+    return {"tools": tools, "count": len(tools)}
+
 
 @app.post("/api/query")
 async def api_query(body: dict):
