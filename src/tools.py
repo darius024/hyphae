@@ -178,13 +178,19 @@ def execute_tool(name, arguments):
 
 
 def _exec_search_papers(query, top_k=5):
-    model = _get_rag_model()
-    chunks = cactus_rag_query(model, query, top_k=int(top_k))
-    return {
-        "results": chunks,
-        "count": len(chunks),
-        "source": "local",
-    }
+    try:
+        model = _get_rag_model()
+        chunks = cactus_rag_query(model, query, top_k=int(top_k))
+        return {
+            "results": chunks,
+            "count": len(chunks),
+            "source": "local",
+        }
+    except Exception as exc:
+        # Fallback: simple text scan across corpus so queries still work when RAG weights are missing.
+        fallback = _exec_search_text(query, max_snippets=int(top_k))
+        fallback["note"] = f"RAG model unavailable ({exc}); used text scan fallback"
+        return fallback
 
 
 def _exec_summarise_notes(topic):
