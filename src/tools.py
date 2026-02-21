@@ -187,10 +187,17 @@ def _exec_search_papers(query, top_k=5):
             "source": "local",
         }
     except Exception as exc:
-        # Fallback: simple text scan across corpus so queries still work when RAG weights are missing.
         fallback = _exec_search_text(query, max_snippets=int(top_k))
-        fallback["note"] = f"RAG model unavailable ({exc}); used text scan fallback"
-        return fallback
+        results = [
+            {"text": m.get("paragraph") or m.get("snippet", ""), "source": m.get("name", ""), "name": m.get("name", "")}
+            for m in fallback.get("matches", [])
+        ]
+        return {
+            "results": results,
+            "count": len(results),
+            "source": "local",
+            "note": f"RAG model unavailable ({exc}); used text scan fallback",
+        }
 
 
 def _exec_summarise_notes(topic):

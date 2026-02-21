@@ -473,36 +473,49 @@ function renderTools(tools) {
     }).join("");
 }
 
+// ── Tool panel collapse toggle ──────────────────────────────────────
+const toolPanelToggle = document.getElementById("tool-panel-toggle");
+if (toolPanelToggle) {
+    toolPanelToggle.addEventListener("click", () => {
+        toolPanelToggle.classList.toggle("collapsed");
+        toolListEl.classList.toggle("collapsed");
+    });
+}
+
 // ── Quick research prompts ─────────────────────────────────────────
 
 function loadQuickPrompts() {
     if (!quickButtonsEl) return;
     const prompts = [
         {
-            title: "📑 Summary w/ citations",
+            title: "Summary with citations",
             hint: "Scan corpus and cite source filenames",
-            text: "Summarize the corpus notes with inline citations [filename] and highlight gaps to investigate next."
+            text: "Summarize the corpus notes with inline citations [filename] and highlight gaps to investigate next.",
+            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>',
         },
         {
-            title: "🔬 Compare documents",
+            title: "Compare documents",
             hint: "Contrast two files on a topic",
-            text: "Compare polymer_synthesis_notes.txt vs battery_cycling_log.txt on conductive additives; output key differences with citations."
+            text: "Compare polymer_synthesis_notes.txt vs battery_cycling_log.txt on conductive additives; output key differences with citations.",
+            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
         },
         {
-            title: "🧪 Design experiment",
-            hint: "Propose next steps & metrics",
-            text: "Propose the next experiment to improve conductivity >1 S/cm while keeping self-healing >85%; include materials, protocol steps, and measurement plan with citations."
+            title: "Design experiment",
+            hint: "Propose next steps and metrics",
+            text: "Propose the next experiment to improve conductivity >1 S/cm while keeping self-healing >85%; include materials, protocol steps, and measurement plan with citations.",
+            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v11"/><path d="M15 3v4"/><path d="M9 14l-4 7h14l-4-7"/><circle cx="9" cy="14" r="2"/></svg>',
         },
         {
-            title: "🌐 Literature + local",
-            hint: "Blend local corpus with web",
-            text: "Search literature on PEDOT:PSS self-healing hydrogels and combine with local corpus findings; cite online papers as [L1], [L2] and local files by name."
+            title: "Literature + local",
+            hint: "Blend local corpus with web search",
+            text: "Search literature on PEDOT:PSS self-healing hydrogels and combine with local corpus findings; cite online papers as [L1], [L2] and local files by name.",
+            icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
         }
     ];
 
     quickButtonsEl.innerHTML = prompts.map(p => `
         <button class="quick-btn" data-text="${escapeHtml(p.text)}">
-            <strong>${escapeHtml(p.title)}</strong>
+            <strong><span class="quick-icon">${p.icon}</span> ${escapeHtml(p.title)}</strong>
             <span>${escapeHtml(p.hint)}</span>
         </button>
     `).join("");
@@ -528,7 +541,7 @@ async function uploadFiles(files) {
     for (const f of files) form.append("file", f);
 
     uploadBtn.classList.add("uploading");
-    uploadBtn.textContent = "Uploading...";
+    uploadBtn.querySelector("span:not(.upload-hint)").textContent = "Uploading…";
 
     try {
         const res = await fetch("/api/upload", { method: "POST", body: form });
@@ -542,7 +555,7 @@ async function uploadFiles(files) {
         addErrorMessage(`Upload failed: ${err.message}`);
     } finally {
         uploadBtn.classList.remove("uploading");
-        uploadBtn.textContent = "Drop files here or click to upload";
+        uploadBtn.querySelector("span:not(.upload-hint)").textContent = "Upload documents";
     }
 }
 
