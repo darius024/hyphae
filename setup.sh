@@ -55,15 +55,35 @@ else
     echo -e "${GREEN}  Done.${NC}"
 fi
 
-# Step 5: Install google-genai
-echo -e "${BLUE}[5/6] Installing google-genai...${NC}"
+# Step 5: Download Whisper model (for voice input)
+echo -e "${BLUE}[5/8] Downloading Whisper model...${NC}"
+if [ -f "weights/whisper-small/config.txt" ]; then
+    echo -e "${GREEN}  Whisper model already downloaded, skipping.${NC}"
+else
+    cactus download openai/whisper-small
+    echo -e "${GREEN}  Done.${NC}"
+fi
+
+# Step 6: Install google-genai
+echo -e "${BLUE}[6/8] Installing google-genai...${NC}"
 pip install google-genai -q
 echo -e "${GREEN}  Done.${NC}"
 
 cd "$PROJECT_ROOT"
 
-# Step 6: Check for API keys
-echo -e "${BLUE}[6/6] Checking API keys...${NC}"
+# Step 7: Install sox for voice recording (optional)
+echo -e "${BLUE}[7/8] Checking voice recording tools...${NC}"
+if command -v sox &> /dev/null; then
+    echo -e "${GREEN}  sox found.${NC}"
+elif command -v ffmpeg &> /dev/null; then
+    echo -e "${GREEN}  ffmpeg found (fallback for voice recording).${NC}"
+else
+    echo -e "${YELLOW}  Neither sox nor ffmpeg found. Voice mode won't work.${NC}"
+    echo -e "${YELLOW}  Install with: brew install sox${NC}"
+fi
+
+# Step 8: Check for API keys
+echo -e "${BLUE}[8/8] Checking API keys...${NC}"
 if [ -z "$GEMINI_API_KEY" ]; then
     echo -e "${YELLOW}  GEMINI_API_KEY not set.${NC}"
     echo -e "${YELLOW}  Get one at: https://aistudio.google.com/api-keys${NC}"
@@ -77,10 +97,14 @@ echo -e "${GREEN}=============================================${NC}"
 echo -e "${GREEN}  Setup complete!${NC}"
 echo -e "${GREEN}=============================================${NC}"
 echo ""
-echo -e "To run the benchmark:"
+echo -e "To use Hyphae:"
 echo -e "  ${BLUE}source cactus/venv/bin/activate${NC}"
 echo -e "  ${BLUE}export GEMINI_API_KEY=\"your-key\"${NC}"
-echo -e "  ${BLUE}python benchmark.py${NC}"
+echo ""
+echo -e "  ${BLUE}python cli.py${NC}                  # interactive text mode"
+echo -e "  ${BLUE}python cli.py --voice${NC}           # voice mode"
+echo -e "  ${BLUE}python cli.py \"your query\"${NC}     # one-shot query"
+echo -e "  ${BLUE}python benchmark.py${NC}             # run benchmark"
 echo ""
 echo -e "To authenticate cactus cloud fallback:"
 echo -e "  ${BLUE}cactus auth${NC}"
