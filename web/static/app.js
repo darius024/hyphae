@@ -43,25 +43,70 @@ function addMessage(role, content, meta) {
     return div;
 }
 
+function formatToolResult(tool, result) {
+    if (result.error) return `<span class="tool-error">Error: ${escapeHtml(result.error)}</span>`;
+
+    switch (tool) {
+        case "search_papers": {
+            const items = (result.results || []).slice(0, 5);
+            if (!items.length) return "No matching passages found.";
+            return `<div class="search-results">${items.map((r, i) => {
+                const score = r.score != null ? `<span class="score">${r.score.toFixed(2)}</span>` : "";
+                const text = escapeHtml((r.text || "").slice(0, 200).replace(/\n/g, " "));
+                return `<div class="search-item">${score}<span>${text}</span></div>`;
+            }).join("")}</div>`;
+        }
+        case "summarise_notes":
+            return renderMarkdown(result.summary || "No summary available.");
+        case "create_note":
+            return `Note saved to <code>${escapeHtml(result.saved || "")}</code>`;
+        case "list_documents": {
+            const docs = result.documents || [];
+            if (!docs.length) return "Corpus is empty.";
+            return `<div class="doc-table">${docs.map(d =>
+                `<div class="doc-row"><span>${escapeHtml(d.name)}</span><span class="doc-size">${d.size_kb} KB</span></div>`
+            ).join("")}</div>`;
+        }
+        case "generate_hypothesis":
+            return renderMarkdown(result.hypotheses || "");
+        case "search_literature":
+            return renderMarkdown(result.results || "");
+        case "compare_documents":
+            return renderMarkdown(result.comparison || "");
+        default:
+            return `<pre>${escapeHtml(JSON.stringify(result, null, 2))}</pre>`;
+    }
+}
+
 function addToolResults(functionCalls, toolResults) {
     if (!toolResults || toolResults.length === 0) return;
 
     const div = document.createElement("div");
-    div.className = "message assistant";
+    div.className = "message assistant tool-details";
+
+    const summary = document.createElement("div");
+    summary.className = "tool-toggle";
+    summary.innerHTML = `<span class="toggle-icon">&#9654;</span> <span class="toggle-label">${toolResults.length} tool call${toolResults.length > 1 ? "s" : ""}</span>`;
+    const content = document.createElement("div");
+    content.className = "tool-content collapsed";
 
     let html = "";
     for (const tr of toolResults) {
-        const argsStr = JSON.stringify(tr.arguments, null, 2);
-        const resultStr = JSON.stringify(tr.result, null, 2);
-
+        const argsStr = Object.entries(tr.arguments || {}).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(", ");
         html += `<div class="tool-call">
-            <span class="tool-name">${escapeHtml(tr.tool)}</span>
-            <div class="tool-args">${escapeHtml(argsStr)}</div>
+            <span class="tool-name">${escapeHtml(tr.tool)}</span><span class="tool-args-inline">(${escapeHtml(argsStr)})</span>
         </div>`;
-        html += `<div class="tool-result">${escapeHtml(resultStr)}</div>`;
+        html += `<div class="tool-result">${formatToolResult(tr.tool, tr.result)}</div>`;
     }
+    content.innerHTML = html;
 
-    div.innerHTML = html;
+    summary.addEventListener("click", () => {
+        const collapsed = content.classList.toggle("collapsed");
+        summary.querySelector(".toggle-icon").innerHTML = collapsed ? "&#9654;" : "&#9660;";
+    });
+
+    div.appendChild(summary);
+    div.appendChild(content);
     messagesEl.appendChild(div);
     scrollToBottom();
 }
