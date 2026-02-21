@@ -532,13 +532,33 @@ def _postprocess_calls(function_calls, tools, messages=None):
 
 
 _VERB_TO_TOOL = {
+    # ── Research tools (primary) ──
+    "search": "search_papers", "find": "search_papers", "look": "search_papers",
+    "query": "search_papers", "retrieve": "search_papers", "rag": "search_papers",
+    "summarize": "summarise_notes", "summarise": "summarise_notes",
+    "summary": "summarise_notes", "recap": "summarise_notes",
+    "compare": "compare_documents", "contrast": "compare_documents",
+    "diff": "compare_documents", "difference": "compare_documents",
+    "hypothesis": "generate_hypothesis", "hypotheses": "generate_hypothesis",
+    "hypothesize": "generate_hypothesis", "hypothesise": "generate_hypothesis",
+    "propose": "generate_hypothesis", "predict": "generate_hypothesis",
+    "literature": "search_literature", "published": "search_literature",
+    "papers": "search_literature", "citations": "search_literature",
+    "prior": "search_literature", "cite": "search_literature",
+    "read": "read_document", "open": "read_document", "show": "read_document",
+    "view": "read_document", "display": "read_document",
+    "list": "list_documents", "corpus": "list_documents",
+    "documents": "list_documents", "files": "list_documents",
+    "note": "create_note", "save": "create_note", "record": "create_note",
+    "write": "create_note", "jot": "create_note",
+    "grep": "search_text", "scan": "search_text", "keyword": "search_text",
+    # ── Legacy benchmark tools (kept for compatibility) ──
     "wake": "set_alarm", "alarm": "set_alarm",
     "timer": "set_timer", "countdown": "set_timer",
     "remind": "create_reminder", "reminder": "create_reminder",
     "text": "send_message", "message": "send_message", "msg": "send_message",
     "play": "play_music", "listen": "play_music",
     "weather": "get_weather", "forecast": "get_weather", "temperature": "get_weather",
-    "find": "search_contacts", "search": "search_contacts", "look": "search_contacts",
     "contact": "search_contacts",
 }
 
