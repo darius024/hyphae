@@ -43,6 +43,7 @@ import sys
 import tempfile
 import time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import AsyncIterator, List, Optional
 
@@ -195,51 +196,103 @@ async def index():
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Helper — Gemini synthesis (Gemini only, no OpenAI)
+# Answer synthesis — local-first, cloud only when needed
 # ═══════════════════════════════════════════════════════════════════════════
 
 def _gemini_client():
     api_key = os.environ.get("GEMINI_API_KEY", "")
     if not api_key:
         return None
-    from google import genai  # lazy import — avoids slow startup
+    from google import genai
     return genai.Client(api_key=api_key)
 
 
-def synthesise_answer(user_message: str, tool_results: list) -> Optional[str]:
-    """Generate a Gemini-based natural language answer from tool execution results."""
+def _is_all_local(tool_results: list) -> bool:
+    """True when every executed tool is local-only (no data should leave the device)."""
+    return all(tr["tool"] in LOCAL_ONLY_TOOLS for tr in tool_results)
+
+
+def _format_local_answer(user_message: str, tool_results: list) -> str:
+    """Build a plain-text answer from local tool results without calling the cloud."""
+    parts = []
+    for tr in tool_results:
+        rd = tr["result"]
+        if "error" in rd:
+            parts.append(f"**{tr['tool']}** encountered an error: {rd['error']}")
+            continue
+        t = tr["tool"]
+        if t == "search_papers":
+            chunks = rd.get("results", [])
+            if chunks:
+                parts.append(f"Found **{len(chunks)}** relevant passage(s):")
+                for i, c in enumerate(chunks[:5], 1):
+                    src = c.get("source") or c.get("name") or ""
+                    cite = f" [{src}]" if src else ""
+                    parts.append(f"{i}. {c.get('text', '')[:400]}{cite}")
+            else:
+                parts.append("No matching passages found in your corpus.")
+        elif t == "search_text":
+            matches = rd.get("matches", [])
+            if matches:
+                parts.append(f"Found **{len(matches)}** text match(es):")
+                for m in matches:
+                    parts.append(f"- **{m.get('name', '')}**: {(m.get('paragraph') or m.get('snippet', ''))[:300]}")
+            else:
+                parts.append("No text matches found.")
+        elif t == "summarise_notes":
+            parts.append(rd.get("summary", "No summary available."))
+        elif t == "create_note":
+            parts.append(f"Note saved to `{rd.get('saved', 'corpus')}`.")
+        elif t == "list_documents":
+            docs = rd.get("documents", [])
+            parts.append(f"**{len(docs)}** document(s) in your corpus:")
+            for d in docs:
+                parts.append(f"- {d['name']} ({d.get('size_kb', '?')} KB)")
+        elif t == "read_document":
+            name = rd.get("name", "document")
+            trunc = " *(truncated)*" if rd.get("truncated") else ""
+            parts.append(f"**{name}** ({rd.get('size_kb', '?')} KB){trunc}:\n{rd.get('content', '')[:800]}")
+        elif t == "compare_documents":
+            parts.append(rd.get("comparison", "No comparison available."))
+        else:
+            parts.append(f"**{t}**: {json.dumps(rd, indent=2)[:400]}")
+    return "\n\n".join(parts)
+
+
+def synthesise_cloud_answer(user_message: str, tool_results: list) -> Optional[str]:
+    """Generate a Gemini-based natural language answer (only for cloud/mixed queries)."""
     client = _gemini_client()
     if not client or not tool_results:
         return None
 
     results_text = ""
     for tr in tool_results:
-        result_data = tr["result"]
-        if "error" in result_data:
-            results_text += f"\nTool {tr['tool']} failed: {result_data['error']}\n"
+        rd = tr["result"]
+        if "error" in rd:
+            results_text += f"\nTool {tr['tool']} failed: {rd['error']}\n"
             continue
         if tr["tool"] == "search_papers":
-            chunks = result_data.get("results", [])
+            chunks = rd.get("results", [])
             results_text += f"\n[search_papers found {len(chunks)} passages]\n"
             for c in chunks[:5]:
                 results_text += f"- {c.get('text', '')[:300]}\n"
         elif tr["tool"] == "summarise_notes":
-            results_text += f"\n[summary]\n{result_data.get('summary', '')}\n"
+            results_text += f"\n[summary]\n{rd.get('summary', '')}\n"
         elif tr["tool"] == "create_note":
-            results_text += f"\n[note saved to {result_data.get('saved', '')}]\n"
+            results_text += f"\n[note saved to {rd.get('saved', '')}]\n"
         elif tr["tool"] == "list_documents":
-            docs = result_data.get("documents", [])
+            docs = rd.get("documents", [])
             results_text += f"\n[{len(docs)} documents in corpus]\n"
             for d in docs:
                 results_text += f"- {d['name']} ({d.get('size_kb', '?')} KB)\n"
         elif tr["tool"] == "generate_hypothesis":
-            results_text += f"\n[hypotheses]\n{result_data.get('hypotheses', '')}\n"
+            results_text += f"\n[hypotheses]\n{rd.get('hypotheses', '')}\n"
         elif tr["tool"] == "search_literature":
-            results_text += f"\n[literature]\n{result_data.get('results', '')}\n"
+            results_text += f"\n[literature]\n{rd.get('results', '')}\n"
         elif tr["tool"] == "compare_documents":
-            results_text += f"\n[comparison]\n{result_data.get('comparison', '')}\n"
+            results_text += f"\n[comparison]\n{rd.get('comparison', '')}\n"
         else:
-            results_text += f"\n[{tr['tool']}]\n{json.dumps(result_data, indent=2)[:500]}\n"
+            results_text += f"\n[{tr['tool']}]\n{json.dumps(rd, indent=2)[:500]}\n"
 
     prompt = (
         f'The user asked: "{user_message}"\n\n'
@@ -252,8 +305,48 @@ def synthesise_answer(user_message: str, tool_results: list) -> Optional[str]:
         resp = client.models.generate_content(model="gemini-2.5-flash-lite", contents=[prompt])
         return resp.text
     except Exception as exc:
-        log.warning("synthesise_answer failed: %s", exc)
+        log.warning("synthesise_cloud_answer failed: %s", exc)
         return None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Privacy prediction — lightweight query classification
+# ═══════════════════════════════════════════════════════════════════════════
+
+_CLOUD_KEYWORDS = {
+    "hypothesis", "hypotheses", "hypothesize", "hypothesise", "propose", "predict",
+    "literature", "published", "papers", "citations", "cite", "prior",
+}
+
+@app.post("/api/classify")
+async def api_classify(body: dict):
+    """Quick client-side hint: will this query stay local or need the cloud?"""
+    text = (body.get("message") or "").strip().lower()
+    if not text:
+        return {"route": "unknown"}
+    words = set(text.split())
+    needs_cloud = bool(words & _CLOUD_KEYWORDS)
+    return {"route": "cloud" if needs_cloud else "local"}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Privacy audit log
+# ═══════════════════════════════════════════════════════════════════════════
+
+_privacy_log: list = []
+
+@app.get("/api/privacy-log")
+async def api_privacy_log():
+    return {"entries": _privacy_log[-100:]}
+
+def _log_privacy_event(query: str, tools_used: list, data_local: bool, routing_ms: float):
+    _privacy_log.append({
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "query": query[:120],
+        "tools": [t["tool"] for t in tools_used],
+        "data_local": data_local,
+        "routing_ms": routing_ms,
+    })
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -288,6 +381,39 @@ async def api_tools():
     return {"tools": tools, "count": len(tools)}
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Document sensitivity tagging
+# ═══════════════════════════════════════════════════════════════════════════
+
+_SENSITIVITY_FILE = Path(CORPUS_DIR) / ".sensitivity.json"
+
+def _load_sensitivity() -> dict:
+    if _SENSITIVITY_FILE.exists():
+        try:
+            return json.loads(_SENSITIVITY_FILE.read_text())
+        except Exception:
+            pass
+    return {}
+
+def _save_sensitivity(data: dict):
+    _SENSITIVITY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _SENSITIVITY_FILE.write_text(json.dumps(data, indent=2))
+
+@app.get("/api/sensitivity")
+async def api_sensitivity():
+    return {"tags": _load_sensitivity()}
+
+@app.put("/api/sensitivity/{name}")
+async def api_set_sensitivity(name: str, body: dict):
+    level = body.get("level", "shareable")
+    if level not in ("confidential", "shareable"):
+        raise HTTPException(400, "level must be 'confidential' or 'shareable'")
+    data = _load_sensitivity()
+    data[name] = level
+    _save_sensitivity(data)
+    return {"name": name, "level": level}
+
+
 @app.post("/api/query")
 async def api_query(body: dict):
     user_message = (body.get("message") or "").strip()
@@ -311,42 +437,68 @@ async def api_query(body: dict):
         tr = execute_tool(fc["name"], fc.get("arguments", {}))
         tool_results.append({"tool": fc["name"], "arguments": fc.get("arguments", {}), "result": tr})
 
-    answer = synthesise_answer(user_message, tool_results)
+    all_local = _is_all_local(tool_results)
+    if all_local:
+        answer = _format_local_answer(user_message, tool_results)
+        data_stayed_local = True
+    else:
+        answer = synthesise_cloud_answer(user_message, tool_results)
+        data_stayed_local = False
+
+    _log_privacy_event(user_message, tool_results, data_stayed_local, routing_ms)
+
     return {
-        "source":         result.get("source", "unknown"),
-        "routing_ms":     routing_ms,
-        "function_calls": result.get("function_calls", []),
-        "tool_results":   tool_results,
-        "answer":         answer,
-        "confidence":     result.get("confidence"),
+        "source":           result.get("source", "unknown"),
+        "routing_ms":       routing_ms,
+        "function_calls":   result.get("function_calls", []),
+        "tool_results":     tool_results,
+        "answer":           answer,
+        "confidence":       result.get("confidence"),
+        "data_local":       data_stayed_local,
     }
 
+
+_HIDDEN_SUFFIXES = {".bin", ".idx", ".faiss", ".npy", ".pkl"}
 
 @app.get("/api/documents")
 async def api_documents():
     corpus = Path(CORPUS_DIR)
     if not corpus.is_dir():
         return {"documents": [], "count": 0}
-    docs = [
-        {"name": f.name, "size_kb": round(f.stat().st_size / 1024, 1)}
-        for f in sorted(corpus.iterdir())
-        if f.is_file() and not f.name.startswith(".")
-    ]
+    originals_dir = corpus / ".originals"
+    sens = _load_sensitivity()
+    docs = []
+    for f in sorted(corpus.iterdir()):
+        if not f.is_file() or f.name.startswith(".") or f.suffix.lower() in _HIDDEN_SUFFIXES:
+            continue
+        has_pdf = (originals_dir / (f.stem + ".pdf")).exists()
+        docs.append({
+            "name": f.name,
+            "size_kb": round(f.stat().st_size / 1024, 1),
+            "has_pdf": has_pdf,
+            "type": "pdf" if has_pdf else f.suffix.lstrip(".").lower() or "txt",
+            "sensitivity": sens.get(f.name, "shareable"),
+        })
     return {"documents": docs, "count": len(docs)}
 
 
 @app.post("/api/upload")
 async def api_upload(file: List[UploadFile] = File(...)):
+    originals_dir = Path(CORPUS_DIR) / ".originals"
+    originals_dir.mkdir(parents=True, exist_ok=True)
     results = []
     for f in file:
         if not f.filename:
             continue
-        suffix = Path(f.filename).suffix
+        suffix = Path(f.filename).suffix.lower()
+        raw_bytes = await f.read()
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            tmp.write(await f.read())
+            tmp.write(raw_bytes)
             tmp_path = tmp.name
         try:
             success = add_file(tmp_path, dest_name=Path(f.filename).stem + ".txt")
+            if success and suffix == ".pdf":
+                (originals_dir / f.filename).write_bytes(raw_bytes)
             results.append({"filename": f.filename, "added": bool(success)})
         finally:
             os.unlink(tmp_path)
@@ -359,10 +511,31 @@ async def api_preview_document(name: str):
     if not path.exists():
         raise HTTPException(404, f"Not found: {name}")
     try:
-        text = path.read_text(errors="replace")[:2000]
+        text = path.read_text(errors="replace")
     except Exception as exc:
         raise HTTPException(500, str(exc))
-    return {"name": name, "preview": text, "size_kb": round(path.stat().st_size / 1024, 1)}
+    originals_dir = Path(CORPUS_DIR) / ".originals"
+    has_pdf = (originals_dir / (path.stem + ".pdf")).exists()
+    return {
+        "name": name,
+        "preview": text,
+        "size_kb": round(path.stat().st_size / 1024, 1),
+        "has_pdf": has_pdf,
+        "pdf_name": path.stem + ".pdf" if has_pdf else None,
+    }
+
+
+@app.get("/api/documents/{name}/raw")
+async def api_raw_document(name: str):
+    """Serve the original file (PDF or text) for in-browser viewing / download."""
+    originals_dir = Path(CORPUS_DIR) / ".originals"
+    pdf_path = originals_dir / name
+    if pdf_path.exists() and pdf_path.suffix.lower() == ".pdf":
+        return FileResponse(str(pdf_path), media_type="application/pdf", filename=name)
+    text_path = Path(CORPUS_DIR) / name
+    if text_path.exists():
+        return FileResponse(str(text_path), media_type="text/plain; charset=utf-8", filename=name)
+    raise HTTPException(404, f"Not found: {name}")
 
 
 @app.delete("/api/documents/{name}")
@@ -371,6 +544,10 @@ async def api_remove_document(name: str):
     if not path.exists():
         raise HTTPException(404, f"Not found: {name}")
     path.unlink()
+    originals_dir = Path(CORPUS_DIR) / ".originals"
+    pdf_orig = originals_dir / (path.stem + ".pdf")
+    if pdf_orig.exists():
+        pdf_orig.unlink()
     return {"removed": name}
 
 
