@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hyphae — Research Copilot</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<aside class="sidebar">
+    <div class="sidebar-header">
+        <h1>Hyphae</h1>
+        <p>Scientific Research Copilot</p>
+    </div>
+
+    <div class="doc-list">
+        <h3>Corpus</h3>
+        <div id="doc-list-items"></div>
+    </div>
+
+    <div class="upload-area">
+        <div class="upload-btn" id="upload-btn">
+            Drop files here or click to upload
+        </div>
+        <input type="file" id="file-input" multiple accept=".pdf,.txt,.md,.csv,.log,.json">
+    </div>
+</aside>
+
+<main class="main">
+    <div class="messages" id="messages">
+        <div class="message assistant">
+            <div class="bubble">
+                Welcome to <strong>Hyphae</strong>. Ask questions about your research documents,
+                search literature, generate hypotheses, or manage your corpus.
+                Your confidential data stays on-device.
+            </div>
+        </div>
+    </div>
+
+    <div class="input-area">
+        <div class="input-row">
+            <textarea id="query-input" placeholder="Ask about your research..." rows="1"></textarea>
+            <button class="icon-btn" id="voice-btn" title="Voice input">🎤</button>
+            <button class="icon-btn send-btn" id="send-btn" title="Send">→</button>
+        </div>
+    </div>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
