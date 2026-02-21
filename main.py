@@ -7,6 +7,7 @@ import json, os, time
 from cactus import cactus_init, cactus_complete, cactus_destroy, cactus_reset
 from google import genai
 from google.genai import types
+from privacy import sanitise_for_cloud
 
 _cactus_model = None
 
@@ -75,7 +76,8 @@ def generate_cloud(messages, tools):
         ])
     ]
 
-    contents = [m["content"] for m in messages if m["role"] == "user"]
+    safe_messages = sanitise_for_cloud(messages)
+    contents = [m["content"] for m in safe_messages if m["role"] == "user"]
 
     start_time = time.time()
 
@@ -102,13 +104,6 @@ def generate_cloud(messages, tools):
     }
 
 
-def _is_multi_action(messages):
-    """Detect if the user query requests multiple actions (e.g. 'set alarm and check weather')."""
-    text = " ".join(m["content"] for m in messages if m["role"] == "user").lower()
-    connectors = [" and ", " also ", " then ", " plus ", " as well "]
-    return sum(text.count(c) for c in connectors) >= 1
-
-
 def _calls_match_tools(function_calls, tools):
     """Check that every returned call name exists in the provided tool definitions."""
     valid_names = {t["name"] for t in tools}
@@ -116,12 +111,7 @@ def _calls_match_tools(function_calls, tools):
 
 
 def generate_hybrid(messages, tools, confidence_threshold=0.99):
-    """Hybrid inference with complexity-aware routing and tool validation."""
-    if _is_multi_action(messages):
-        cloud = generate_cloud(messages, tools)
-        cloud["source"] = "cloud (fallback)"
-        return cloud
-
+    """Local-first routing: trust on-device if it returns valid tool calls, else cloud."""
     local = generate_cactus(messages, tools)
 
     if local["function_calls"] and _calls_match_tools(local["function_calls"], tools):
