@@ -112,7 +112,13 @@ function buildMetaHtml(meta) {
         ? '<span class="badge local">LOCAL</span>'
         : '<span class="badge cloud">CLOUD</span>';
     const confBadge = confidenceBadge(meta.confidence);
-    return `<div class="meta">${routeBadge}${confBadge} <span>${meta.routing_ms}ms</span></div>`;
+    let privacyBadge = "";
+    if (meta.data_local === true) {
+        privacyBadge = '<span class="badge privacy-local" title="No data left your device"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> PRIVATE</span>';
+    } else if (meta.data_local === false) {
+        privacyBadge = '<span class="badge privacy-cloud" title="Data sent to Gemini for synthesis"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg> CLOUD</span>';
+    }
+    return `<div class="meta">${routeBadge}${confBadge}${privacyBadge} <span>${meta.routing_ms}ms</span></div>`;
 }
 
 function addMessage(role, content, meta) {
@@ -283,7 +289,10 @@ async function sendQuery(text) {
             return;
         }
 
-        const meta = { source: data.source, routing_ms: data.routing_ms, confidence: data.confidence };
+        const meta = {
+            source: data.source, routing_ms: data.routing_ms,
+            confidence: data.confidence, data_local: data.data_local,
+        };
         const calls = data.function_calls || [];
 
         if (data.answer) {
@@ -410,6 +419,24 @@ async function loadDocuments() {
     }
 }
 
+function docTypeIcon(doc) {
+    if (doc.has_pdf || doc.type === "pdf") {
+        return '<svg class="doc-type-icon pdf" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
+    }
+    if (doc.type === "md") {
+        return '<svg class="doc-type-icon md" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>';
+    }
+    return '<svg class="doc-type-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>';
+}
+
+function sensitivityBadge(doc) {
+    const isConf = doc.sensitivity === "confidential";
+    if (isConf) {
+        return `<button class="sens-btn sens-conf" data-doc="${escapeHtml(doc.name)}" data-level="confidential" title="Confidential — click to make shareable"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></button>`;
+    }
+    return `<button class="sens-btn sens-share" data-doc="${escapeHtml(doc.name)}" data-level="shareable" title="Shareable — click to mark confidential"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 5-5 5 5 0 0 1 5 5"/></svg></button>`;
+}
+
 function renderDocuments(docs) {
     if (!docs || docs.length === 0) {
         docListEl.innerHTML = '<div class="doc-empty">No documents yet. Upload PDFs or text files to get started.</div>';
@@ -418,7 +445,10 @@ function renderDocuments(docs) {
 
     docListEl.innerHTML = docs.map(d => `
         <div class="doc-item">
+            ${docTypeIcon(d)}
             <span class="name doc-preview-link" data-doc="${escapeHtml(d.name)}">${escapeHtml(d.name)}</span>
+            ${d.has_pdf ? '<span class="badge doc-badge-pdf">PDF</span>' : ''}
+            ${sensitivityBadge(d)}
             <span class="size">${d.size_kb} KB</span>
             <button class="remove-btn" onclick="removeDoc('${escapeHtml(d.name)}')" title="Remove">×</button>
         </div>
@@ -426,6 +456,22 @@ function renderDocuments(docs) {
 
     docListEl.querySelectorAll(".doc-preview-link").forEach(el => {
         el.addEventListener("click", () => previewDoc(el.dataset.doc));
+    });
+
+    docListEl.querySelectorAll(".sens-btn").forEach(btn => {
+        btn.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            const name = btn.dataset.doc;
+            const newLevel = btn.dataset.level === "confidential" ? "shareable" : "confidential";
+            try {
+                await fetch(`/api/sensitivity/${encodeURIComponent(name)}`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ level: newLevel }),
+                });
+                loadDocuments();
+            } catch {}
+        });
     });
 }
 
@@ -640,15 +686,141 @@ uploadBtn.addEventListener("drop", (e) => {
 
 document.getElementById("clear-btn").addEventListener("click", clearHistory);
 
+// ── Route prediction indicator ──────────────────────────────────────
+
+const routeIndicator = document.getElementById("route-indicator");
+let _classifyTimer = null;
+
+function updateRouteIndicator(text) {
+    if (!text.trim()) {
+        routeIndicator.innerHTML = "";
+        routeIndicator.className = "route-indicator";
+        return;
+    }
+    clearTimeout(_classifyTimer);
+    _classifyTimer = setTimeout(async () => {
+        try {
+            const res = await fetch("/api/classify", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ message: text }),
+            });
+            const data = await res.json();
+            if (data.route === "local") {
+                routeIndicator.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Stays on-device';
+                routeIndicator.className = "route-indicator route-local";
+            } else {
+                routeIndicator.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg> Will use Gemini cloud';
+                routeIndicator.className = "route-indicator route-cloud";
+            }
+        } catch {}
+    }, 300);
+}
+
+queryInput.addEventListener("input", () => updateRouteIndicator(queryInput.value));
+
+// ── Privacy audit log ───────────────────────────────────────────────
+
+const privacyLogOverlay = document.getElementById("privacy-log-overlay");
+const privacyLogBody = document.getElementById("privacy-log-body");
+
+document.getElementById("privacy-log-btn").addEventListener("click", loadPrivacyLog);
+document.getElementById("privacy-log-close").addEventListener("click", () => {
+    privacyLogOverlay.classList.remove("open");
+});
+privacyLogOverlay.addEventListener("click", (e) => {
+    if (e.target === privacyLogOverlay) privacyLogOverlay.classList.remove("open");
+});
+
+async function loadPrivacyLog() {
+    privacyLogOverlay.classList.add("open");
+    privacyLogBody.innerHTML = '<div class="doc-empty">Loading…</div>';
+    try {
+        const res = await fetch("/api/privacy-log");
+        const data = await res.json();
+        const entries = data.entries || [];
+        if (!entries.length) {
+            privacyLogBody.innerHTML = '<div class="doc-empty">No queries yet. Your audit log will appear here as you use Hyphae.</div>';
+            return;
+        }
+        privacyLogBody.innerHTML = `
+            <div class="plog-summary">
+                <div class="plog-stat plog-stat-local">
+                    <strong>${entries.filter(e => e.data_local).length}</strong>
+                    <span>Local queries</span>
+                </div>
+                <div class="plog-stat plog-stat-cloud">
+                    <strong>${entries.filter(e => !e.data_local).length}</strong>
+                    <span>Cloud queries</span>
+                </div>
+                <div class="plog-stat">
+                    <strong>${entries.length}</strong>
+                    <span>Total</span>
+                </div>
+            </div>
+            <div class="plog-entries">
+                ${entries.slice().reverse().map(e => {
+                    const time = new Date(e.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+                    const badge = e.data_local
+                        ? '<span class="badge privacy-local"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> PRIVATE</span>'
+                        : '<span class="badge privacy-cloud"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg> CLOUD</span>';
+                    const tools = (e.tools || []).map(t => `<code>${escapeHtml(t)}</code>`).join(" ");
+                    return `<div class="plog-entry">
+                        <span class="plog-time">${time}</span>
+                        ${badge}
+                        <span class="plog-query">${escapeHtml(e.query)}</span>
+                        <span class="plog-tools">${tools}</span>
+                        <span class="plog-ms">${e.routing_ms}ms</span>
+                    </div>`;
+                }).join("")}
+            </div>
+        `;
+    } catch (err) {
+        privacyLogBody.innerHTML = `<div class="doc-empty">Failed to load: ${escapeHtml(err.message)}</div>`;
+    }
+}
+
 // ── Document preview modal ──────────────────────────────────────────
 
 const previewOverlay = document.getElementById("preview-overlay");
 const previewTitle = document.getElementById("preview-title");
 const previewBody = document.getElementById("preview-body");
+const previewPdf = document.getElementById("preview-pdf");
+const previewTabText = document.getElementById("preview-tab-text");
+const previewTabPdf = document.getElementById("preview-tab-pdf");
+const previewDownload = document.getElementById("preview-download");
+
+let _previewHasPdf = false;
+let _previewPdfName = null;
+
+function showPreviewTab(tab) {
+    if (tab === "pdf" && _previewHasPdf) {
+        previewBody.style.display = "none";
+        previewPdf.style.display = "";
+        previewTabPdf.classList.add("active");
+        previewTabText.classList.remove("active");
+        if (!previewPdf.src || previewPdf.src === "about:blank") {
+            previewPdf.src = `/api/documents/${encodeURIComponent(_previewPdfName)}/raw`;
+        }
+    } else {
+        previewBody.style.display = "";
+        previewPdf.style.display = "none";
+        previewTabText.classList.add("active");
+        previewTabPdf.classList.remove("active");
+    }
+}
 
 async function previewDoc(name) {
     previewTitle.textContent = name;
-    previewBody.textContent = "Loading...";
+    previewBody.textContent = "Loading…";
+    previewPdf.src = "about:blank";
+    previewPdf.style.display = "none";
+    previewBody.style.display = "";
+    previewTabPdf.style.display = "none";
+    previewTabText.classList.add("active");
+    previewTabPdf.classList.remove("active");
+    _previewHasPdf = false;
+    _previewPdfName = null;
     previewOverlay.classList.add("open");
 
     try {
@@ -656,17 +828,34 @@ async function previewDoc(name) {
         const data = await res.json();
         if (data.error) {
             previewBody.textContent = `Error: ${data.error}`;
+            return;
+        }
+        previewBody.textContent = data.preview;
+        previewTitle.textContent = `${name} (${data.size_kb} KB)`;
+
+        if (data.has_pdf && data.pdf_name) {
+            _previewHasPdf = true;
+            _previewPdfName = data.pdf_name;
+            previewTabPdf.style.display = "";
+            previewDownload.href = `/api/documents/${encodeURIComponent(data.pdf_name)}/raw`;
+            previewDownload.download = data.pdf_name;
+            showPreviewTab("pdf");
         } else {
-            previewBody.textContent = data.preview;
-            previewTitle.textContent = `${name} (${data.size_kb} KB)`;
+            previewDownload.href = `/api/documents/${encodeURIComponent(name)}/raw`;
+            previewDownload.download = name;
         }
     } catch (err) {
         previewBody.textContent = `Failed to load: ${err.message}`;
     }
 }
 
-function closePreview() { previewOverlay.classList.remove("open"); }
+function closePreview() {
+    previewOverlay.classList.remove("open");
+    previewPdf.src = "about:blank";
+}
 
+previewTabText.addEventListener("click", () => showPreviewTab("text"));
+previewTabPdf.addEventListener("click", () => showPreviewTab("pdf"));
 document.getElementById("preview-close").addEventListener("click", closePreview);
 previewOverlay.addEventListener("click", (e) => {
     if (e.target === previewOverlay) closePreview();

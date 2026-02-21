@@ -153,8 +153,8 @@ body {
 
 .doc-item {
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    gap: 8px;
     padding: 8px 10px;
     border-radius: var(--radius-sm);
     font-size: 13px;
@@ -164,6 +164,14 @@ body {
 
 .doc-item:hover { background: var(--bg-tertiary); }
 
+.doc-type-icon {
+    flex-shrink: 0;
+    color: var(--text-tertiary);
+}
+
+.doc-type-icon.pdf { color: var(--red); }
+.doc-type-icon.md { color: var(--accent); }
+
 .doc-item .name {
     flex: 1;
     overflow: hidden;
@@ -171,14 +179,24 @@ body {
     white-space: nowrap;
     cursor: pointer;
     font-weight: 450;
+    min-width: 0;
 }
 
 .doc-item .name:hover { color: var(--accent); }
 
+.doc-badge-pdf {
+    font-size: 9px !important;
+    padding: 1px 5px !important;
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
+    background: var(--red-bg) !important;
+    color: var(--red) !important;
+    border: 1px solid rgba(185, 28, 28, 0.15) !important;
+}
+
 .doc-item .size {
     color: var(--text-tertiary);
     font-size: 11px;
-    margin-left: 8px;
     flex-shrink: 0;
     font-variant-numeric: tabular-nums;
 }
@@ -509,6 +527,198 @@ body {
     background: var(--red-bg);
     color: var(--red);
     border: 1px solid rgba(185, 28, 28, 0.15);
+}
+
+.badge.privacy-local {
+    background: var(--green-bg);
+    color: var(--green);
+    border: 1px solid rgba(13, 124, 74, 0.2);
+}
+
+.badge.privacy-cloud {
+    background: var(--amber-bg);
+    color: var(--amber);
+    border: 1px solid rgba(180, 83, 9, 0.2);
+}
+
+/* ── Route prediction indicator ─────────────────────────────────── */
+
+.route-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    font-family: var(--sans);
+    padding: 2px 8px;
+    border-radius: 12px;
+    transition: all 0.25s ease;
+    min-height: 18px;
+}
+
+.route-indicator:empty { display: none; }
+
+.route-indicator.route-local {
+    color: var(--green);
+    background: var(--green-bg);
+}
+
+.route-indicator.route-cloud {
+    color: var(--amber);
+    background: var(--amber-bg);
+}
+
+/* ── Sensitivity buttons ─────────────────────────────────────────── */
+
+.sens-btn {
+    background: none;
+    border: 1px solid transparent;
+    cursor: pointer;
+    padding: 3px 5px;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    transition: all var(--transition);
+}
+
+.sens-btn.sens-conf {
+    color: var(--red);
+    background: var(--red-bg);
+    border-color: rgba(185, 28, 28, 0.2);
+}
+
+.sens-btn.sens-share {
+    color: var(--text-tertiary);
+    opacity: 0;
+}
+
+.doc-item:hover .sens-btn.sens-share { opacity: 1; }
+
+.sens-btn:hover {
+    color: var(--accent);
+    background: var(--accent-light);
+    border-color: var(--accent-border);
+}
+
+/* ── Privacy log button ──────────────────────────────────────────── */
+
+.privacy-log-btn {
+    background: none;
+    border: 1px solid var(--border-light);
+    color: var(--text-tertiary);
+    font-size: 11px;
+    font-family: var(--sans);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    margin-left: auto;
+    transition: all var(--transition);
+}
+
+.privacy-log-btn:hover {
+    color: var(--accent);
+    border-color: var(--accent-border);
+    background: var(--accent-light);
+}
+
+/* ── Privacy log modal ───────────────────────────────────────────── */
+
+.privacy-log-body {
+    padding: 20px;
+    overflow-y: auto;
+    flex: 1;
+    font-family: var(--sans);
+}
+
+.plog-summary {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.plog-stat {
+    flex: 1;
+    text-align: center;
+    padding: 12px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius);
+    border: 1px solid var(--border-light);
+}
+
+.plog-stat strong {
+    display: block;
+    font-size: 22px;
+    font-variant-numeric: tabular-nums;
+}
+
+.plog-stat span {
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.plog-stat-local strong { color: var(--green); }
+.plog-stat-cloud strong { color: var(--amber); }
+
+.plog-entries {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.plog-entry {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    transition: background var(--transition);
+}
+
+.plog-entry:hover { background: var(--bg-tertiary); }
+
+.plog-time {
+    color: var(--text-tertiary);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+    width: 50px;
+}
+
+.plog-query {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.plog-tools {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.plog-tools code {
+    font-size: 10px;
+    font-family: var(--mono);
+    background: var(--bg-tertiary);
+    padding: 1px 5px;
+    border-radius: 4px;
+    border: 1px solid var(--border-light);
+}
+
+.plog-ms {
+    color: var(--text-tertiary);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+    width: 45px;
+    text-align: right;
 }
 
 /* ── Tool details (collapsible) ──────────────────────────────────── */
@@ -870,9 +1080,9 @@ body {
     background: var(--bg-secondary);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
-    width: 92%;
-    max-width: 820px;
-    max-height: 85vh;
+    width: 94%;
+    max-width: 900px;
+    height: 88vh;
     display: flex;
     flex-direction: column;
     box-shadow: var(--shadow-lg);
@@ -882,16 +1092,53 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 16px 20px;
+    padding: 14px 20px;
     border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
 }
 
 .modal-title {
     font-size: 14px;
     font-weight: 600;
+    font-family: var(--sans);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+}
+
+.modal-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    margin-left: 12px;
+}
+
+.modal-action-btn {
+    background: none;
+    border: 1px solid transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 5px 8px;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color var(--transition), background var(--transition), border-color var(--transition);
+    text-decoration: none;
+}
+
+.modal-action-btn:hover {
+    color: var(--accent);
+    background: var(--accent-light);
+}
+
+.modal-action-btn.active {
+    color: var(--accent);
+    background: var(--accent-light);
+    border-color: var(--accent-border);
 }
 
 .modal-close {
@@ -911,6 +1158,13 @@ body {
     background: var(--red-bg);
 }
 
+.modal-body-wrap {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
 .modal-body {
     padding: 20px;
     font-size: 13px;
@@ -921,6 +1175,15 @@ body {
     color: var(--text-primary);
     margin: 0;
     font-family: var(--mono);
+    flex: 1;
+}
+
+.modal-pdf {
+    width: 100%;
+    flex: 1;
+    border: none;
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+    background: var(--bg-tertiary);
 }
 
 /* ── Mobile menu button ──────────────────────────────────────────── */

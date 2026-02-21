@@ -102,9 +102,14 @@
                     </button>
                 </div>
                 <div class="input-hints">
+                    <div class="route-indicator" id="route-indicator"></div>
                     <span><kbd>/</kbd> focus</span>
                     <span><kbd>Enter</kbd> send</span>
                     <span><kbd>Shift+Enter</kbd> newline</span>
+                    <button class="privacy-log-btn" id="privacy-log-btn" title="Privacy audit log" aria-label="Privacy audit log">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                        Audit log
+                    </button>
                 </div>
             </div>
         </main>
@@ -191,9 +196,37 @@
     <div class="modal">
         <div class="modal-header">
             <span class="modal-title" id="preview-title"></span>
-            <button class="modal-close" id="preview-close" aria-label="Close preview">&times;</button>
+            <div class="modal-actions">
+                <button class="modal-action-btn" id="preview-tab-text" title="Text view" aria-label="Text view">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                </button>
+                <button class="modal-action-btn" id="preview-tab-pdf" title="PDF view" aria-label="PDF view" style="display:none">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                </button>
+                <a class="modal-action-btn" id="preview-download" title="Download" aria-label="Download" download>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                </a>
+                <button class="modal-close" id="preview-close" aria-label="Close preview">&times;</button>
+            </div>
         </div>
-        <pre class="modal-body" id="preview-body"></pre>
+        <div class="modal-body-wrap">
+            <pre class="modal-body" id="preview-body"></pre>
+            <iframe class="modal-pdf" id="preview-pdf" style="display:none"></iframe>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="privacy-log-overlay">
+    <div class="modal" style="max-width:700px">
+        <div class="modal-header">
+            <span class="modal-title">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Privacy Audit Log
+            </span>
+            <button class="modal-close" id="privacy-log-close" aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body-wrap">
+            <div class="privacy-log-body" id="privacy-log-body"></div>
+        </div>
     </div>
 </div>
 
