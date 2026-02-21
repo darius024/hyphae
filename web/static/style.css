@@ -485,9 +485,51 @@ body {
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
 
+/* ── Mobile menu button ──────────────────────────────────────────── */
+.menu-btn {
+    display: none;
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 200;
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: 20px;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+}
+.menu-btn:hover { background: var(--bg-tertiary); }
+
+.sidebar-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 99;
+}
+
 /* ── Responsive ──────────────────────────────────────────────────── */
 @media (max-width: 768px) {
-    .sidebar { display: none; }
-    .messages { padding: 16px; }
+    .menu-btn { display: flex; }
+
+    .sidebar {
+        position: fixed;
+        left: -300px;
+        top: 0;
+        bottom: 0;
+        z-index: 100;
+        transition: left 0.25s ease;
+        width: 280px;
+    }
+    .sidebar.open { left: 0; }
+    .sidebar-overlay.open { display: block; }
+
+    .messages { padding: 16px; padding-top: 56px; }
     .input-area { padding: 12px 16px 16px; }
 }

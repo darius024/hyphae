@@ -468,6 +468,20 @@ uploadBtn.addEventListener("drop", (e) => {
 
 document.getElementById("clear-btn").addEventListener("click", clearHistory);
 
+// ── Mobile sidebar ──────────────────────────────────────────────────
+
+const menuBtn = document.getElementById("menu-btn");
+const sidebar = document.querySelector(".sidebar");
+const sidebarOverlay = document.getElementById("sidebar-overlay");
+
+function toggleSidebar() {
+    sidebar.classList.toggle("open");
+    sidebarOverlay.classList.toggle("open");
+}
+
+menuBtn.addEventListener("click", toggleSidebar);
+sidebarOverlay.addEventListener("click", toggleSidebar);
+
 // ── Init ────────────────────────────────────────────────────────────
 loadHistory();
 loadDocuments();
