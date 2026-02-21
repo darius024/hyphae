@@ -31,11 +31,12 @@ def generate_cactus(messages, tools):
 
     raw_str = cactus_complete(
         model,
-        [{"role": "system", "content": "You are a helpful assistant that can use tools."}] + messages,
+        [{"role": "system", "content": "You are a function calling model. Use the provided functions to respond to the user query. Always extract the correct arguments from the query."}] + messages,
         tools=cactus_tools,
         force_tools=True,
         max_tokens=256,
         stop_sequences=["<|im_end|>", "<end_of_turn>"],
+        tool_rag_top_k=0,
     )
 
     try:
@@ -104,17 +105,25 @@ def generate_cloud(messages, tools):
     }
 
 
-def _calls_match_tools(function_calls, tools):
-    """Check that every returned call name exists in the provided tool definitions."""
-    valid_names = {t["name"] for t in tools}
-    return all(fc["name"] in valid_names for fc in function_calls)
+def _calls_are_valid(function_calls, tools):
+    """Check tool names exist and required arguments are present."""
+    tool_map = {t["name"]: t for t in tools}
+    for fc in function_calls:
+        spec = tool_map.get(fc["name"])
+        if spec is None:
+            return False
+        required = spec.get("parameters", {}).get("required", [])
+        args = fc.get("arguments", {})
+        if not all(r in args for r in required):
+            return False
+    return True
 
 
 def generate_hybrid(messages, tools, confidence_threshold=0.99):
     """Local-first routing: trust on-device if it returns valid tool calls, else cloud."""
     local = generate_cactus(messages, tools)
 
-    if local["function_calls"] and _calls_match_tools(local["function_calls"], tools):
+    if local["function_calls"] and _calls_are_valid(local["function_calls"], tools):
         local["source"] = "on-device"
         return local
 
