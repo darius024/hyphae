@@ -405,11 +405,15 @@ function renderDocuments(docs) {
 
     docListEl.innerHTML = docs.map(d => `
         <div class="doc-item">
-            <span class="name">${escapeHtml(d.name)}</span>
+            <span class="name doc-preview-link" data-doc="${escapeHtml(d.name)}">${escapeHtml(d.name)}</span>
             <span class="size">${d.size_kb} KB</span>
             <button class="remove-btn" onclick="removeDoc('${escapeHtml(d.name)}')" title="Remove">×</button>
         </div>
     `).join("");
+
+    docListEl.querySelectorAll(".doc-preview-link").forEach(el => {
+        el.addEventListener("click", () => previewDoc(el.dataset.doc));
+    });
 }
 
 async function removeDoc(name) {
@@ -479,6 +483,38 @@ uploadBtn.addEventListener("drop", (e) => {
 });
 
 document.getElementById("clear-btn").addEventListener("click", clearHistory);
+
+// ── Document preview modal ──────────────────────────────────────────
+
+const previewOverlay = document.getElementById("preview-overlay");
+const previewTitle = document.getElementById("preview-title");
+const previewBody = document.getElementById("preview-body");
+
+async function previewDoc(name) {
+    previewTitle.textContent = name;
+    previewBody.textContent = "Loading...";
+    previewOverlay.classList.add("open");
+
+    try {
+        const res = await fetch(`/api/documents/${encodeURIComponent(name)}`);
+        const data = await res.json();
+        if (data.error) {
+            previewBody.textContent = `Error: ${data.error}`;
+        } else {
+            previewBody.textContent = data.preview;
+            previewTitle.textContent = `${name} (${data.size_kb} KB)`;
+        }
+    } catch (err) {
+        previewBody.textContent = `Failed to load: ${err.message}`;
+    }
+}
+
+function closePreview() { previewOverlay.classList.remove("open"); }
+
+document.getElementById("preview-close").addEventListener("click", closePreview);
+previewOverlay.addEventListener("click", (e) => {
+    if (e.target === previewOverlay) closePreview();
+});
 
 // ── Mobile sidebar ──────────────────────────────────────────────────
 

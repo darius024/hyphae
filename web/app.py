@@ -180,6 +180,21 @@ def api_upload():
     return jsonify({"uploaded": results})
 
 
+@app.route("/api/documents/<name>", methods=["GET"])
+def api_preview_document(name):
+    """Return a preview of a document's content."""
+    path = Path(CORPUS_DIR) / name
+    if not path.exists():
+        return jsonify({"error": f"Not found: {name}"}), 404
+
+    try:
+        text = path.read_text(errors="replace")[:2000]
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    return jsonify({"name": name, "preview": text, "size_kb": round(path.stat().st_size / 1024, 1)})
+
+
 @app.route("/api/documents/<name>", methods=["DELETE"])
 def api_remove_document(name):
     """Remove a document from the corpus."""
