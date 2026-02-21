@@ -89,8 +89,9 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 
 CREATE TABLE IF NOT EXISTS nb_settings (
-    key   TEXT PRIMARY KEY,
-    value TEXT NOT NULL
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
 
 INSERT OR IGNORE INTO nb_settings(key, value) VALUES

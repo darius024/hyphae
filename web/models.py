@@ -72,12 +72,13 @@ class UploadResponse(BaseModel):
 # ── Citations ─────────────────────────────────────────────────────────────
 
 class Citation(BaseModel):
-    chunk_id: str
+    number: int
     source_id: str
     source_title: Optional[str] = None
-    page: Optional[int] = None
+    page_number: Optional[int] = None
     snippet: str
-    score: float
+    chunk_id: Optional[str] = None
+    score: Optional[float] = None
 
 
 # ── Conversations ─────────────────────────────────────────────────────────
