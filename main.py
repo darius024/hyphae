@@ -1,9 +1,13 @@
 
 import sys, os, logging
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
 
-from config import CACTUS_SRC, FUNCTIONGEMMA_PATH
-functiongemma_path = FUNCTIONGEMMA_PATH
+_PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+_CACTUS_SRC = os.path.join(_PROJECT_ROOT, "cactus", "python", "src")
+functiongemma_path = os.path.join(_PROJECT_ROOT, "cactus", "weights", "functiongemma-270m-it")
+
+sys.path.insert(0, os.path.join(_PROJECT_ROOT, "src"))
+if _CACTUS_SRC not in sys.path:
+    sys.path.insert(0, _CACTUS_SRC)
 
 import json, time
 
