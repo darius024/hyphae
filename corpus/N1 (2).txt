@@ -1,0 +1,342 @@
+# Source: tmp5ye0o_p3.pdf
+
+Note 1: Consumer Theory
+John Finlay
+October 6, 2025
+1
+Introduction
+This note is intended to supplement the material in Lecture 1. For examples
+and graphical illustrations see the lecture slides: this note focuses on providing
+slightly more mathematical detail on the results in the lecture. Material which
+appears only in these notes, and not in the lecture slides, is optional and will
+not appear directly on the exam, but hopefully being familiar with the material
+in the notes will solidify your understanding of the results in the slides.
+2
+Utility Functions
+We use utility functions to summarize a consumer’s preferences. If a consumer
+prefers one choice to another, we say that it yields her higher utility.
+More formally, we are interested in the consumer’s choices between con-
+sumption bundles. A consumption bundle is just a list of quantities of goods
+the consumer might choose: for example, the set of goods could be (Coffee,
+Tea), and the consumer might choose two cups of coffee and one cup of tea.
+We would then write her choice as (2,1). If the consumer prefers, say, two cups
+of coffee plus one cup of tea to three cups of coffee and no tea, we would say
+that her utility function is higher at (2,1) than at (3,0). If we denote the utility
+function by u, this is the same as saying u(2, 1) > u(3, 0). In general, if x is
+one possible choice and x′ is another, and the consumer prefers x to x′, then we
+expect her utility function to satisfy u(x) > u(x′).
+3
+The Utility Maximisation Problem
+3.1
+Setup
+We assume that the consumer chooses the consumption bundle x which yields
+the highest utility among all affordable bundles. To define affordable, we need
+to introduce prices. Suppose that x is a list (x1, x2, ..., xN) of weakly positive
+numbers — that is, we will not allow the consumer to choose a negative amount
+of any good. Then the corresponding list of prices is (p1, p2, ..., pN), and we will
+assume that all the prices are strictly positive numbers. We will also assume
+1
+
+
+the consumer has total income equal to y > 0. Given prices and income, the
+consumer can afford a bundle x if
+∑
+i
+pixi ≤y.
+In words, a bundle is affordable if the consumer’s total expenditure is weakly
+less than her income. Having defined the set of affordable choices, we can define
+the utility maximisation problem
+max
+x1,x2,...,xN u(x1, x2, ..., xN)
+subject to
+∑
+i
+pixi ≤y.
+That is, the consumer chooses the bundle which maximises her utility subject
+to the constraint that this bundle should be affordable.
+3.2
+Solution using Lagrangian
+The problem we have stated above is an inequality-constrained maximisation
+problem, and there are well-known approaches to solving such problems.
+In
+this course, we will make our lives slightly easier with the following technical
+assumptions.
+Assumption 1 The utility function u(x) is twice continuously differentiable,
+concave, increasing in all its arguments, and has limxi→0 u′
+i(x1, x2, ..., xi, ..., xN) =
+∞for all its arguments xi.
+Roughly speaking, these assumption ensure that we get a ‘nice’ solution in which
+the consumer spends all of her income and chooses strictly positive quantities
+of all of the goods. They also ensure that we can find the solution using a first
+order conditions, as detailed below.
+Given Assumption 1, we know the consumer will spend all of her income.
+Mathematically, that means that we know the budget constraint will always
+hold with equality, and we can rewrite the utility maximisation problem as
+max
+x1,x2,...,xN u(x1, x2, ..., xN)
+subject to
+∑
+i
+pixi = y.
+where we have replaced the inequality constraint above with an equality con-
+straint. The most direct way to solve this equality-constrained maximisation
+problem is to set up a Lagrangian
+L =
+max
+x1,...,xn,λ u(x1, x2, ..., xN) −λ
+(∑
+i
+pixi −y
+)
+,
+and obtain the first order conditions
+u′
+i(x1, x2, ..., xN) = λpi
+for
+i = 1, ..., N.
+These N first order conditions, plus the budget constraint, are enough to solve
+for x1, x2, ..., xN as well as the Lagrange multiplier λ.
+2
+
+
+3.3
+Intuition
+The key condition that the solution to the utility maximisation problem, denoted
+x∗, should satisfy is
+u′
+i(x∗)
+u′
+j(x∗) = pi
+pj
+for any pair of goods i and j.
+There are several equivalent ways of saying
+this in words. Most directly, the ratio of marginal utilities between any two
+goods should equal the ratio of prices. More intuitively, the consumer should be
+indifferent between buying a little more of good i and a little more of good j, for
+any two goods i and j. If she were not, she could slightly reduce her consumption
+of one good, raise her consumption of the other, and end up better off.
+To make this argument concrete, let’s suppose there are two goods with
+prices £1 for good 1 and £2 for good 2. Suppose the consumer considers an
+affordable level of consumption (x1, x2) at which the marginal utility of good
+1 is 5 and the marginal utility of good 2 is also 5.
+If the consumer lowers
+her consumption of good 2 by 1 unit her utility will fall by 5, and she will
+save £2.
+With this extra money, she can buy 2 units of good 1 and raise
+her utility by 10. She has thus found a new bundle which yields 10 - 5 = 5
+more units of utility and is also affordable; so the original bundle cannot be a
+solution to her utility maximisation problem. The only time when such utility-
+increasing rearrangement is not possible is when the marginal utility of each
+good is proportional to its price.
+Using this condition, plus the budget constraint, you can solve for demand
+for each good xi as a function of prices and income. In general we can write
+demand as
+xi = Di(pi, p−i, y).
+In words we would read this as: demand for good i is a function of the price of
+good i, the price of all other goods, and income.
+3.4
+Examples
+Below you can find two example in which we derive the demand functions cor-
+responding to different choices of utility functions: one using Cobb-Douglas
+utility, and the other using what is known as Constant Elasticity of Substitu-
+tion (CES) utility. CES utility is a useful special case because it results in a
+convenient, but fairly realistic, form of demand, which we will use frequently in
+this course.
+Cobb-Douglas Utility Function
+Let’s assume there are only two goods, and the utility function takes the fol-
+lowing form
+u(x1, x2) = xα
+1 x1−α
+2
+,
+3
+
+
+where α is a parameter strictly between zero and one. The marginal utility of
+good one is
+u′
+1(x1, x2) = αxα−1
+1
+x1−α
+2
+,
+and the marginal utility of good two is
+u′
+2(x1, x2) = (1 −α)xα
+1 x−α
+2 .
+Taking the ratio of these marginal utility and setting it equal to the ratio of
+prices yields
+u′
+1(x1, x2)
+u′
+2(x1, x2) =
+αxα−1
+1
+x1−α
+2
+(1 −α)xα
+1 x−α
+2
+=
+α
+1 −α
+(x2
+x1
+)
+= p1
+p2
+.
+Notice that we have not yet used the budget constraint
+p1x1 + p2x2 = y.
+Let’s use it to substitute out x2.
+(
+α
+1 −α
+) (x2
+x1
+)
+= p1
+p2
+=⇒p1x1 =
+(
+α
+1 −α
+)
+p2x2 =⇒p1x1 =
+(
+α
+1 −α
+)
+(y−p1x1).
+Rearranging a little more gives
+x1 = α
+( y
+p1
+)
+and finally substituting this into the budget constraint yields
+x2 = (1 −α)
+( y
+p2
+)
+.
+That is, we have found the consumer’s demand for each good as a function of
+prices and income.
+Constant Elasticity of Substitution Utility Function
+As we will see in Lecture 2 and beyond, a convenient functional form for demand
+is
+D(p) = dp−δ.
+In this example we will show that this demand curve can be derived from a
+fairly simple utility function. Let us suppose there are N different goods, and
+that the consumer’s utility is given by
+u(x1, ..., xN) =
+(∑
+i
+xη
+i
+) 1
+η
+4
+
+
+where 0 < η < 1 is a parameter. The marginal utility of good i is
+u′
+i(x1, ..., xN) = ηxη−1
+i
+
+∑
+j
+xη
+j
+
+
+1
+η −1
+.
+Just as in the Cobb-Douglas example, we can take the ratio of this between any
+two goods — let’s say between good i and good one — and set it equal to the
+ratio of their prices
+u′
+i(x1, ..., xN)
+u′
+1(x1, ..., xN) =
+( xi
+x1
+)η−1
+= pi
+p1
+.
+Rearrange this expression to obtain
+pixi
+p1x1
+=
+( pi
+p1
+)
+η
+η−1
+Now, sum over all the goods i and use the fact that
+∑
+i
+pixi = y
+to obtain
+y
+p1x1
+= p
+−
+η
+η−1
+1
+∑
+i
+p
+η
+η−1
+i
+.
+Putting quantity on one side and price on the other, we obtain a demand curve
+for good one
+x1 = y
+(∑
+i
+p
+−
+η
+η−1
+i
+)−1
+p
+1
+η−1
+1
+We can then define
+d = y
+(∑
+i
+p
+−
+η
+η−1
+i
+)−1
+and
+δ =
+−1
+η −1
+so that
+x1 = dp−δ
+1
+as desired. This is just the demand for good one, but the same procedure would
+yield an identical demand curve for every other good.
+You might object that since p1 is inside the sum ∑
+i p
+η
+η−1
+i
+it is also in the
+constant d, and so we have not quite produced a constant elasticity demand
+curve. This is true, but as long as good one is a small share of the consumer’s
+budget the constant elasticity demand curve will be a good approximation. We
+can make the result exactly true by letting the number of goods N go to infinity,
+but the proof of that result is beyond the scope of this course.
+5

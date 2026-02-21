@@ -1,0 +1,42 @@
+Conductive Self-Healing Hydrogel — Synthesis Protocol
+Lab: Advanced Materials Group, Imperial College London
+PI: Dr. Elena Vasquez
+Date: January 2026
+
+OBJECTIVE
+Develop a PEDOT:PSS-based hydrogel with conductivity >0.5 S/cm and
+autonomous self-healing efficiency >80% at room temperature.
+
+MATERIALS
+- PEDOT:PSS (Clevios PH1000, Heraeus)
+- Polyvinyl alcohol (PVA), Mw 89,000–98,000
+- Borax (sodium tetraborate decahydrate)
+- Dimethyl sulfoxide (DMSO), 5 vol% as secondary dopant
+- Glycerol, 10 vol% as plasticiser
+- Deionised water
+
+PROCEDURE
+1. Dissolve PVA (10 wt%) in DI water at 90°C under stirring for 2 h.
+2. Cool PVA solution to 25°C.
+3. Add PEDOT:PSS dispersion (30 vol% of total) and stir for 30 min.
+4. Add DMSO (5 vol%) and glycerol (10 vol%); stir for 15 min.
+5. Add borax solution (0.5 M, 3 mL per 20 mL batch) dropwise.
+6. Pour into silicone mould and cure at 25°C for 12 h.
+
+RESULTS (Batch CHG-026-003)
+- Conductivity: 0.62 S/cm (4-point probe, 25°C)
+- Self-healing efficiency: 87% (tensile recovery after 6 h, 25°C)
+- Tensile strength: 42 kPa
+- Elongation at break: 320%
+- Swelling ratio (24 h, DI water): 180%
+
+OBSERVATIONS
+- DMSO secondary doping significantly enhanced conductivity (0.62 vs 0.18 S/cm without).
+- Borax cross-link density controls healing time vs mechanical strength trade-off.
+- Glycerol prevents dehydration over 7-day ambient exposure.
+- Colour: deep blue-black, semi-transparent in thin films (<1 mm).
+
+NEXT STEPS
+- Test conductivity retention after 100 healing cycles.
+- Evaluate biocompatibility via L929 fibroblast viability assay.
+- Attempt 3D printing with modified extrusion parameters.

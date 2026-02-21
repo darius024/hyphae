@@ -1,0 +1,39 @@
+Literature Review — Self-Healing Conductive Polymers for Bioelectronics
+Compiled: January 2026
+
+1. Tee et al. (2012) — Nature Nanotechnology
+"An electrically and mechanically self-healing composite with pressure- and flexion-sensitive properties"
+- Nickel microparticles in a hydrogen-bonding supramolecular polymer.
+- Conductivity: ~0.01 S/cm, healed in ~15 min.
+- Limitation: low conductivity, not suitable for neural interfaces.
+
+2. Oh et al. (2016) — Nature
+"Intrinsically stretchable and healable semiconducting polymer for organic transistors"
+- DPP-based conjugated polymer with dynamic urea bonds.
+- Healed at 150°C, 24 h — not practical for biological settings.
+- Carrier mobility recovered to 85%.
+
+3. Zhang et al. (2020) — Advanced Materials
+"A highly stretchable, self-healing, conductive hydrogel for wearable sensors"
+- PAA/PEDOT:PSS hydrogel with Fe³⁺ coordination cross-links.
+- Conductivity: 0.12 S/cm, self-healing at RT in 2 h.
+- Gauge factor: 3.4 (good for strain sensing).
+
+4. Lu et al. (2022) — Science Advances
+"Tough, self-healing, and tissue-adhesive hydrogel electronics"
+- PVA/PEDOT:PSS with boronate ester dynamic bonds.
+- Conductivity: 0.38 S/cm, self-healing efficiency >90% in 4 h.
+- Demonstrated in vivo EMG recording for 3 days.
+- Closest prior work to our approach — we improve conductivity to 0.62 S/cm.
+
+5. Wang et al. (2023) — Nature Electronics
+"Intrinsically conductive hydrogels for neural interfaces"
+- Pure PEDOT:PSS hydrogel (no insulating matrix).
+- Conductivity: 47 S/cm — much higher, but brittle and non-self-healing.
+- Excellent impedance, limited mechanical robustness.
+
+KEY GAPS IN LITERATURE
+- No prior work combines conductivity >0.5 S/cm with autonomous RT self-healing.
+- Biocompatibility data is sparse for PEDOT:PSS hydrogels in chronic implant settings.
+- 3D-printability of self-healing conductive hydrogels is unexplored.
+- Long-term conductivity retention after repeated healing cycles is unknown.
