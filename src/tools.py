@@ -234,30 +234,36 @@ def _exec_read_document(name, max_chars=4000):
 
 
 def _exec_search_text(query, max_snippets=5):
-    """Case-insensitive search over corpus text files with short snippets."""
+    """Case-insensitive search over corpus text files with paragraph snippets and filenames for citation."""
     query_low = query.lower()
     matches = []
+
     for pattern in ["**/*.txt", "**/*.md"]:
         for path in Path(CORPUS_DIR).glob(pattern):
             try:
                 text = path.read_text(errors="replace")
             except Exception:
                 continue
-            if query_low in text.lower():
-                # collect up to max_snippets snippets per file
-                for line in text.splitlines():
-                    if query_low in line.lower():
-                        matches.append({
-                            "name": path.name,
-                            "snippet": line.strip()[:240],
-                            "source": "local",
-                        })
-                        if len(matches) >= max_snippets:
-                            break
+
+            if query_low not in text.lower():
+                continue
+
+            paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+            for para in paragraphs:
+                if query_low in para.lower():
+                    snippet = para[:600]
+                    matches.append({
+                        "name": path.name,
+                        "paragraph": snippet,
+                        "source": "local",
+                    })
+                    if len(matches) >= max_snippets:
+                        break
             if len(matches) >= max_snippets:
                 break
         if len(matches) >= max_snippets:
             break
+
     return {"matches": matches, "count": len(matches), "source": "local"}
 
 
@@ -339,10 +345,39 @@ def _exec_search_literature(query):
 
 def _exec_compare_documents(doc_a, doc_b, topic):
     """Compare two documents on a topic using local RAG. No data leaves the device."""
-    model = _get_rag_model()
+    def _paragraph_hits(doc_name):
+        path = Path(CORPUS_DIR) / doc_name
+        if not path.exists():
+            return []
+        try:
+            text = path.read_text(errors="replace")
+        except Exception:
+            return []
+        topic_low = topic.lower()
+        tokens = [w for w in topic_low.replace("/", " ").replace("-", " ").split() if len(w) > 3]
+        paras = [p.strip() for p in text.split("\n\n") if p.strip()]
+        hits = [p for p in paras if topic_low in p.lower()]
+        if hits:
+            return hits
+        # fallback: any token match (looser)
+        loose = []
+        for p in paras:
+            pl = p.lower()
+            if any(t in pl for t in tokens):
+                loose.append(p)
+        return loose if loose else paras[:2]
 
-    chunks_a = cactus_rag_query(model, f"{doc_a} {topic}", top_k=3)
-    chunks_b = cactus_rag_query(model, f"{doc_b} {topic}", top_k=3)
+    try:
+        model = _get_rag_model()
+        chunks_a = cactus_rag_query(model, f"{doc_a} {topic}", top_k=3)
+        chunks_b = cactus_rag_query(model, f"{doc_b} {topic}", top_k=3)
+    except Exception:
+        chunks_a = chunks_b = []
+
+    if not chunks_a and not chunks_b:
+        # Fallback to paragraph scan if RAG missing or no hits
+        chunks_a = [{"text": p} for p in _paragraph_hits(doc_a)[:3]]
+        chunks_b = [{"text": p} for p in _paragraph_hits(doc_b)[:3]]
 
     if not chunks_a and not chunks_b:
         return {"comparison": "No relevant content found in either document.", "source": "local"}
@@ -350,28 +385,31 @@ def _exec_compare_documents(doc_a, doc_b, topic):
     context_a = "\n".join(c["text"] for c in chunks_a) if chunks_a else "(no matches)"
     context_b = "\n".join(c["text"] for c in chunks_b) if chunks_b else "(no matches)"
 
-    cactus_reset(model)
-    prompt = (
-        f"Compare the following two sources on the topic of '{topic}'.\n\n"
-        f"--- Source A ({doc_a}) ---\n{context_a}\n\n"
-        f"--- Source B ({doc_b}) ---\n{context_b}\n\n"
-        f"Provide a concise comparison highlighting similarities and differences."
-    )
-
-    response = cactus_complete(
-        model,
-        [
-            {"role": "system", "content": "You are a research assistant. Compare the provided sources concisely."},
-            {"role": "user", "content": prompt},
-        ],
-        max_tokens=512,
-    )
-
     try:
-        result = json.loads(response)
-        return {"comparison": result.get("response", ""), "source": "local"}
-    except json.JSONDecodeError:
-        return {
-            "comparison": f"Source A ({doc_a}): {context_a[:300]}\n\nSource B ({doc_b}): {context_b[:300]}",
-            "source": "local",
-        }
+        model = _get_rag_model()
+        cactus_reset(model)
+        response = cactus_complete(
+            model,
+            [
+                {"role": "system", "content": "You are a research assistant. Compare the provided sources concisely with inline citations [doc]."},
+                {"role": "user", "content": (
+                    f"Compare the following two sources on '{topic}'. Include inline citations like [doc_a] and [doc_b].\n\n"
+                    f"--- Source A ({doc_a}) ---\n{context_a}\n\n"
+                    f"--- Source B ({doc_b}) ---\n{context_b}\n\n"
+                    f"Provide similarities, differences, and a one-line takeaway."
+                )},
+            ],
+            max_tokens=512,
+        )
+        try:
+            result = json.loads(response)
+            return {"comparison": result.get("response", ""), "source": "local"}
+        except json.JSONDecodeError:
+            pass
+    except Exception:
+        pass
+
+    return {
+        "comparison": f"Source A ({doc_a}): {context_a[:300]}\n\nSource B ({doc_b}): {context_b[:300]}",
+        "source": "local",
+    }

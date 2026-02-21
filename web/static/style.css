@@ -197,6 +197,106 @@ body {
 .doc-item:hover .remove-btn { opacity: 1; }
 .doc-item .remove-btn:hover { color: var(--red); }
 
+.tool-panel {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+}
+
+.tool-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.tool-legend { display: flex; gap: 6px; align-items: center; }
+
+.tool-list { display: flex; flex-direction: column; gap: 8px; }
+
+.tool-item {
+    border: 1px solid var(--border);
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    padding: 10px 12px;
+}
+
+.tool-name {
+    font-weight: 600;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.tool-desc {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+    line-height: 1.5;
+}
+
+.tool-params {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-top: 6px;
+}
+
+.tool-param { margin-bottom: 4px; }
+.tool-param .param-type { color: var(--text-secondary); }
+
+.tool-usage {
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+.tool-usage code {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    padding: 2px 6px;
+    border-radius: 6px;
+}
+
+.quick-prompts {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+}
+
+.quick-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.quick-buttons {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+}
+
+.quick-btn {
+    padding: 10px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+    color: var(--text-primary);
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.quick-btn:hover {
+    border-color: var(--accent);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+}
+
+.quick-btn strong { display: block; font-size: 12px; }
+.quick-btn span { display: block; font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+
 .upload-area {
     padding: 16px;
     border-top: 1px solid var(--border);
