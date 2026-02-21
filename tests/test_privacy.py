@@ -37,6 +37,32 @@ class TestSanitiseForCloud:
         result = sanitise_for_cloud(messages)
         assert result[0]["role"] == "system"
 
+    def test_strips_email_addresses(self):
+        messages = [{"role": "user", "content": "Contact researcher at jane.doe@labcorp.org"}]
+        result = sanitise_for_cloud(messages)
+        assert "jane.doe@labcorp.org" not in result[0]["content"]
+        assert "[REDACTED]" in result[0]["content"]
+
+    def test_strips_urls(self):
+        messages = [{"role": "user", "content": "Data at https://internal.lab.io/exp/42"}]
+        result = sanitise_for_cloud(messages)
+        assert "https://internal.lab.io/exp/42" not in result[0]["content"]
+
+    def test_strips_ip_addresses(self):
+        messages = [{"role": "user", "content": "Server at 192.168.1.42 has the data"}]
+        result = sanitise_for_cloud(messages)
+        assert "192.168.1.42" not in result[0]["content"]
+
+    def test_strips_dates(self):
+        messages = [{"role": "user", "content": "Experiment run on 2025-03-15"}]
+        result = sanitise_for_cloud(messages)
+        assert "2025-03-15" not in result[0]["content"]
+
+    def test_strips_gps_coordinates(self):
+        messages = [{"role": "user", "content": "Field site at 51.5074, -0.1278"}]
+        result = sanitise_for_cloud(messages)
+        assert "51.5074, -0.1278" not in result[0]["content"]
+
     def test_does_not_mutate_original(self):
         messages = [{"role": "user", "content": "Check /data/file.txt"}]
         sanitise_for_cloud(messages)
