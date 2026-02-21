@@ -1,0 +1,35 @@
+Lab Hardware Configuration Notes
+Updated: February 2026
+
+Potentiostat Setup:
+- Model: BioLogic VMP-300
+- Channels: 16 independent channels
+- Current range: 10 nA to 400 mA per channel
+- Connected via Ethernet to lab server (192.168.1.50)
+- Software: EC-Lab v11.50, license key stored in lab safe
+
+Temperature Chamber:
+- Model: ESPEC BTZ-175
+- Range: -70°C to 180°C
+- Currently configured for battery cycling tests
+- Calibration due: March 2026
+- Thermocouples calibrated against NIST reference on 2026-01-20
+
+SEM:
+- Model: JEOL JSM-7200F
+- EDS: Oxford Instruments Ultim Max 100
+- Last alignment: 2026-02-01
+- Beam current optimised for cathode cross-section imaging: 5 kV, 8 mm WD
+- Note: stage motor Y-axis showing intermittent noise, service call scheduled
+
+XRD:
+- Model: Bruker D8 Advance
+- Source: Cu K-alpha (1.5406 Angstrom)
+- Detector: LYNXEYE XE-T
+- Standard measurement: 10-80° 2theta, 0.02° step, 1s/step
+- Reference patterns stored on shared drive: Z:\XRD_References\
+
+Data Storage:
+- All raw data backed up nightly to NAS: 192.168.1.100
+- Naming convention: YYYY-MM-DD_ExperimentID_Instrument
+- Archive older than 6 months moved to cold storage
