@@ -1,0 +1,35 @@
+---
+description: Core project rules for Hyphae - Scientific Research Copilot
+alwaysApply: true
+---
+
+# Hyphae Project Rules
+
+## Git
+- NEVER run any git commands (add, commit, push, revert, rebase, etc.). The user manages git themselves.
+
+## Code Changes
+- Make minimal, focused changes that get the job done. No over-engineering.
+- Prioritise correctness first, then privacy, then performance.
+- Do not refactor or restructure code unless explicitly asked.
+- Do not add comments that just narrate what the code does.
+
+## Privacy
+- Sensitive data (PDFs, experiment logs, hardware notes) must NEVER be sent to cloud APIs.
+- Only abstract/sanitised queries go to Gemini. Raw experiments stay local.
+- Never log, print, or persist API keys, tokens, or secrets.
+- Never hardcode credentials. Use environment variables.
+
+## Performance
+- Maximise on-device inference (FunctionGemma via Cactus) to reduce latency and cloud dependency.
+- Cloud fallback (Gemini) is a last resort when local confidence is insufficient.
+- Keep the `generate_hybrid()` signature unchanged — it must stay compatible with `benchmark.py`.
+
+## Environment
+- Python venv lives at `cactus/venv/`. Always activate it before running scripts.
+- The `cactus/` directory is a symlink to the cactus repo and is gitignored.
+- Gemini model is `gemini-2.5-flash` (not `gemini-2.0-flash`, which is deprecated).
+
+## Testing
+- Run `python benchmark.py` to validate changes against the scoring rubric.
+- Score = F1 (60%) + speed (15%) + on-device ratio (25%), weighted by difficulty.

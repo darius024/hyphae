@@ -2,17 +2,46 @@
 
 **Scientific Research Copilot That Respects Confidential Data**
 
-Hybrid local-first + cloud AI system for scientific research. Sensitive data (PDFs, experiment logs, hardware notes) stays on-device via FunctionGemma + Cactus. Only abstract reasoning (hypothesis generation, literature reasoning) goes to the cloud via Gemini — raw experiments never leak.
+> **Hyphae** (pronounced *hy-fee*) are the branching, thread-like filaments of a fungal network — the hidden infrastructure that connects organisms underground, sharing nutrients and signals without exposing the network itself. Just like hyphae enable communication while keeping the root system private, our system enables research reasoning while keeping raw experimental data confidential.
+
+## What is Hyphae?
+
+A hybrid local-first + cloud AI system for scientific research. Sensitive data (PDFs, experiment logs, hardware notes) stays on-device via FunctionGemma + Cactus. Only abstract reasoning (hypothesis generation, literature reasoning) goes to the cloud via Gemini — raw experiments never leak.
+
+The key novelty: **research reasoning without leaking raw experiments.**
 
 Built for the Cactus x Google DeepMind Hackathon.
 
 ## Architecture
 
+```
+┌──────────────────────────────────────────────────┐
+│                    Hyphae                        │
+│                                                  │
+│  ┌─────────────────┐    ┌─────────────────────┐  │
+│  │   LOCAL LAYER   │    │    CLOUD LAYER      │  │
+│  │                 │    │                     │  │
+│  │  PDFs           │    │  Hypothesis         │  │
+│  │  Experiment logs│    │  generation         │  │
+│  │  Hardware notes │    │  Literature         │  │
+│  │                 │    │  reasoning          │  │
+│  │  FunctionGemma  │    │  Gemini 2.5 Flash   │  │
+│  │  via Cactus     │    │                     │  │
+│  └────────┬────────┘    └──────────┬──────────┘  │
+│           │    ┌──────────────┐    │              │
+│           └────│   ROUTING    │────┘              │
+│                │  Confidence  │                   │
+│                │  + Privacy   │                   │
+│                └──────────────┘                   │
+└──────────────────────────────────────────────────┘
+  Raw data never leaves the device.
+```
+
 | Layer | What | How |
 |-------|------|-----|
 | **Local** | PDFs, experiment logs, hardware notes | FunctionGemma on-device via Cactus |
-| **Cloud** | Hypothesis generation, literature reasoning | Gemini 2.5 Flash |
-| **Routing** | Smart confidence-based decision | Hybrid strategy in `generate_hybrid()` |
+| **Cloud** | Hypothesis generation, literature reasoning | Gemini 2.5 Flash API |
+| **Routing** | Smart confidence + privacy-aware decision | Hybrid strategy in `generate_hybrid()` |
 
 ## Setup
 
@@ -20,7 +49,7 @@ Built for the Cactus x Google DeepMind Hackathon.
 - macOS with Apple Silicon (M1+)
 - Python 3.12 (`brew install python@3.12`)
 - HuggingFace account with access to [google/functiongemma-270m-it](https://huggingface.co/google/functiongemma-270m-it)
-- [Gemini API key](https://aistudio.google.com/api-keys)
+- [Gemini API key](https://aistudio.google.com/api-keys) — claim hackathon credits via [London link](https://trygcp.dev/claim/cactus-x-gdm-hackathon-london)
 - [Cactus API key](https://cactuscompute.com/dashboard/api-keys)
 
 ### Quick Start
@@ -67,9 +96,10 @@ Scoring: F1 accuracy (60%) + speed (15%) + on-device ratio (25%), weighted by di
 ## Submit
 
 ```bash
-python submit.py --team "Hyphae" --location "YourCity"
+python submit.py --team "Hyphae" --location "London"
 ```
 
 ## Team
 
 - Darius
+- Stefi
