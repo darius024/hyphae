@@ -168,9 +168,15 @@ body {
 .bubble {
     padding: 12px 16px;
     font-size: 14px;
-    line-height: 1.5;
+    line-height: 1.6;
     width: fit-content;
 }
+
+.bubble ul { margin: 6px 0 6px 18px; list-style: disc; }
+.bubble ol { margin: 6px 0 6px 18px; list-style: decimal; }
+.bubble li { margin-bottom: 2px; }
+.bubble strong { font-weight: 600; }
+.bubble em { font-style: italic; color: var(--text-secondary); }
 
 .meta {
     display: flex;

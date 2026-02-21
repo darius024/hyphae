@@ -11,11 +11,24 @@ let mediaRecorder = null;
 
 // ── Messages ────────────────────────────────────────────────────────
 
+function renderMarkdown(text) {
+    let html = escapeHtml(text);
+    html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    html = html.replace(/\*(.+?)\*/g, "<em>$1</em>");
+    html = html.replace(/^[-•]\s+(.+)$/gm, "<li>$1</li>");
+    html = html.replace(/(<li>.*<\/li>)/gs, "<ul>$1</ul>");
+    html = html.replace(/<\/ul>\s*<ul>/g, "");
+    html = html.replace(/^\d+\.\s+(.+)$/gm, "<li>$1</li>");
+    html = html.replace(/\n/g, "<br>");
+    return html;
+}
+
 function addMessage(role, content, meta) {
     const div = document.createElement("div");
     div.className = `message ${role}`;
 
-    let html = `<div class="bubble">${escapeHtml(content)}</div>`;
+    const rendered = role === "assistant" ? renderMarkdown(content) : escapeHtml(content);
+    let html = `<div class="bubble">${rendered}</div>`;
 
     if (meta) {
         const badge = meta.source === "on-device"
@@ -103,14 +116,22 @@ async function sendQuery(text) {
             return;
         }
 
-        const summary = data.function_calls.length > 0
-            ? `Called ${data.function_calls.map(fc => fc.name).join(", ")}`
-            : "No tools were called.";
-
-        addMessage("assistant", summary, {
-            source: data.source,
-            routing_ms: data.routing_ms,
-        });
+        if (data.answer) {
+            addMessage("assistant", data.answer, {
+                source: data.source,
+                routing_ms: data.routing_ms,
+            });
+        } else if (data.function_calls.length > 0) {
+            addMessage("assistant", `Called ${data.function_calls.map(fc => fc.name).join(", ")}`, {
+                source: data.source,
+                routing_ms: data.routing_ms,
+            });
+        } else {
+            addMessage("assistant", "I couldn't find a relevant tool for that query. Try rephrasing?", {
+                source: data.source,
+                routing_ms: data.routing_ms,
+            });
+        }
 
         addToolResults(data.function_calls, data.tool_results);
     } catch (err) {
@@ -173,13 +194,24 @@ async function sendVoice(blob) {
         }
 
         addMessage("user", `🎤 "${data.transcript}"`);
-        const summary = data.function_calls.length > 0
-            ? `Called ${data.function_calls.map(fc => fc.name).join(", ")}`
-            : "No tools were called.";
-        addMessage("assistant", summary, {
-            source: data.source,
-            routing_ms: data.routing_ms,
-        });
+
+        if (data.answer) {
+            addMessage("assistant", data.answer, {
+                source: data.source,
+                routing_ms: data.routing_ms,
+            });
+        } else if (data.function_calls.length > 0) {
+            addMessage("assistant", `Called ${data.function_calls.map(fc => fc.name).join(", ")}`, {
+                source: data.source,
+                routing_ms: data.routing_ms,
+            });
+        } else {
+            addMessage("assistant", "I couldn't process that. Try again?", {
+                source: data.source,
+                routing_ms: data.routing_ms,
+            });
+        }
+
         addToolResults(data.function_calls, data.tool_results);
     } catch (err) {
         removeThinking();

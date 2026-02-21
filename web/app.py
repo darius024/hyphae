@@ -14,7 +14,7 @@ Usage:
     CLOUD_ONLY=1 python app.py        # skip local inference
 """
 
-import sys, os, time, json, tempfile
+import sys, os, time, json, tempfile, logging
 from pathlib import Path
 
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -22,14 +22,80 @@ sys.path.insert(0, _project_root)
 sys.path.insert(0, os.path.join(_project_root, "src"))
 
 from flask import Flask, request, jsonify, send_from_directory
+from google import genai
 
 from main import generate_hybrid
 from tools import ALL_TOOLS, execute_tool
 from ingest import add_file, list_documents as list_corpus, remove_document, extract_pdf_text
 from config import CORPUS_DIR
 
+log = logging.getLogger(__name__)
+
 _static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 app = Flask(__name__, static_folder=_static_dir, static_url_path="")
+
+
+def synthesise_answer(user_message, tool_results):
+    """Generate a natural language answer from tool results via Gemini."""
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key or not tool_results:
+        return None
+
+    results_text = ""
+    for tr in tool_results:
+        result_data = tr["result"]
+        if "error" in result_data:
+            results_text += f"\nTool {tr['tool']} failed: {result_data['error']}\n"
+            continue
+
+        if tr["tool"] == "search_papers":
+            chunks = result_data.get("results", [])
+            results_text += f"\n[search_papers found {len(chunks)} passages]\n"
+            for c in chunks[:5]:
+                results_text += f"- {c.get('text', '')[:300]}\n"
+
+        elif tr["tool"] == "summarise_notes":
+            results_text += f"\n[summary]\n{result_data.get('summary', '')}\n"
+
+        elif tr["tool"] == "create_note":
+            results_text += f"\n[note saved to {result_data.get('saved', '')}]\n"
+
+        elif tr["tool"] == "list_documents":
+            docs = result_data.get("documents", [])
+            results_text += f"\n[{len(docs)} documents in corpus]\n"
+            for d in docs:
+                results_text += f"- {d['name']} ({d.get('size_kb', '?')} KB)\n"
+
+        elif tr["tool"] == "generate_hypothesis":
+            results_text += f"\n[hypotheses]\n{result_data.get('hypotheses', '')}\n"
+
+        elif tr["tool"] == "search_literature":
+            results_text += f"\n[literature]\n{result_data.get('results', '')}\n"
+
+        elif tr["tool"] == "compare_documents":
+            results_text += f"\n[comparison]\n{result_data.get('comparison', '')}\n"
+
+        else:
+            results_text += f"\n[{tr['tool']}]\n{json.dumps(result_data, indent=2)[:500]}\n"
+
+    prompt = (
+        f"The user asked: \"{user_message}\"\n\n"
+        f"The system executed tools and got these results:\n{results_text}\n\n"
+        "Based on these results, write a helpful, concise answer to the user's question. "
+        "Reference specific data from the results. Do not mention tool names or internal details. "
+        "Write as a knowledgeable research assistant."
+    )
+
+    try:
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[prompt],
+        )
+        return response.text
+    except Exception as e:
+        log.warning("Response synthesis failed: %s", e)
+        return None
 
 
 @app.route("/")
@@ -57,11 +123,14 @@ def api_query():
         tr = execute_tool(fc["name"], fc.get("arguments", {}))
         tool_results.append({"tool": fc["name"], "arguments": fc.get("arguments", {}), "result": tr})
 
+    answer = synthesise_answer(user_message, tool_results)
+
     return jsonify({
         "source": result.get("source", "unknown"),
         "routing_ms": round(routing_ms, 1),
         "function_calls": result.get("function_calls", []),
         "tool_results": tool_results,
+        "answer": answer,
         "confidence": result.get("confidence", None),
     })
 
@@ -156,12 +225,15 @@ def api_voice():
         tr = execute_tool(fc["name"], fc.get("arguments", {}))
         tool_results.append({"tool": fc["name"], "arguments": fc.get("arguments", {}), "result": tr})
 
+    answer = synthesise_answer(transcript, tool_results)
+
     return jsonify({
         "transcript": transcript,
         "source": result.get("source", "unknown"),
         "routing_ms": round(routing_ms, 1),
         "function_calls": result.get("function_calls", []),
         "tool_results": tool_results,
+        "answer": answer,
     })
 
 
