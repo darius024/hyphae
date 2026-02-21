@@ -573,30 +573,7 @@ sidebarOverlay.addEventListener("click", toggleSidebar);
 // ── Init ────────────────────────────────────────────────────────────
 loadHistory();
 loadDocuments();
-
-// ════════════════════════════════════════════════════════════════════════
-//  MODE SWITCHER
-// ════════════════════════════════════════════════════════════════════════
-
-const panelCorpus   = document.getElementById("panel-corpus");
-const panelNotebook = document.getElementById("panel-notebook");
-const btnCorpus     = document.getElementById("mode-corpus");
-const btnNotebook   = document.getElementById("mode-notebook");
-
-btnCorpus.addEventListener("click", () => {
-    panelCorpus.classList.add("active");
-    panelNotebook.classList.remove("active");
-    btnCorpus.classList.add("active");
-    btnNotebook.classList.remove("active");
-});
-
-btnNotebook.addEventListener("click", () => {
-    panelNotebook.classList.add("active");
-    panelCorpus.classList.remove("active");
-    btnNotebook.classList.add("active");
-    btnCorpus.classList.remove("active");
-    loadNotebooks();
-});
+loadNotebooks();
 
 // ════════════════════════════════════════════════════════════════════════
 //  NOTEBOOK STATE
@@ -984,14 +961,23 @@ nbClearBtn.addEventListener("click", () => {
 
 // ── Mobile notebook sidebar ───────────────────────────────────────────
 
-const nbMenuBtn       = document.getElementById("nb-menu-btn");
-const nbSidebar       = document.querySelector(".nb-sidebar");
-const nbSidebarOverlay= document.getElementById("nb-sidebar-overlay");
+const nbMenuBtn        = document.getElementById("nb-menu-btn");
+const nbSidebarOverlay = document.getElementById("nb-sidebar-overlay");
+const nbColumn         = document.getElementById("panel-notebook");
+const nbOpenBtn        = document.getElementById("nb-open-btn");
+
+if (window.innerWidth > 1200) {
+    nbColumn.classList.remove("closed");
+}
 
 function toggleNbSidebar() {
-    nbSidebar.classList.toggle("open");
-    nbSidebarOverlay.classList.toggle("open");
+    const isClosed = nbColumn.classList.toggle("closed");
+    nbSidebarOverlay.classList.toggle("open", !isClosed);
 }
 
 nbMenuBtn.addEventListener("click", toggleNbSidebar);
 nbSidebarOverlay.addEventListener("click", toggleNbSidebar);
+nbOpenBtn.addEventListener("click", () => {
+    nbColumn.classList.remove("closed");
+    nbSidebarOverlay.classList.add("open");
+});

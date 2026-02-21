@@ -65,6 +65,20 @@ sys.path.insert(0, str(_PROJECT_ROOT))
 sys.path.insert(0, str(_WEB_DIR))
 sys.path.insert(0, str(_PROJECT_ROOT / "src"))
 
+# Load .env from repo root if present so GEMINI_API_KEY and other secrets are
+# available before importing heavy modules (e.g., main) that expect them.
+try:
+    from dotenv import load_dotenv  # type: ignore
+
+    _env_path = _REPO_ROOT / ".env"
+    if _env_path.exists():
+        load_dotenv(dotenv_path=str(_env_path))
+        logging.getLogger(__name__).info("Loaded .env from %s", _env_path)
+except Exception:
+    # If python-dotenv isn't installed or load fails, continue — caller can still
+    # export env vars manually before starting the server.
+    pass
+
 # ── FastAPI ───────────────────────────────────────────────────────────────
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -138,6 +152,38 @@ def _startup():
 
 # Serve static SPA
 app.mount("/static", StaticFiles(directory=str(_WEB_DIR / "static")), name="static")
+
+# Compatibility aliases for static assets requested at root (e.g., /style.css)
+from fastapi.responses import FileResponse
+
+@app.get("/style.css", include_in_schema=False)
+async def css_alias():
+    return FileResponse(str(_WEB_DIR / "static" / "style.css"))
+
+@app.get("/app.js", include_in_schema=False)
+async def js_alias():
+    return FileResponse(str(_WEB_DIR / "static" / "app.js"))
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon_alias():
+    fav = _WEB_DIR / "static" / "favicon.ico"
+    if fav.exists():
+        return FileResponse(str(fav))
+    raise HTTPException(404)
+
+@app.get("/apple-touch-icon.png", include_in_schema=False)
+async def apple_touch_icon_alias():
+    icon = _WEB_DIR / "static" / "apple-touch-icon.png"
+    if icon.exists():
+        return FileResponse(str(icon))
+    raise HTTPException(404)
+
+@app.get("/apple-touch-icon-precomposed.png", include_in_schema=False)
+async def apple_touch_icon_pre_alias():
+    icon = _WEB_DIR / "static" / "apple-touch-icon-precomposed.png"
+    if icon.exists():
+        return FileResponse(str(icon))
+    raise HTTPException(404)
 
 
 @app.get("/", include_in_schema=False)
