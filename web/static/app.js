@@ -62,9 +62,9 @@ function clearHistory() {
     localStorage.removeItem(HISTORY_KEY);
     messagesEl.innerHTML = `<div class="message assistant">
         <div class="bubble">
-            <strong>Welcome to Hyphae.</strong> Ask questions about your research documents,
-            search literature, generate hypotheses, or manage your corpus.
-            <span class="privacy-note">Your confidential data stays on-device.</span>
+            <strong>Welcome back, researcher.</strong> Your documents are loaded and ready. Ask questions,
+            search your corpus, compare papers, or generate hypotheses.
+            <span class="privacy-note">Confidential data stays on-device — cloud is only used when you need external resources.</span>
         </div>
     </div>`;
 }
@@ -916,13 +916,18 @@ async function loadNotebooks() {
 
 function renderNotebookList(notebooks) {
     if (!notebooks.length) {
-        nbListEl.innerHTML = '<div class="doc-empty">No notebooks yet. Click ＋ to create one.</div>';
+        nbListEl.innerHTML = `<div class="nb-empty-state">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-tertiary);margin-bottom:8px"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
+            <p>No notebooks yet</p>
+            <button class="nb-empty-create" onclick="document.getElementById('nb-new-btn').click()">Create your first notebook</button>
+        </div>`;
         return;
     }
     nbListEl.innerHTML = notebooks.map(nb => `
         <div class="nb-item${nb.id === currentNbId ? " active" : ""}" data-id="${nb.id}">
+            <svg class="nb-item-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
             <span class="nb-item-name">${escapeHtml(nb.name)}</span>
-            <span class="nb-item-count" style="color:var(--text-secondary);font-size:11px;margin-right:6px">${nb.source_count || 0}</span>
+            <span class="nb-item-count">${nb.source_count || 0}</span>
             <button class="nb-item-del" data-id="${nb.id}" title="Delete notebook">×</button>
         </div>
     `).join("");
@@ -957,18 +962,49 @@ async function selectNotebook(nbId, name) {
     await Promise.all([loadSources(nbId), loadConversations(nbId)]);
 }
 
-document.getElementById("nb-new-btn").addEventListener("click", async () => {
-    const name = prompt("Notebook name:", "New Notebook");
-    if (!name) return;
-    const res = await fetch("/api/notebooks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
-    });
-    const data = await res.json();
-    await loadNotebooks();
-    selectNotebook(data.id, data.name);
-});
+// ── Notebook creation modal ───────────────────────────────────────────
+const nbCreateOverlay = document.getElementById("nb-create-overlay");
+const nbCreateName = document.getElementById("nb-create-name");
+const nbCreateDesc = document.getElementById("nb-create-desc");
+const nbCreateSubmit = document.getElementById("nb-create-submit");
+
+function openNbCreateModal() {
+    nbCreateName.value = "";
+    nbCreateDesc.value = "";
+    nbCreateOverlay.classList.add("open");
+    setTimeout(() => nbCreateName.focus(), 100);
+}
+
+function closeNbCreateModal() {
+    nbCreateOverlay.classList.remove("open");
+}
+
+async function submitNewNotebook() {
+    const name = nbCreateName.value.trim();
+    if (!name) { nbCreateName.focus(); return; }
+    nbCreateSubmit.disabled = true;
+    nbCreateSubmit.textContent = "Creating…";
+    try {
+        const res = await fetch("/api/notebooks", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name }),
+        });
+        const data = await res.json();
+        closeNbCreateModal();
+        await loadNotebooks();
+        selectNotebook(data.id, data.name);
+    } finally {
+        nbCreateSubmit.disabled = false;
+        nbCreateSubmit.textContent = "Create notebook";
+    }
+}
+
+document.getElementById("nb-new-btn").addEventListener("click", openNbCreateModal);
+document.getElementById("nb-create-close").addEventListener("click", closeNbCreateModal);
+nbCreateOverlay.addEventListener("click", (e) => { if (e.target === nbCreateOverlay) closeNbCreateModal(); });
+nbCreateSubmit.addEventListener("click", submitNewNotebook);
+nbCreateName.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submitNewNotebook(); } });
 
 async function deleteNotebook(nbId) {
     if (!confirm("Delete this notebook and all its sources?")) return;
@@ -1110,8 +1146,7 @@ async function selectConversation(nbId, convId, title) {
 
 document.getElementById("nb-conv-new-btn").addEventListener("click", async () => {
     if (!currentNbId) return;
-    const title = prompt("Conversation title:", "New Conversation");
-    if (!title) return;
+    const title = "New conversation";
     const res = await fetch(`/api/notebooks/${currentNbId}/conversations`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

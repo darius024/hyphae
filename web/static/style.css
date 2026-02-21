@@ -98,6 +98,68 @@ body {
     letter-spacing: 0.2px;
 }
 
+/* ── User bar ──────────────────────────────────────────────────────── */
+
+.user-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 14px;
+    padding: 8px 10px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius);
+    border: 1px solid var(--border-light);
+}
+
+.user-avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    font-family: var(--sans);
+    flex-shrink: 0;
+    letter-spacing: 0.5px;
+}
+
+.user-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.user-name {
+    font-size: 13px;
+    font-weight: 600;
+    font-family: var(--sans);
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.user-status {
+    font-size: 10.5px;
+    color: var(--text-tertiary);
+    font-family: var(--sans);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    flex-shrink: 0;
+}
+
 .privacy-badge {
     display: inline-flex;
     align-items: center;
@@ -1335,8 +1397,8 @@ body {
 .nb-header-row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: 8px;
+    flex: 1;
 }
 
 .nb-header-row h2 {
@@ -1345,6 +1407,30 @@ body {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    flex: 1;
+}
+
+.nb-new-btn-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 20px;
+    padding: 5px 14px 5px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: var(--sans);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background var(--transition), box-shadow var(--transition);
+    flex-shrink: 0;
+}
+
+.nb-new-btn-pill:hover {
+    background: var(--accent-hover);
+    box-shadow: var(--shadow-sm);
 }
 
 .icon-btn-sm {
@@ -1370,16 +1456,44 @@ body {
 
 .nb-list-wrap { flex-shrink: 0; padding: 10px; }
 
+.nb-empty-state {
+    padding: 24px 16px;
+    text-align: center;
+    font-family: var(--sans);
+}
+
+.nb-empty-state p {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+}
+
+.nb-empty-create {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 20px;
+    padding: 7px 18px;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: var(--sans);
+    cursor: pointer;
+    transition: background var(--transition);
+}
+
+.nb-empty-create:hover { background: var(--accent-hover); }
+
 .nb-item {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: 8px;
     padding: 9px 12px;
     border-radius: var(--radius-sm);
     font-size: 13px;
     cursor: pointer;
     transition: background var(--transition);
     font-weight: 450;
+    border: 1px solid transparent;
 }
 
 .nb-item:hover { background: var(--bg-tertiary); }
@@ -1387,14 +1501,28 @@ body {
 .nb-item.active {
     background: var(--accent-light);
     color: var(--accent);
-    border: 1px solid var(--accent-border);
+    border-color: var(--accent-border);
 }
+
+.nb-item-icon {
+    flex-shrink: 0;
+    color: var(--text-tertiary);
+}
+
+.nb-item.active .nb-item-icon { color: var(--accent); }
 
 .nb-item-name {
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.nb-item-count {
+    color: var(--text-tertiary);
+    font-size: 11px;
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
 }
 
 .nb-item-del {
@@ -1413,7 +1541,7 @@ body {
 .nb-section-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: 6px;
     padding: 10px 12px 6px;
     font-size: 10px;
     text-transform: uppercase;
@@ -1421,6 +1549,9 @@ body {
     color: var(--text-tertiary);
     font-weight: 600;
 }
+
+.nb-section-header span { flex: 1; }
+.nb-section-header svg { flex-shrink: 0; }
 
 .nb-sources-wrap, .nb-conv-wrap {
     flex-shrink: 0;
@@ -1637,6 +1768,65 @@ body {
     line-height: 1.2;
     font-family: var(--sans);
 }
+
+/* ── Notebook creation modal ─────────────────────────────────────── */
+
+.nb-create-body {
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.nb-create-label {
+    font-size: 12px;
+    font-weight: 600;
+    font-family: var(--sans);
+    color: var(--text-secondary);
+}
+
+.nb-create-optional {
+    font-weight: 400;
+    color: var(--text-tertiary);
+}
+
+.nb-create-input {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 14px;
+    font-family: var(--sans);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    transition: border-color var(--transition), box-shadow var(--transition);
+    resize: none;
+    box-sizing: border-box;
+}
+
+.nb-create-input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-light);
+}
+
+.nb-create-submit {
+    width: 100%;
+    padding: 11px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 14px;
+    font-weight: 600;
+    font-family: var(--sans);
+    cursor: pointer;
+    transition: background var(--transition);
+    margin-top: 4px;
+}
+
+.nb-create-submit:hover { background: var(--accent-hover); }
+.nb-create-submit:disabled { opacity: 0.6; cursor: not-allowed; }
 
 /* ── Mobile notebook ─────────────────────────────────────────────────── */
 
