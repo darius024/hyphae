@@ -111,6 +111,32 @@ TOOL_COMPARE_DOCUMENTS = {
     },
 }
 
+TOOL_READ_DOCUMENT = {
+    "name": "read_document",
+    "description": "Open a local corpus file and return its text (truncated for safety).",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string", "description": "Exact filename in the corpus (e.g., notes.txt)"},
+            "max_chars": {"type": "integer", "description": "Optional character cap (default 4000)"},
+        },
+        "required": ["name"],
+    },
+}
+
+TOOL_SEARCH_TEXT = {
+    "name": "search_text",
+    "description": "Search inside local corpus files for a keyword or phrase and return matching snippets.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "Text to search for (case-insensitive)"},
+            "max_snippets": {"type": "integer", "description": "Maximum snippets to return (default 5)"},
+        },
+        "required": ["query"],
+    },
+}
+
 ALL_TOOLS = [
     TOOL_SEARCH_PAPERS,
     TOOL_SUMMARISE_NOTES,
@@ -119,9 +145,11 @@ ALL_TOOLS = [
     TOOL_GENERATE_HYPOTHESIS,
     TOOL_SEARCH_LITERATURE,
     TOOL_COMPARE_DOCUMENTS,
+    TOOL_READ_DOCUMENT,
+    TOOL_SEARCH_TEXT,
 ]
 
-LOCAL_ONLY_TOOLS = {"search_papers", "summarise_notes", "create_note", "list_documents", "compare_documents"}
+LOCAL_ONLY_TOOLS = {"search_papers", "summarise_notes", "create_note", "list_documents", "compare_documents", "read_document", "search_text"}
 CLOUD_SAFE_TOOLS = {"generate_hypothesis", "search_literature"}
 
 
@@ -137,6 +165,8 @@ def execute_tool(name, arguments):
         "generate_hypothesis": _exec_generate_hypothesis,
         "search_literature": _exec_search_literature,
         "compare_documents": _exec_compare_documents,
+        "read_document": _exec_read_document,
+        "search_text": _exec_search_text,
     }
     fn = dispatch.get(name)
     if fn is None:
@@ -178,6 +208,51 @@ def _exec_summarise_notes(topic):
         return {"summary": result.get("response", ""), "source": "local"}
     except json.JSONDecodeError:
         return {"summary": context[:500], "source": "local"}
+
+
+def _exec_read_document(name, max_chars=4000):
+    """Return the text content of a corpus file (truncated)."""
+    path = Path(CORPUS_DIR) / name
+    if not path.exists() or not path.is_file():
+        raise FileNotFoundError(f"Document not found: {name}")
+    text = path.read_text(errors="replace")
+    snippet = text[: int(max_chars)]
+    truncated = len(text) > len(snippet)
+    return {
+        "name": name,
+        "content": snippet,
+        "truncated": truncated,
+        "size_kb": round(path.stat().st_size / 1024, 1),
+        "source": "local",
+    }
+
+
+def _exec_search_text(query, max_snippets=5):
+    """Case-insensitive search over corpus text files with short snippets."""
+    query_low = query.lower()
+    matches = []
+    for pattern in ["**/*.txt", "**/*.md"]:
+        for path in Path(CORPUS_DIR).glob(pattern):
+            try:
+                text = path.read_text(errors="replace")
+            except Exception:
+                continue
+            if query_low in text.lower():
+                # collect up to max_snippets snippets per file
+                for line in text.splitlines():
+                    if query_low in line.lower():
+                        matches.append({
+                            "name": path.name,
+                            "snippet": line.strip()[:240],
+                            "source": "local",
+                        })
+                        if len(matches) >= max_snippets:
+                            break
+            if len(matches) >= max_snippets:
+                break
+        if len(matches) >= max_snippets:
+            break
+    return {"matches": matches, "count": len(matches), "source": "local"}
 
 
 def _exec_create_note(title, content):

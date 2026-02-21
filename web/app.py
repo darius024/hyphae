@@ -367,7 +367,14 @@ async def api_voice(audio: UploadFile = File(...)):
         from voice import transcribe_file  # type: ignore
         transcript = transcribe_file(wav_path)
     except Exception as exc:
-        raise HTTPException(500, f"Transcription failed: {exc}")
+        # Return a clear error so the frontend can surface guidance instead of a network failure.
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": f"Transcription failed: {exc}",
+                "hint": "Install whisper weights: `cactus download openai/whisper-small` and ensure ffmpeg is installed (brew install ffmpeg)."
+            }
+        )
     finally:
         for p in cleanup:
             try:
