@@ -215,6 +215,9 @@ body {
 
 .badge.local { background: rgba(52, 211, 153, 0.15); color: var(--green); }
 .badge.cloud { background: rgba(251, 191, 36, 0.15); color: var(--amber); }
+.badge.conf-high { background: rgba(52, 211, 153, 0.12); color: var(--green); }
+.badge.conf-med { background: rgba(251, 191, 36, 0.12); color: var(--amber); }
+.badge.conf-low { background: rgba(248, 113, 113, 0.12); color: var(--red); }
 
 /* ── Tool details (collapsible) ──────────────────────────────────── */
 .tool-toggle {

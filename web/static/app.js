@@ -21,10 +21,16 @@ function saveHistory() {
             const bubble = el.querySelector(".bubble");
             if (!bubble) return;
             const meta = {};
-            const badge = el.querySelector(".badge");
+            const routeBadge = el.querySelector(".badge.local, .badge.cloud");
+            const confBadge = el.querySelector(".badge.conf-high, .badge.conf-med, .badge.conf-low");
             const metaSpan = el.querySelector(".meta span:last-child");
-            if (badge) meta.source = badge.classList.contains("local") ? "on-device" : "cloud";
+            if (routeBadge) meta.source = routeBadge.classList.contains("local") ? "on-device" : "cloud";
             if (metaSpan) meta.routing_ms = metaSpan.textContent.replace("ms", "");
+            if (confBadge) {
+                if (confBadge.classList.contains("conf-high")) meta.confidence = 1;
+                else if (confBadge.classList.contains("conf-med")) meta.confidence = 0.5;
+                else meta.confidence = 0.1;
+            }
             msgs.push({ role, text: bubble.textContent, html: bubble.innerHTML, meta: Object.keys(meta).length ? meta : null });
         });
         localStorage.setItem(HISTORY_KEY, JSON.stringify(msgs));
@@ -42,13 +48,7 @@ function loadHistory() {
             const div = document.createElement("div");
             div.className = `message ${m.role}`;
             let html = `<div class="bubble">${m.html || escapeHtml(m.text)}</div>`;
-            if (m.meta) {
-                const isLocal = m.meta.source && m.meta.source.includes("on-device");
-                const badge = isLocal
-                    ? '<span class="badge local">LOCAL</span>'
-                    : '<span class="badge cloud">CLOUD</span>';
-                html += `<div class="meta">${badge} <span>${m.meta.routing_ms}ms</span></div>`;
-            }
+            html += buildMetaHtml(m.meta);
             div.innerHTML = html;
             messagesEl.appendChild(div);
         }
@@ -94,20 +94,32 @@ function renderMarkdown(text) {
     return html;
 }
 
+function confidenceBadge(value) {
+    if (value == null) return "";
+    const n = parseFloat(value);
+    if (isNaN(n)) return "";
+    if (n >= 0.8) return '<span class="badge conf-high">HIGH</span>';
+    if (n >= 0.4) return '<span class="badge conf-med">MED</span>';
+    return '<span class="badge conf-low">LOW</span>';
+}
+
+function buildMetaHtml(meta) {
+    if (!meta) return "";
+    const isLocal = meta.source && meta.source.includes("on-device");
+    const routeBadge = isLocal
+        ? '<span class="badge local">LOCAL</span>'
+        : '<span class="badge cloud">CLOUD</span>';
+    const confBadge = confidenceBadge(meta.confidence);
+    return `<div class="meta">${routeBadge}${confBadge} <span>${meta.routing_ms}ms</span></div>`;
+}
+
 function addMessage(role, content, meta) {
     const div = document.createElement("div");
     div.className = `message ${role}`;
 
     const rendered = role === "assistant" ? renderMarkdown(content) : escapeHtml(content);
     let html = `<div class="bubble">${rendered}</div>`;
-
-    if (meta) {
-        const isLocal = meta.source && meta.source.includes("on-device");
-        const badge = isLocal
-            ? '<span class="badge local">LOCAL</span>'
-            : '<span class="badge cloud">CLOUD</span>';
-        html += `<div class="meta">${badge} <span>${meta.routing_ms}ms</span></div>`;
-    }
+    html += buildMetaHtml(meta);
 
     div.innerHTML = html;
     messagesEl.appendChild(div);
@@ -257,21 +269,14 @@ async function sendQuery(text) {
             return;
         }
 
+        const meta = { source: data.source, routing_ms: data.routing_ms, confidence: data.confidence };
+
         if (data.answer) {
-            addMessage("assistant", data.answer, {
-                source: data.source,
-                routing_ms: data.routing_ms,
-            });
+            addMessage("assistant", data.answer, meta);
         } else if (data.function_calls.length > 0) {
-            addMessage("assistant", `Called ${data.function_calls.map(fc => fc.name).join(", ")}`, {
-                source: data.source,
-                routing_ms: data.routing_ms,
-            });
+            addMessage("assistant", `Called ${data.function_calls.map(fc => fc.name).join(", ")}`, meta);
         } else {
-            addMessage("assistant", "I couldn't find a relevant tool for that query. Try rephrasing?", {
-                source: data.source,
-                routing_ms: data.routing_ms,
-            });
+            addMessage("assistant", "I couldn't find a relevant tool for that query. Try rephrasing?", meta);
         }
 
         addToolResults(data.function_calls, data.tool_results);
@@ -345,22 +350,14 @@ async function sendVoice(blob, ext = ".webm") {
         }
 
         addMessage("user", `🎤 "${data.transcript}"`);
+        const meta = { source: data.source, routing_ms: data.routing_ms, confidence: data.confidence };
 
         if (data.answer) {
-            addMessage("assistant", data.answer, {
-                source: data.source,
-                routing_ms: data.routing_ms,
-            });
+            addMessage("assistant", data.answer, meta);
         } else if (data.function_calls.length > 0) {
-            addMessage("assistant", `Called ${data.function_calls.map(fc => fc.name).join(", ")}`, {
-                source: data.source,
-                routing_ms: data.routing_ms,
-            });
+            addMessage("assistant", `Called ${data.function_calls.map(fc => fc.name).join(", ")}`, meta);
         } else {
-            addMessage("assistant", "I couldn't process that. Try again?", {
-                source: data.source,
-                routing_ms: data.routing_ms,
-            });
+            addMessage("assistant", "I couldn't process that. Try again?", meta);
         }
 
         addToolResults(data.function_calls, data.tool_results);
