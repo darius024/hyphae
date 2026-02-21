@@ -3,7 +3,7 @@ import sys
 sys.path.insert(0, "cactus/python/src")
 functiongemma_path = "cactus/weights/functiongemma-270m-it"
 
-import json, os, time
+import json, os, time, functools
 
 try:
     from cactus import cactus_init, cactus_complete, cactus_destroy
@@ -95,11 +95,9 @@ def _expected_call_count(messages, tools) -> int:
     return min(action_count, len(tools))
 
 
-def _build_system_prompt(messages, tools) -> str:
-    """Build a task-specific, complexity-aware system prompt."""
-    tool_names = [t["name"] for t in tools]
-    expected_calls = _expected_call_count(messages, tools)
-
+@functools.lru_cache(maxsize=128)
+def _build_system_prompt_cached(tool_names_tuple: tuple, expected_calls: int) -> str:
+    """Build and cache system prompt — identical (tools, n_calls) hits return cached string."""
     base = (
         "You are a precise function-calling assistant. "
         "Call ONLY provided tools with exact types. "
@@ -109,16 +107,62 @@ def _build_system_prompt(messages, tools) -> str:
     )
 
     if expected_calls >= 2:
-        base += (
-            f"Call ALL {expected_calls} functions — do not skip any. "
-        )
+        base += f"Call ALL {expected_calls} functions — do not skip any. "
     else:
         base += "Call exactly one function. "
 
-    if len(tools) > 1:
-        base += f"Choose carefully among: {', '.join(tool_names)}."
+    if len(tool_names_tuple) > 1:
+        base += f"Choose carefully among: {', '.join(tool_names_tuple)}."
 
     return base
+
+
+def _build_system_prompt(messages, tools) -> str:
+    """Build a task-specific, complexity-aware system prompt."""
+    tool_names = tuple(t["name"] for t in tools)
+    expected_calls = _expected_call_count(messages, tools)
+    return _build_system_prompt_cached(tool_names, expected_calls)
+
+
+@functools.lru_cache(maxsize=128)
+def _build_gemini_tools_cached(tools_key: tuple) -> list:
+    """Build and cache types.Tool objects — identical tool-sets hit cache, skip Pydantic construction.
+
+    tools_key: tuple of (name, description, props_json, required_json) per tool.
+    """
+    declarations = []
+    for name, description, props_json, required_json in tools_key:
+        props = json.loads(props_json)
+        required = json.loads(required_json)
+        declarations.append(
+            types.FunctionDeclaration(
+                name=name,
+                description=description,
+                parameters=types.Schema(
+                    type="OBJECT",
+                    properties={
+                        k: types.Schema(type=v["type"].upper(), description=v.get("description", ""))
+                        for k, v in props.items()
+                    },
+                    required=required,
+                ),
+            )
+        )
+    return [types.Tool(function_declarations=declarations)]
+
+
+def _tools_cache_key(tools) -> tuple:
+    """Convert tools list into a hashable cache key."""
+    enriched = _enrich_tools(tools)
+    return tuple(
+        (
+            t["name"],
+            t["description"],
+            json.dumps(t["parameters"]["properties"], sort_keys=True),
+            json.dumps(t["parameters"].get("required", []), sort_keys=True),
+        )
+        for t in enriched
+    )
 
 
 def generate_cactus(messages, tools):
@@ -167,39 +211,19 @@ def generate_cloud(messages, tools):
     # Use module-level cached client (avoids re-init latency on every call)
     client = _gemini_client or genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
-    # Enrich tool descriptions with clarifying hints (same as Cactus path)
-    enriched_tools = _enrich_tools(tools)
-
-    gemini_tools = [
-        types.Tool(function_declarations=[
-            types.FunctionDeclaration(
-                name=t["name"],
-                description=t["description"],
-                parameters=types.Schema(
-                    type="OBJECT",
-                    properties={
-                        k: types.Schema(type=v["type"].upper(), description=v.get("description", ""))
-                        for k, v in t["parameters"]["properties"].items()
-                    },
-                    required=t["parameters"].get("required", []),
-                ),
-            )
-            for t in enriched_tools
-        ])
-    ]
+    # Build (cached) tool objects — skips Pydantic construction on repeated calls
+    gemini_tools = _build_gemini_tools_cached(_tools_cache_key(tools))
 
     expected_calls = _expected_call_count(messages, tools)
     user_text = " ".join(m["content"] for m in messages if m["role"] == "user")
 
     # For multi-action queries, prepend a brief count reminder in the user turn
     if expected_calls >= 2:
-        contents = [
-            f"Perform ALL {expected_calls} actions requested:\n\n{user_text}"
-        ]
+        contents = [f"Perform ALL {expected_calls} actions requested:\n\n{user_text}"]
     else:
         contents = [user_text]
 
-    # System instruction carries the full extraction rules (no duplication in contents)
+    # System prompt is lru_cache'd — same tool-set + n_calls hits cached string
     system_prompt = _build_system_prompt(messages, tools)
 
     start_time = time.time()
@@ -211,8 +235,7 @@ def generate_cloud(messages, tools):
             config=types.GenerateContentConfig(
                 tools=gemini_tools,
                 system_instruction=system_prompt,
-                # Disable extended thinking — saves ~500-800ms with no accuracy loss
-                # for straightforward function-calling tasks
+                # Disable extended thinking — saves ~500-800ms for simple tasks
                 thinking_config=types.ThinkingConfig(thinking_budget=0),
             ),
         )
