@@ -457,6 +457,49 @@ queryInput.addEventListener("keydown", (e) => {
     }
 });
 
+// ── Keyboard shortcuts ──────────────────────────────────────────────
+
+document.addEventListener("keydown", (e) => {
+    const mod = e.metaKey || e.ctrlKey;
+
+    // Cmd/Ctrl+K → focus doc search
+    if (mod && e.key === "k") {
+        e.preventDefault();
+        docSearchInput.focus();
+        if (window.innerWidth <= 768 && !sidebar.classList.contains("open")) {
+            toggleSidebar();
+        }
+        return;
+    }
+
+    // Escape → close preview modal, clear doc search, or blur input
+    if (e.key === "Escape") {
+        if (previewOverlay.classList.contains("open")) {
+            closePreview();
+        } else if (document.activeElement === docSearchInput) {
+            docSearchInput.value = "";
+            docSearchInput.dispatchEvent(new Event("input"));
+            docSearchInput.blur();
+        } else if (document.activeElement === queryInput) {
+            queryInput.blur();
+        }
+        return;
+    }
+
+    // Cmd/Ctrl+Enter → send query (works even with Shift held)
+    if (mod && e.key === "Enter") {
+        e.preventDefault();
+        sendQuery(queryInput.value);
+        return;
+    }
+
+    // "/" → focus query input (when not already in an input)
+    if (e.key === "/" && !mod && document.activeElement.tagName !== "INPUT" && document.activeElement.tagName !== "TEXTAREA") {
+        e.preventDefault();
+        queryInput.focus();
+    }
+});
+
 queryInput.addEventListener("input", () => {
     queryInput.style.height = "auto";
     queryInput.style.height = Math.min(queryInput.scrollHeight, 120) + "px";
