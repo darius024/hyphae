@@ -905,6 +905,26 @@ const nbSendBtn      = document.getElementById("nb-send-btn");
 const nbClearBtn     = document.getElementById("nb-clear-btn");
 const nbCitationsBar = document.getElementById("nb-citations-bar");
 const nbCitationsList= document.getElementById("nb-citations-list");
+const mainInputArea  = document.getElementById("main-input-area");
+
+function enterNotebookChat(nbName, convTitle) {
+    messagesEl.style.display = "none";
+    mainInputArea.style.display = "none";
+    nbChatWrap.style.display = "";
+    document.getElementById("nb-chat-title").textContent = nbName + " \u2014 " + convTitle;
+}
+
+function exitNotebookChat() {
+    nbChatWrap.style.display = "none";
+    messagesEl.style.display = "";
+    mainInputArea.style.display = "";
+    currentConvId = null;
+    nbMessagesEl.innerHTML = "";
+    nbCitationsBar.style.display = "none";
+    nbConvList.querySelectorAll(".nb-conv-item").forEach(el => el.classList.remove("active"));
+}
+
+document.getElementById("nb-chat-back").addEventListener("click", exitNotebookChat);
 
 // ── Notebook list ────────────────────────────────────────────────────
 
@@ -944,17 +964,15 @@ function renderNotebookList(notebooks) {
 }
 
 async function selectNotebook(nbId, name) {
-    currentNbId   = nbId;
+    currentNbId = nbId;
+    if (currentConvId) exitNotebookChat();
     currentConvId = null;
 
     nbNameDisplay.textContent = name;
     nbSourcesWrap.style.display = "";
     nbConvWrap.style.display    = "";
     nbPlaceholder.style.display = "none";
-    nbChatWrap.style.display    = "none";
-    nbCitationsBar.style.display= "none";
 
-    // highlight
     nbListEl.querySelectorAll(".nb-item").forEach(el => {
         el.classList.toggle("active", el.dataset.id === nbId);
     });
@@ -1010,11 +1028,11 @@ async function deleteNotebook(nbId) {
     if (!confirm("Delete this notebook and all its sources?")) return;
     await fetch(`/api/notebooks/${nbId}`, { method: "DELETE" });
     if (currentNbId === nbId) {
+        if (currentConvId) exitNotebookChat();
         currentNbId = null;
         nbNameDisplay.textContent = "Notebooks";
         nbSourcesWrap.style.display = "none";
         nbConvWrap.style.display    = "none";
-        nbChatWrap.style.display    = "none";
         nbPlaceholder.style.display = "";
     }
     loadNotebooks();
@@ -1123,14 +1141,12 @@ function renderConversations(nbId, convs) {
 
 async function selectConversation(nbId, convId, title) {
     currentConvId = convId;
-    nbChatWrap.style.display = "";
-    nbPlaceholder.style.display = "none";
+    enterNotebookChat(nbNameDisplay.textContent, title);
 
     nbConvList.querySelectorAll(".nb-conv-item").forEach(el => {
         el.classList.toggle("active", el.dataset.id === convId);
     });
 
-    // load message history
     const res  = await fetch(`/api/notebooks/${nbId}/conversations/${convId}/messages`);
     const data = await res.json();
     nbMessagesEl.innerHTML = "";

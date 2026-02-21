@@ -1334,7 +1334,7 @@ body {
 
     .notebook-column.closed { transform: translateX(100%); }
     .nb-menu { display: flex; }
-    .nb-sidebar { width: 280px; }
+    .nb-sidebar { width: 100%; }
     .sidebar-overlay#nb-sidebar-overlay.open { display: block; }
     .nb-open-btn { display: flex; }
 }
@@ -1342,13 +1342,13 @@ body {
 /* ── Notebook column layout ──────────────────────────────────────── */
 
 .notebook-column {
-    width: 540px;
-    max-width: 45vw;
+    width: 300px;
+    max-width: 30vw;
     border-left: 1px solid var(--border);
     background: var(--bg-secondary);
     display: flex;
     flex-direction: column;
-    min-width: 380px;
+    min-width: 260px;
     position: relative;
 }
 
@@ -1392,6 +1392,11 @@ body {
     flex-direction: column;
     flex-shrink: 0;
     overflow-y: auto;
+}
+
+.nb-sidebar.nb-sidebar-full {
+    width: 100%;
+    border-right: none;
 }
 
 .nb-header-row {
@@ -1689,6 +1694,47 @@ body {
     min-height: 0;
 }
 
+.nb-chat-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-secondary);
+    flex-shrink: 0;
+}
+
+.nb-chat-back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    padding: 5px 12px;
+    font-size: 13px;
+    font-family: var(--sans);
+    cursor: pointer;
+    transition: color var(--transition), border-color var(--transition), background var(--transition);
+}
+
+.nb-chat-back-btn:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-light);
+}
+
+.nb-chat-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--sans);
+}
+
 /* Citations bar */
 .nb-citations-bar {
     padding: 10px 32px;
@@ -1842,5 +1888,4 @@ body {
 
     .nb-sidebar.open { left: 0; }
     #nb-sidebar-overlay.open { display: block; }
-    .nb-main .messages { padding-top: 56px; }
 }

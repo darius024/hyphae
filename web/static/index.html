@@ -94,7 +94,7 @@
                 </div>
             </div>
 
-            <div class="input-area">
+            <div class="input-area" id="main-input-area">
                 <div class="input-row">
                     <textarea id="query-input" placeholder="Ask about your research..." rows="1"></textarea>
                     <button class="icon-btn voice-btn" id="voice-btn" title="Voice input" aria-label="Voice input">
@@ -119,6 +119,32 @@
                     </button>
                 </div>
             </div>
+
+            <div id="nb-chat-wrap" style="display:none" class="nb-chat-wrap">
+                <div class="nb-chat-header">
+                    <button id="nb-chat-back" class="nb-chat-back-btn" title="Back to main chat">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+                        <span>Back to chat</span>
+                    </button>
+                    <span class="nb-chat-title" id="nb-chat-title"></span>
+                </div>
+                <div class="messages" id="nb-messages"></div>
+                <div id="nb-citations-bar" class="nb-citations-bar" style="display:none">
+                    <span class="citations-label">Sources:</span>
+                    <div id="nb-citations-list"></div>
+                </div>
+                <div class="input-area">
+                    <div class="input-row">
+                        <textarea id="nb-query-input" placeholder="Ask about your sources..." rows="1"></textarea>
+                        <button class="icon-btn send-btn" id="nb-send-btn" title="Send" aria-label="Send">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                        </button>
+                        <button class="icon-btn clear-btn" id="nb-clear-btn" title="Clear chat" aria-label="Clear chat">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
         </main>
 
         <!-- Notebook column -->
@@ -137,68 +163,43 @@
                 </button>
             </div>
 
-            <div class="nb-inner">
-                <aside class="sidebar nb-sidebar">
-                    <div class="nb-list-wrap" id="nb-list-wrap">
-                        <div id="nb-list"></div>
+            <aside class="sidebar nb-sidebar nb-sidebar-full">
+                <div class="nb-list-wrap" id="nb-list-wrap">
+                    <div id="nb-list"></div>
+                </div>
+
+                <div id="nb-placeholder" class="nb-placeholder">
+                    <div class="nb-placeholder-inner">
+                        <svg class="nb-placeholder-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/><line x1="9" y1="7" x2="15" y2="7"/><line x1="9" y1="11" x2="13" y2="11"/></svg>
+                        <h3>Select or create a notebook</h3>
+                        <p>Each notebook is a private workspace. Upload documents, then chat with your AI copilot grounded in your sources.</p>
                     </div>
+                </div>
 
-                    <div class="nb-sources-wrap" id="nb-sources-wrap" style="display:none">
-                        <div class="nb-section-header">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                            <span>Sources</span>
-                            <label class="icon-btn-sm" id="nb-upload-label" title="Add file">+ File
-                                <input type="file" id="nb-file-input" multiple accept=".pdf,.txt,.md" style="display:none">
-                            </label>
-                        </div>
-                        <div id="nb-source-list"></div>
-                        <div class="nb-url-row">
-                            <input type="text" id="nb-url-input" class="doc-search" placeholder="Paste URL...">
-                            <button class="icon-btn-sm" id="nb-url-btn">Add</button>
-                        </div>
+                <div class="nb-sources-wrap" id="nb-sources-wrap" style="display:none">
+                    <div class="nb-section-header">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                        <span>Sources</span>
+                        <label class="icon-btn-sm" id="nb-upload-label" title="Add file">+ File
+                            <input type="file" id="nb-file-input" multiple accept=".pdf,.txt,.md" style="display:none">
+                        </label>
                     </div>
-
-                    <div class="nb-conv-wrap" id="nb-conv-wrap" style="display:none">
-                        <div class="nb-section-header">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                            <span>Conversations</span>
-                            <button class="icon-btn-sm" id="nb-conv-new-btn" title="New conversation">+ New</button>
-                        </div>
-                        <div id="nb-conv-list"></div>
+                    <div id="nb-source-list"></div>
+                    <div class="nb-url-row">
+                        <input type="text" id="nb-url-input" class="doc-search" placeholder="Paste URL...">
+                        <button class="icon-btn-sm" id="nb-url-btn">Add</button>
                     </div>
-                </aside>
+                </div>
 
-                <main class="main nb-main">
-                    <div id="nb-placeholder" class="nb-placeholder">
-                        <div class="nb-placeholder-inner">
-                            <svg class="nb-placeholder-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/><line x1="9" y1="7" x2="15" y2="7"/><line x1="9" y1="11" x2="13" y2="11"/></svg>
-                            <h3>Select or create a notebook</h3>
-                            <p>Each notebook is a private workspace. Upload documents, then chat with your AI copilot grounded in your sources.</p>
-                        </div>
+                <div class="nb-conv-wrap" id="nb-conv-wrap" style="display:none">
+                    <div class="nb-section-header">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                        <span>Conversations</span>
+                        <button class="icon-btn-sm" id="nb-conv-new-btn" title="New conversation">+ New</button>
                     </div>
-
-                    <div id="nb-chat-wrap" style="display:none" class="nb-chat-wrap">
-                        <div class="messages" id="nb-messages"></div>
-
-                        <div id="nb-citations-bar" class="nb-citations-bar" style="display:none">
-                            <span class="citations-label">Sources:</span>
-                            <div id="nb-citations-list"></div>
-                        </div>
-
-                        <div class="input-area">
-                            <div class="input-row">
-                                <textarea id="nb-query-input" placeholder="Ask about your sources..." rows="1"></textarea>
-                                <button class="icon-btn send-btn" id="nb-send-btn" title="Send" aria-label="Send">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                                </button>
-                                <button class="icon-btn clear-btn" id="nb-clear-btn" title="Clear chat" aria-label="Clear chat">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </main>
-            </div>
+                    <div id="nb-conv-list"></div>
+                </div>
+            </aside>
         </section>
 
         <div class="sidebar-overlay" id="nb-sidebar-overlay"></div>
