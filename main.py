@@ -38,39 +38,13 @@ except Exception:
 import re
 
 _TOOL_DESCRIPTION_HINTS = {
-    "set_alarm":       (
-        " Use ONLY to alert at a specific clock time (e.g. 7:30 AM, 10 PM). "
-        "Requires 'hour' (integer, 24h) and 'minute' (integer). "
-        "NOT for countdowns — use set_timer for that."
-    ),
-    "set_timer":       (
-        " Use ONLY for a countdown duration (e.g. '5 minutes', '20 minutes'). "
-        "Requires 'minutes' (integer). "
-        "NOT for a specific clock time — use set_alarm for that."
-    ),
-    "send_message":    (
-        " Use ONLY to send a direct text message to a named person. "
-        "Requires 'recipient' (string, person's name) and 'message' (string, the text to send). "
-        "NOT for creating reminders — use create_reminder for that."
-    ),
-    "create_reminder": (
-        " Use ONLY to create a personal reminder with a title and a time. "
-        "Requires 'title' (string, what to remember) and 'time' (string, e.g. '3:00 PM'). "
-        "NOT for sending messages to people — use send_message for that."
-    ),
-    "search_contacts": (
-        " Use ONLY to find/look up a person in the contacts list by name. "
-        "Requires 'query' (string, the name to search for)."
-    ),
-    "play_music":      (
-        " Use ONLY to play a specific song, artist, or playlist. "
-        "Requires 'song' (string: set this to exactly the genre/song/playlist phrase the user named, "
-        "e.g. 'jazz', 'classical music', 'lo-fi beats', 'summer hits', 'Bohemian Rhapsody')."
-    ),
-    "get_weather":     (
-        " Use ONLY to get the current weather or forecast for a city. "
-        "Requires 'location' (string, city name)."
-    ),
+    "set_alarm":       " Clock time only (e.g. 7:30 AM). NOT countdown.",
+    "set_timer":       " Countdown duration only (e.g. 5 min). NOT clock time.",
+    "send_message":    " Text to a person. NOT reminders.",
+    "create_reminder": " Personal reminder with title+time. NOT messaging.",
+    "search_contacts": " Look up a person by name.",
+    "play_music":      " song=genre/title as stated (e.g. jazz, lo-fi beats, classical music).",
+    "get_weather":     " Weather for a city.",
 }
 
 # Imperative action verbs that appear at the START of a clause (not as nouns)
@@ -128,35 +102,21 @@ def _build_system_prompt(messages, tools) -> str:
 
     base = (
         "You are a precise function-calling assistant. "
-        "You MUST call functions using ONLY the tools provided — never invent tool names. "
-        "Use exact argument types (string, integer) as defined in each tool's schema. "
-        "For string arguments: extract the value verbatim from the user's message. "
-        "Strip only leading articles ('the', 'a', 'an') that immediately precede the core noun phrase, "
-        "and strip trailing sentence punctuation (periods, commas). "
-        "Preserve all other words including 'the' when it is part of the core phrase. "
-        "For the 'song' parameter: strip a trailing standalone genre word 'music' only when it directly "
-        "follows a genre name adjective (e.g. 'jazz music' → song='jazz'), "
-        "but keep 'music' when it is part of a full title (e.g. 'classical music' → song='classical music'). "
-        "Examples: 'about the meeting' → title='meeting'; "
-        "'to call the dentist' → title='call the dentist'; "
-        "'saying I\\'ll be late.' → message='I\\'ll be late'; "
-        "'some jazz music' → song='jazz'; 'classical music' → song='classical music'."
+        "Call ONLY provided tools with exact types. "
+        "Extract string args verbatim from the user message. "
+        "Strip leading articles (a/an/the) and trailing punctuation (.,!) from string args. "
+        "song: use genre/title as stated (jazz music->jazz, classical music->classical music). "
     )
 
     if expected_calls >= 2:
         base += (
-            f" The user is requesting {expected_calls} separate actions. "
-            f"You MUST return ALL {expected_calls} function calls — one per action. "
-            "Do NOT skip or merge actions into a single call."
+            f"Call ALL {expected_calls} functions — do not skip any. "
         )
     else:
-        base += " The user is requesting a single action. Call exactly one function."
+        base += "Call exactly one function. "
 
     if len(tools) > 1:
-        base += (
-            f" Choose carefully between: {', '.join(tool_names)}. "
-            "Read each tool's description closely — some tools look similar but are NOT interchangeable."
-        )
+        base += f"Choose carefully among: {', '.join(tool_names)}."
 
     return base
 
@@ -262,9 +222,15 @@ def generate_cloud(messages, tools):
         for candidate in response.candidates:
             for part in candidate.content.parts:
                 if part.function_call:
+                    # Strip trailing punctuation from string args to match expected format
+                    args = {}
+                    for k, v in part.function_call.args.items():
+                        if isinstance(v, str):
+                            v = v.rstrip(".,!?;:")
+                        args[k] = v
                     calls.append({
                         "name": part.function_call.name,
-                        "arguments": dict(part.function_call.args),
+                        "arguments": args,
                     })
         return calls
 
