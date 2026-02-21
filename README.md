@@ -62,7 +62,7 @@ git clone https://github.com/darius024/hyphae.git && cd hyphae
 pip install huggingface_hub
 huggingface-cli login
 
-# 3. Run setup (clones cactus, builds, downloads model, installs deps)
+# 3. Run setup (initializes submodule, builds, downloads model, installs deps)
 bash setup.sh
 
 # 4. Activate the environment
@@ -119,6 +119,7 @@ python cli.py "list all my documents"
 | `summarise_notes` | LOCAL-ONLY | Summarise experiment notes on a topic |
 | `create_note` | LOCAL-ONLY | Save a research note locally |
 | `list_documents` | LOCAL-ONLY | List all local documents |
+| `compare_documents` | LOCAL-ONLY | Compare two documents on a topic |
 | `generate_hypothesis` | CLOUD-SAFE | Generate hypotheses from abstract context |
 | `search_literature` | CLOUD-SAFE | Search scientific literature |
 
@@ -143,19 +144,70 @@ Scoring: F1 accuracy (60%) + speed (15%) + on-device ratio (25%), weighted by di
 python submit.py --team "Hyphae" --location "London"
 ```
 
+### Web UI
+
+```bash
+python web/app.py                  # start on port 5000
+PORT=8080 python web/app.py        # custom port
+```
+
+Chat interface with document sidebar, drag-and-drop upload, and voice input.
+
+### Corpus management
+
+```bash
+python -m src.ingest add paper.pdf        # add a PDF
+python -m src.ingest add notes/           # add a directory
+python -m src.ingest list                 # list indexed documents
+python -m src.ingest remove <filename>    # remove a document
+```
+
+## Tests
+
+```bash
+python -m pytest tests/ -v
+```
+
+29 unit tests covering tool dispatch, privacy sanitisation, and corpus ingestion.
+
 ## Project Structure
 
 ```
 hyphae/
-  cli.py          # CLI entrypoint (text, voice, one-shot)
-  main.py         # Hybrid routing engine (local-first + cloud fallback)
-  tools.py        # Research tool definitions + execution
-  privacy.py      # Cloud message sanitiser
-  voice.py        # On-device voice input via Whisper
-  benchmark.py    # Hackathon benchmark
-  submit.py       # Leaderboard submission
-  corpus/         # Local research documents (never sent to cloud)
-  setup.sh        # One-command setup for teammates
+├── main.py                 # Hybrid routing engine (stays at root for submit.py)
+├── benchmark.py            # Hackathon benchmark
+├── submit.py               # Leaderboard submission
+├── cli.py                  # CLI entrypoint (text, voice, one-shot)
+├── setup.sh                # One-command setup
+├── requirements.txt        # Python dependencies
+│
+├── src/                    # Library modules
+│   ├── config.py           # Centralized cactus/model paths
+│   ├── tools.py            # Research tool definitions + execution
+│   ├── privacy.py          # Cloud message sanitiser
+│   ├── voice.py            # On-device voice input via Whisper
+│   └── ingest.py           # Corpus ingestion CLI
+│
+├── tests/                  # Unit tests (pytest)
+│   ├── conftest.py         # Shared fixtures
+│   ├── test_tools.py       # Tool dispatch tests
+│   ├── test_privacy.py     # Sanitisation tests
+│   ├── test_ingest.py      # Ingestion tests
+│   └── test_routing.py     # Routing integration tests
+│
+├── web/                    # Flask web app
+│   ├── app.py              # API backend
+│   └── static/             # Frontend (HTML/CSS/JS)
+│
+├── examples/               # Usage examples
+│   ├── basic_query.py      # Minimal hybrid query
+│   ├── corpus_management.py # PDF ingestion demo
+│   └── voice_demo.py       # Voice transcription demo
+│
+├── docs/                   # Documentation
+├── scripts/                # Utility scripts
+├── corpus/                 # Local research documents (never sent to cloud)
+└── cactus/                 # Cactus SDK (git submodule)
 ```
 
 ## Team

@@ -1,13 +1,10 @@
-import sys
-sys.path.insert(0, "cactus/python/src")
-
 import json
 import subprocess
 import tempfile
 import os
-from cactus import cactus_init, cactus_transcribe, cactus_destroy
 
-WHISPER_PATH = "cactus/weights/whisper-small"
+from config import WHISPER_PATH
+from cactus import cactus_init, cactus_transcribe, cactus_destroy
 WHISPER_PROMPT = "<|startoftranscript|><|en|><|transcribe|><|notimestamps|>"
 RECORD_SECONDS = 5
 SAMPLE_RATE = 16000

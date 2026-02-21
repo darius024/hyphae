@@ -20,7 +20,7 @@ import shutil
 import sys
 from pathlib import Path
 
-CORPUS_DIR = os.environ.get("HYPHAE_CORPUS", "corpus")
+from config import CORPUS_DIR
 
 
 def extract_pdf_text(pdf_path: str) -> str:

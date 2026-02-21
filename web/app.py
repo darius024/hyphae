@@ -17,15 +17,19 @@ Usage:
 import sys, os, time, json, tempfile
 from pathlib import Path
 
-sys.path.insert(0, "cactus/python/src")
+_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _project_root)
+sys.path.insert(0, os.path.join(_project_root, "src"))
 
 from flask import Flask, request, jsonify, send_from_directory
 
 from main import generate_hybrid
 from tools import ALL_TOOLS, execute_tool
-from ingest import add_file, list_documents as list_corpus, remove_document, extract_pdf_text, CORPUS_DIR
+from ingest import add_file, list_documents as list_corpus, remove_document, extract_pdf_text
+from config import CORPUS_DIR
 
-app = Flask(__name__, static_folder="static", static_url_path="")
+_static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+app = Flask(__name__, static_folder=_static_dir, static_url_path="")
 
 
 @app.route("/")

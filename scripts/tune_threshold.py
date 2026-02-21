@@ -8,7 +8,10 @@ Usage:
 """
 
 import sys, os
-sys.path.insert(0, "cactus/python/src")
+
+_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _project_root)
+sys.path.insert(0, os.path.join(_project_root, "src"))
 os.environ["CACTUS_NO_CLOUD_TELE"] = "1"
 
 import main

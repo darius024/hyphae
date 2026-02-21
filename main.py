@@ -1,9 +1,11 @@
 
-import sys
-sys.path.insert(0, "cactus/python/src")
-functiongemma_path = "cactus/weights/functiongemma-270m-it"
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
 
-import json, os, time
+from config import CACTUS_SRC, FUNCTIONGEMMA_PATH
+functiongemma_path = FUNCTIONGEMMA_PATH
+
+import json, time
 
 try:
     from cactus import cactus_init, cactus_complete, cactus_destroy
@@ -11,11 +13,15 @@ try:
 except ImportError:
     CACTUS_AVAILABLE = False
 
-# Set CLOUD_ONLY=1 to skip local inference entirely (useful when Cactus is not installed)
 CLOUD_ONLY = os.environ.get("CLOUD_ONLY", "0") == "1"
 from google import genai
 from google.genai import types
-from privacy import sanitise_for_cloud
+
+try:
+    from privacy import sanitise_for_cloud
+except ImportError:
+    def sanitise_for_cloud(messages):
+        return messages
 
 _GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 if not _GEMINI_API_KEY:

@@ -1,14 +1,11 @@
-import sys
-sys.path.insert(0, "cactus/python/src")
-
 import json
 import os
-import glob
 from pathlib import Path
 from datetime import datetime
+
+from config import CACTUS_SRC, RAG_MODEL_PATH, CORPUS_DIR
 from cactus import cactus_init, cactus_rag_query, cactus_complete, cactus_reset
 
-CORPUS_DIR = os.environ.get("HYPHAE_CORPUS", "corpus")
 NOTES_DIR = os.path.join(CORPUS_DIR, "notes")
 
 _rag_model = None
@@ -19,7 +16,7 @@ def _get_rag_model():
     if _rag_model is None:
         os.makedirs(CORPUS_DIR, exist_ok=True)
         _rag_model = cactus_init(
-            "cactus/weights/lfm2-vl-450m",
+            RAG_MODEL_PATH,
             corpus_dir=CORPUS_DIR,
         )
     return _rag_model

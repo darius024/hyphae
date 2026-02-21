@@ -1,0 +1,70 @@
+"""Shared pytest fixtures for Hyphae tests."""
+
+import sys, os
+
+_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _project_root)
+sys.path.insert(0, os.path.join(_project_root, "src"))
+
+import pytest
+import tempfile
+import shutil
+
+
+@pytest.fixture
+def tmp_corpus(tmp_path, monkeypatch):
+    """Create a temporary corpus directory with sample files."""
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+
+    (corpus / "battery_notes.txt").write_text(
+        "Battery cycling test results:\n"
+        "Sample A: 95% capacity retention after 500 cycles.\n"
+        "Sample B: 88% capacity retention after 500 cycles.\n"
+        "FEC-3 additive improved capacity retention by 7%.\n"
+    )
+
+    (corpus / "polymer_log.txt").write_text(
+        "Polymer synthesis log:\n"
+        "Batch 12: Mw = 45,000 g/mol, PDI = 1.8\n"
+        "Batch 13: Mw = 52,000 g/mol, PDI = 1.5\n"
+        "Temperature: 180°C, reaction time: 4h\n"
+    )
+
+    import ingest
+    import tools
+    monkeypatch.setattr(ingest, "CORPUS_DIR", str(corpus))
+    monkeypatch.setattr(tools, "CORPUS_DIR", str(corpus))
+    monkeypatch.setattr(tools, "NOTES_DIR", os.path.join(str(corpus), "notes"))
+
+    yield corpus
+
+
+@pytest.fixture
+def sample_tools():
+    """Return a minimal set of tool schemas for testing."""
+    return [
+        {
+            "name": "get_weather",
+            "description": "Get current weather for a location",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "location": {"type": "string", "description": "City name"}
+                },
+                "required": ["location"],
+            },
+        },
+        {
+            "name": "send_message",
+            "description": "Send a message to a contact",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "recipient": {"type": "string", "description": "Name of the person"},
+                    "message": {"type": "string", "description": "The message content"},
+                },
+                "required": ["recipient", "message"],
+            },
+        },
+    ]
