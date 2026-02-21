@@ -16,8 +16,10 @@ except ImportError:
     CACTUS_AVAILABLE = False
 
 CLOUD_ONLY = os.environ.get("CLOUD_ONLY", "0") == "1"
-from google import genai
-from google.genai import types
+# NOTE: We avoid importing heavy cloud deps (google.genai, httpx, aiohttp, etc.)
+# at module import time. They are lazily imported inside _get_gemini_client and
+# generate_cloud so scripts that only exercise on-device code don't pay the
+# cold-import cost or run into binary import errors.
 
 try:
     from privacy import sanitise_for_cloud
@@ -30,11 +32,41 @@ if not _GEMINI_API_KEY:
     log.warning("GEMINI_API_KEY is not set. Cloud calls will fail.")
 
 _gemini_client = None
+_http2_client = None
 
 def _get_gemini_client():
-    global _gemini_client
-    if _gemini_client is None:
-        _gemini_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+    """Lazily import google.genai and create a cached client.
+
+    Returns None if imports or client construction fail (caller should handle).
+    """
+    global _gemini_client, _http2_client
+    if _gemini_client is not None:
+        return _gemini_client
+
+    try:
+        # Import locally to avoid heavy startup cost at module import time
+        from google import genai
+        from google.genai import types as _types
+    except Exception as e:
+        log.warning("google.genai import failed: %s", e)
+        _gemini_client = None
+        return None
+
+    try:
+        import httpx as _httpx
+        _http2_client = _httpx.Client(http2=True, timeout=10.0)
+        _gemini_client = genai.Client(
+            api_key=os.environ.get("GEMINI_API_KEY"),
+            http_options=_types.HttpOptions(client=_http2_client),
+        ) if os.environ.get("GEMINI_API_KEY") else None
+    except Exception:
+        # Fallback: plain client without HTTP/2
+        try:
+            _gemini_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY")) if os.environ.get("GEMINI_API_KEY") else None
+        except Exception as e:
+            log.warning("Failed to create genai.Client: %s", e)
+            _gemini_client = None
+
     return _gemini_client
 
 
@@ -140,10 +172,10 @@ def _build_system_prompt(messages, tools) -> str:
         "For the 'song' parameter: strip a trailing standalone genre word 'music' only when it directly "
         "follows a genre name adjective (e.g. 'jazz music' → song='jazz'), "
         "but keep 'music' when it is part of a full title (e.g. 'classical music' → song='classical music'). "
-        "Examples: 'about the meeting' → title='meeting'; "
-        "'to call the dentist' → title='call the dentist'; "
-        "'saying I\\'ll be late.' → message='I\\'ll be late'; "
-        "'some jazz music' → song='jazz'; 'classical music' → song='classical music'."
+        "Examples: 'about the meeting' -> title='meeting'; "
+        "'to call the dentist' -> title='call the dentist'; "
+        "'saying I\\'ll be late.' -> message='I\\'ll be late'; "
+        "'some jazz music' -> song='jazz'; 'classical music' -> song='classical music'."
     )
 
     if expected_calls >= 2:
@@ -213,7 +245,17 @@ def generate_cactus(messages, tools):
 
 def generate_cloud(messages, tools):
     """Run function calling via Gemini Cloud API with multi-call retry."""
+    # Ensure cloud libs are available; _get_gemini_client performs lazy import for the client
     client = _get_gemini_client()
+    if client is None:
+        log.warning("No Gemini client available (GEMINI_API_KEY unset or import failed)")
+        return {"function_calls": [], "total_time_ms": 0}
+
+    try:
+        from google.genai import types
+    except Exception as e:
+        log.warning("Failed to import google.genai.types: %s", e)
+        return {"function_calls": [], "total_time_ms": 0}
 
     # Enrich tool descriptions with clarifying hints (same as Cactus path)
     enriched_tools = _enrich_tools(tools)

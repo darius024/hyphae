@@ -1,0 +1,147 @@
+"""
+SQLite database — Hyphae Notebook layer.
+
+Tables: notebooks, sources, chunks, conversations, messages, settings
+FTS5 virtual table chunks_fts for BM25 full-text search.
+"""
+
+import sqlite3
+import logging
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Generator
+
+log = logging.getLogger(__name__)
+
+# DB file lives next to this module (web/notebook.db)
+DB_PATH = Path(__file__).parent / "notebook.db"
+
+_DDL = """
+PRAGMA journal_mode=WAL;
+PRAGMA foreign_keys=ON;
+
+CREATE TABLE IF NOT EXISTS notebooks (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    description TEXT,
+    allow_cloud INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+
+CREATE TABLE IF NOT EXISTS sources (
+    id          TEXT PRIMARY KEY,
+    notebook_id TEXT NOT NULL REFERENCES notebooks(id) ON DELETE CASCADE,
+    title       TEXT,
+    type        TEXT NOT NULL,
+    filename    TEXT,
+    url         TEXT,
+    page_count  INTEGER,
+    status      TEXT NOT NULL DEFAULT 'pending',
+    error       TEXT,
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+
+CREATE TABLE IF NOT EXISTS chunks (
+    id          TEXT PRIMARY KEY,
+    notebook_id TEXT NOT NULL,
+    source_id   TEXT NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+    chunk_index INTEGER NOT NULL,
+    page_number INTEGER,
+    raw_text    TEXT NOT NULL,
+    clean_text  TEXT NOT NULL,
+    token_count INTEGER,
+    faiss_id    INTEGER,
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_chunks_nb     ON chunks(notebook_id);
+CREATE INDEX IF NOT EXISTS idx_chunks_src    ON chunks(source_id);
+CREATE INDEX IF NOT EXISTS idx_chunks_faiss  ON chunks(notebook_id, faiss_id);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
+    clean_text,
+    chunk_id    UNINDEXED,
+    notebook_id UNINDEXED,
+    content='chunks',
+    content_rowid='rowid'
+);
+
+CREATE TABLE IF NOT EXISTS conversations (
+    id          TEXT PRIMARY KEY,
+    notebook_id TEXT NOT NULL REFERENCES notebooks(id) ON DELETE CASCADE,
+    title       TEXT,
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+
+CREATE TABLE IF NOT EXISTS messages (
+    id              TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    notebook_id     TEXT NOT NULL,
+    role            TEXT NOT NULL,
+    content         TEXT NOT NULL,
+    citations       TEXT,
+    source          TEXT,
+    latency_ms      REAL,
+    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+
+CREATE TABLE IF NOT EXISTS nb_settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+INSERT OR IGNORE INTO nb_settings(key, value) VALUES
+    ('embed_model',         'all-MiniLM-L6-v2'),
+    ('retrieval_top_k',     '6'),
+    ('chunk_size',          '400'),
+    ('chunk_overlap',       '80');
+"""
+
+_FTS_TRIGGERS = """
+CREATE TRIGGER IF NOT EXISTS chunks_ai AFTER INSERT ON chunks BEGIN
+    INSERT INTO chunks_fts(rowid, clean_text, chunk_id, notebook_id)
+    VALUES (new.rowid, new.clean_text, new.id, new.notebook_id);
+END;
+
+CREATE TRIGGER IF NOT EXISTS chunks_ad AFTER DELETE ON chunks BEGIN
+    INSERT INTO chunks_fts(chunks_fts, rowid, clean_text, chunk_id, notebook_id)
+    VALUES ('delete', old.rowid, old.clean_text, old.id, old.notebook_id);
+END;
+
+CREATE TRIGGER IF NOT EXISTS chunks_au AFTER UPDATE ON chunks BEGIN
+    INSERT INTO chunks_fts(chunks_fts, rowid, clean_text, chunk_id, notebook_id)
+    VALUES ('delete', old.rowid, old.clean_text, old.id, old.notebook_id);
+    INSERT INTO chunks_fts(rowid, clean_text, chunk_id, notebook_id)
+    VALUES (new.rowid, new.clean_text, new.id, new.notebook_id);
+END;
+"""
+
+
+def init_db() -> None:
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        conn.executescript(_DDL)
+        conn.executescript(_FTS_TRIGGERS)
+        conn.commit()
+        log.info("Notebook DB ready at %s", DB_PATH)
+    finally:
+        conn.close()
+
+
+@contextmanager
+def get_conn() -> Generator[sqlite3.Connection, None, None]:
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA journal_mode=WAL")
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()

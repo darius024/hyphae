@@ -4,10 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hyphae — Research Copilot</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 
+<!-- ── Mode switcher ─────────────────────────────────────────────────── -->
+<div class="mode-switcher">
+    <button class="mode-btn active" id="mode-corpus" title="Corpus mode">Corpus</button>
+    <button class="mode-btn" id="mode-notebook" title="Notebook mode">Notebooks</button>
+</div>
+
+<!-- ═══════════════════════════ CORPUS PANEL ══════════════════════════ -->
+<div id="panel-corpus" class="panel active">
 <aside class="sidebar">
     <div class="sidebar-header">
         <h1>Hyphae</h1>
@@ -51,7 +59,84 @@
         </div>
     </div>
 </main>
+</div><!-- end #panel-corpus -->
 
+<!-- ═══════════════════════ NOTEBOOK PANEL ════════════════════════════ -->
+<div id="panel-notebook" class="panel">
+<aside class="sidebar nb-sidebar">
+    <div class="sidebar-header nb-sidebar-header">
+        <div class="nb-header-row">
+            <h2 id="nb-name-display">Notebooks</h2>
+            <button class="icon-btn-sm" id="nb-new-btn" title="New notebook">＋</button>
+        </div>
+    </div>
+
+    <!-- Notebook list -->
+    <div class="nb-list-wrap" id="nb-list-wrap">
+        <div id="nb-list"></div>
+    </div>
+
+    <!-- Sources panel (shown when a notebook is selected) -->
+    <div class="nb-sources-wrap" id="nb-sources-wrap" style="display:none">
+        <div class="nb-section-header">
+            <span>Sources</span>
+            <label class="icon-btn-sm" id="nb-upload-label" title="Add file">＋ File
+                <input type="file" id="nb-file-input" multiple accept=".pdf,.txt,.md" style="display:none">
+            </label>
+        </div>
+        <div id="nb-source-list"></div>
+        <div class="nb-url-row">
+            <input type="text" id="nb-url-input" class="doc-search" placeholder="Paste URL…">
+            <button class="icon-btn-sm" id="nb-url-btn">Add</button>
+        </div>
+    </div>
+
+    <!-- Conversation list -->
+    <div class="nb-conv-wrap" id="nb-conv-wrap" style="display:none">
+        <div class="nb-section-header">
+            <span>Conversations</span>
+            <button class="icon-btn-sm" id="nb-conv-new-btn" title="New conversation">＋</button>
+        </div>
+        <div id="nb-conv-list"></div>
+    </div>
+</aside>
+
+<div class="sidebar-overlay" id="nb-sidebar-overlay"></div>
+
+<main class="main nb-main">
+    <button class="menu-btn" id="nb-menu-btn" title="Toggle sidebar">☰</button>
+
+    <!-- Placeholder when no notebook selected -->
+    <div id="nb-placeholder" class="nb-placeholder">
+        <div class="nb-placeholder-inner">
+            <div class="nb-placeholder-icon">📓</div>
+            <h3>Select or create a notebook</h3>
+            <p>Upload documents, then chat with Gemini grounded in your sources.</p>
+        </div>
+    </div>
+
+    <!-- Notebook chat area -->
+    <div id="nb-chat-wrap" style="display:none" class="nb-chat-wrap">
+        <div class="messages" id="nb-messages"></div>
+
+        <!-- Citations bar -->
+        <div id="nb-citations-bar" class="nb-citations-bar" style="display:none">
+            <span class="citations-label">Sources:</span>
+            <div id="nb-citations-list"></div>
+        </div>
+
+        <div class="input-area">
+            <div class="input-row">
+                <textarea id="nb-query-input" placeholder="Ask about your sources…" rows="1"></textarea>
+                <button class="icon-btn send-btn" id="nb-send-btn" title="Send">→</button>
+                <button class="icon-btn clear-btn" id="nb-clear-btn" title="Clear chat">✕</button>
+            </div>
+        </div>
+    </div>
+</main>
+</div><!-- end #panel-notebook -->
+
+<!-- ── Shared: document preview modal ────────────────────────────────── -->
 <div class="modal-overlay" id="preview-overlay">
     <div class="modal">
         <div class="modal-header">
@@ -62,6 +147,6 @@
     </div>
 </div>
 
-<script src="app.js"></script>
+<script src="/static/app.js"></script>
 </body>
 </html>

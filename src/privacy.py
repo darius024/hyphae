@@ -48,3 +48,32 @@ def filter_tools_for_cloud(tools):
 def filter_tools_for_local(tools):
     """Return only tools that should run on-device."""
     return [t for t in tools if t["name"] in LOCAL_ONLY_TOOLS]
+
+
+# ── Notebook sanitisation helpers (minimal) ─────────────────────────────
+
+def sanitise_text(text: str):
+    """Lightweight PII scrubber used by the notebook layer.
+
+    Replaces any SENSITIVE_PATTERNS matches with [REDACTED] and returns the
+    cleaned text plus a list of triggered labels (pattern indices).
+    """
+    triggered = []
+    for idx, pattern in enumerate(SENSITIVE_PATTERNS):
+        new_text, n = pattern.subn("[REDACTED]", text)
+        if n:
+            triggered.append(f"pattern_{idx}")
+            text = new_text
+    return text, triggered
+
+
+def sanitise_messages(messages):
+    cleaned = []
+    all_trig = []
+    for msg in messages:
+        msg = copy.deepcopy(msg)
+        if isinstance(msg.get("content"), str):
+            msg["content"], trig = sanitise_text(msg["content"])
+            all_trig.extend(trig)
+        cleaned.append(msg)
+    return cleaned, list(set(all_trig))
