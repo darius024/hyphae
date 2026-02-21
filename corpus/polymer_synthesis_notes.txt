@@ -1,0 +1,37 @@
+Polymer Synthesis Notes — Conductive Hydrogel Project
+Researcher: Stefi
+Last Updated: February 2026
+
+Background:
+Developing self-healing conductive hydrogels for wearable biosensors.
+Target: conductivity >1 S/cm, self-healing efficiency >85%, biocompatible.
+
+Synthesis Batch SH-042:
+- Monomer: Acrylic acid (AA, 2.0M) + PEDOT:PSS (1.2 wt%)
+- Crosslinker: N,N'-methylenebisacrylamide (MBA, 0.5 mol%)
+- Initiator: Ammonium persulfate (APS, 0.2 mol%)
+- Reaction: 70°C, 4 hours under N2
+
+Results:
+- Conductivity: 0.87 S/cm (below target)
+- Self-healing efficiency: 91% after 6h at room temp
+- Tensile strength: 45 kPa
+- Swelling ratio: 12.3x in PBS
+
+Batch SH-043 (increased PEDOT:PSS):
+- Changed PEDOT:PSS to 1.8 wt%
+- Conductivity: 1.23 S/cm (ABOVE TARGET)
+- Self-healing efficiency: 78% (below target — crosslink density too high?)
+- Tensile strength: 52 kPa
+- Swelling ratio: 9.8x in PBS
+
+Key Insight:
+Increasing PEDOT:PSS improves conductivity but may interfere with dynamic bond
+reformation needed for self-healing. Need to find the sweet spot or introduce
+additional dynamic crosslinks (e.g., boronate ester bonds).
+
+Next Steps:
+1. Try intermediate PEDOT:PSS concentration (1.5 wt%)
+2. Add phenylboronic acid (PBA) as dynamic crosslinker
+3. Test biocompatibility with L929 fibroblast cell line
+4. Measure impedance at skin-electrode interface
