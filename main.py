@@ -87,11 +87,15 @@ def generate_cloud(messages, tools):
 
     start_time = time.time()
 
-    gemini_response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=contents,
-        config=types.GenerateContentConfig(tools=gemini_tools),
-    )
+    try:
+        gemini_response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=contents,
+            config=types.GenerateContentConfig(tools=gemini_tools),
+        )
+    except Exception as e:
+        print(f"WARNING: Gemini API call failed: {e}", file=sys.stderr)
+        return {"function_calls": [], "total_time_ms": (time.time() - start_time) * 1000}
 
     total_time_ms = (time.time() - start_time) * 1000
 
