@@ -403,6 +403,73 @@ body {
     color: white;
 }
 
+.send-btn.disabled, .icon-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+#query-input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Retry button */
+.retry-btn {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    margin-left: 8px;
+    transition: background 0.15s;
+}
+.retry-btn:hover { background: var(--accent-hover); }
+
+.error-bubble { color: var(--red); }
+
+/* Upload spinner */
+.upload-btn.uploading {
+    border-color: var(--accent);
+    color: var(--accent);
+    pointer-events: none;
+    animation: pulse 1.5s infinite;
+}
+
+/* Document skeleton loading */
+.doc-skeleton {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 12px;
+}
+.doc-skeleton div {
+    height: 14px;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+    animation: shimmer 1.2s infinite;
+}
+.doc-skeleton div:nth-child(1) { width: 80%; }
+.doc-skeleton div:nth-child(2) { width: 60%; }
+.doc-skeleton div:nth-child(3) { width: 70%; }
+
+@keyframes shimmer {
+    0% { opacity: 0.4; }
+    50% { opacity: 0.8; }
+    100% { opacity: 0.4; }
+}
+
+/* Empty state */
+.doc-empty {
+    padding: 12px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-align: center;
+    line-height: 1.5;
+}
+
 /* ── Scrollbar ───────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }

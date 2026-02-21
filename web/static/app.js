@@ -8,6 +8,20 @@ const uploadBtn = document.getElementById("upload-btn");
 
 let isRecording = false;
 let mediaRecorder = null;
+let isBusy = false;
+
+function setBusy(busy) {
+    isBusy = busy;
+    sendBtn.disabled = busy;
+    voiceBtn.disabled = busy && !isRecording;
+    queryInput.disabled = busy;
+    if (busy) {
+        sendBtn.classList.add("disabled");
+    } else {
+        sendBtn.classList.remove("disabled");
+        queryInput.focus();
+    }
+}
 
 // ── Messages ────────────────────────────────────────────────────────
 
@@ -31,13 +45,36 @@ function addMessage(role, content, meta) {
     let html = `<div class="bubble">${rendered}</div>`;
 
     if (meta) {
-        const badge = meta.source === "on-device"
+        const isLocal = meta.source && meta.source.includes("on-device");
+        const badge = isLocal
             ? '<span class="badge local">LOCAL</span>'
             : '<span class="badge cloud">CLOUD</span>';
         html += `<div class="meta">${badge} <span>${meta.routing_ms}ms</span></div>`;
     }
 
     div.innerHTML = html;
+    messagesEl.appendChild(div);
+    scrollToBottom();
+    return div;
+}
+
+function addErrorMessage(text, retryFn) {
+    const div = document.createElement("div");
+    div.className = "message assistant";
+
+    let html = `<div class="bubble error-bubble">${escapeHtml(text)}`;
+    if (retryFn) {
+        html += ` <button class="retry-btn">Retry</button>`;
+    }
+    html += `</div>`;
+
+    div.innerHTML = html;
+    if (retryFn) {
+        div.querySelector(".retry-btn").addEventListener("click", () => {
+            div.remove();
+            retryFn();
+        });
+    }
     messagesEl.appendChild(div);
     scrollToBottom();
     return div;
@@ -139,13 +176,14 @@ function escapeHtml(text) {
 // ── Query ───────────────────────────────────────────────────────────
 
 async function sendQuery(text) {
-    if (!text.trim()) return;
+    if (!text.trim() || isBusy) return;
 
     addMessage("user", text);
     queryInput.value = "";
     queryInput.style.height = "auto";
 
-    const thinking = addThinking();
+    setBusy(true);
+    addThinking();
 
     try {
         const res = await fetch("/api/query", {
@@ -157,7 +195,7 @@ async function sendQuery(text) {
         removeThinking();
 
         if (data.error) {
-            addMessage("assistant", `Error: ${data.error}`);
+            addErrorMessage(`Error: ${data.error}`, () => sendQuery(text));
             return;
         }
 
@@ -181,7 +219,9 @@ async function sendQuery(text) {
         addToolResults(data.function_calls, data.tool_results);
     } catch (err) {
         removeThinking();
-        addMessage("assistant", `Network error: ${err.message}`);
+        addErrorMessage(`Network error: ${err.message}`, () => sendQuery(text));
+    } finally {
+        setBusy(false);
     }
 }
 
@@ -217,7 +257,7 @@ async function toggleVoice() {
         voiceBtn.classList.add("recording");
         voiceBtn.textContent = "⏹";
     } catch (err) {
-        addMessage("assistant", `Microphone access denied: ${err.message}`);
+        addErrorMessage(`Microphone access denied: ${err.message}`);
     }
 }
 
@@ -231,7 +271,8 @@ function stopRecording() {
 }
 
 async function sendVoice(blob, ext = ".webm") {
-    const thinking = addThinking();
+    setBusy(true);
+    addThinking();
     const form = new FormData();
     form.append("audio", blob, `recording${ext}`);
 
@@ -241,7 +282,7 @@ async function sendVoice(blob, ext = ".webm") {
         removeThinking();
 
         if (data.error) {
-            addMessage("assistant", `Voice error: ${data.error}`);
+            addErrorMessage(`Voice error: ${data.error}`);
             return;
         }
 
@@ -267,25 +308,28 @@ async function sendVoice(blob, ext = ".webm") {
         addToolResults(data.function_calls, data.tool_results);
     } catch (err) {
         removeThinking();
-        addMessage("assistant", `Voice error: ${err.message}`);
+        addErrorMessage(`Voice error: ${err.message}`);
+    } finally {
+        setBusy(false);
     }
 }
 
 // ── Documents ───────────────────────────────────────────────────────
 
 async function loadDocuments() {
+    docListEl.innerHTML = '<div class="doc-skeleton"><div></div><div></div><div></div></div>';
     try {
         const res = await fetch("/api/documents");
         const data = await res.json();
         renderDocuments(data.documents);
     } catch {
-        docListEl.innerHTML = '<div class="doc-item"><span class="name">Failed to load</span></div>';
+        docListEl.innerHTML = '<div class="doc-item"><span class="name" style="color:var(--red)">Failed to load</span></div>';
     }
 }
 
 function renderDocuments(docs) {
     if (!docs || docs.length === 0) {
-        docListEl.innerHTML = '<div class="doc-item"><span class="name" style="color:var(--text-secondary)">No documents yet</span></div>';
+        docListEl.innerHTML = '<div class="doc-empty">No documents yet. Upload PDFs or text files to get started.</div>';
         return;
     }
 
@@ -309,6 +353,9 @@ async function uploadFiles(files) {
     const form = new FormData();
     for (const f of files) form.append("file", f);
 
+    uploadBtn.classList.add("uploading");
+    uploadBtn.textContent = "Uploading...";
+
     try {
         const res = await fetch("/api/upload", { method: "POST", body: form });
         const data = await res.json();
@@ -318,7 +365,10 @@ async function uploadFiles(files) {
             addMessage("assistant", `Uploaded ${count} document(s) to corpus.`);
         }
     } catch (err) {
-        addMessage("assistant", `Upload failed: ${err.message}`);
+        addErrorMessage(`Upload failed: ${err.message}`);
+    } finally {
+        uploadBtn.classList.remove("uploading");
+        uploadBtn.textContent = "Drop files here or click to upload";
     }
 }
 
