@@ -66,6 +66,21 @@ body {
     padding: 0 8px;
 }
 
+.doc-search {
+    width: 100%;
+    padding: 7px 10px;
+    margin-bottom: 8px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 12px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+.doc-search:focus { border-color: var(--accent); }
+.doc-search::placeholder { color: var(--text-secondary); }
+
 .doc-item {
     display: flex;
     justify-content: space-between;

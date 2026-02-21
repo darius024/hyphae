@@ -374,12 +374,24 @@ async function sendVoice(blob, ext = ".webm") {
 
 // ── Documents ───────────────────────────────────────────────────────
 
+let allDocuments = [];
+const docSearchInput = document.getElementById("doc-search");
+
+docSearchInput.addEventListener("input", () => {
+    const q = docSearchInput.value.toLowerCase();
+    const filtered = q ? allDocuments.filter(d => d.name.toLowerCase().includes(q)) : allDocuments;
+    renderDocuments(filtered);
+});
+
 async function loadDocuments() {
     docListEl.innerHTML = '<div class="doc-skeleton"><div></div><div></div><div></div></div>';
     try {
         const res = await fetch("/api/documents");
         const data = await res.json();
-        renderDocuments(data.documents);
+        allDocuments = data.documents || [];
+        const q = docSearchInput.value.toLowerCase();
+        const filtered = q ? allDocuments.filter(d => d.name.toLowerCase().includes(q)) : allDocuments;
+        renderDocuments(filtered);
     } catch {
         docListEl.innerHTML = '<div class="doc-item"><span class="name" style="color:var(--red)">Failed to load</span></div>';
     }
