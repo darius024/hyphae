@@ -22,15 +22,48 @@ if not _GEMINI_API_KEY:
     print("WARNING: GEMINI_API_KEY is not set. Cloud calls will fail.", file=sys.stderr)
 
 
+import re
+
 _TOOL_DESCRIPTION_HINTS = {
-    "set_alarm":       " Use this to wake up or be alerted at a specific clock time (e.g. 7:30 AM). NOT for countdowns.",
-    "set_timer":       " Use this for a countdown (e.g. '5 minutes from now'). NOT for a specific clock time.",
-    "send_message":    " Use this to send a text/message to a specific person. NOT for reminders.",
-    "create_reminder": " Use this to create a reminder with a title. NOT for sending messages to people.",
-    "search_contacts": " Use this to look up / find a person in contacts by name.",
-    "play_music":      " Use this to play a song, artist, or playlist by name.",
-    "get_weather":     " Use this to get the current weather or forecast for a city.",
+    "set_alarm":       (
+        " Use ONLY to alert at a specific clock time (e.g. 7:30 AM, 10 PM). "
+        "Requires 'hour' (integer, 24h) and 'minute' (integer). "
+        "NOT for countdowns — use set_timer for that."
+    ),
+    "set_timer":       (
+        " Use ONLY for a countdown duration (e.g. '5 minutes', '20 minutes'). "
+        "Requires 'minutes' (integer). "
+        "NOT for a specific clock time — use set_alarm for that."
+    ),
+    "send_message":    (
+        " Use ONLY to send a direct text message to a named person. "
+        "Requires 'recipient' (string, person's name) and 'message' (string, the text to send). "
+        "NOT for creating reminders — use create_reminder for that."
+    ),
+    "create_reminder": (
+        " Use ONLY to create a personal reminder with a title and a time. "
+        "Requires 'title' (string, what to remember) and 'time' (string, e.g. '3:00 PM'). "
+        "NOT for sending messages to people — use send_message for that."
+    ),
+    "search_contacts": (
+        " Use ONLY to find/look up a person in the contacts list by name. "
+        "Requires 'query' (string, the name to search for)."
+    ),
+    "play_music":      (
+        " Use ONLY to play a specific song, artist, or playlist. "
+        "Requires 'song' (string, the name of the song or playlist)."
+    ),
+    "get_weather":     (
+        " Use ONLY to get the current weather or forecast for a city. "
+        "Requires 'location' (string, city name)."
+    ),
 }
+
+# Action verbs that strongly signal a distinct tool call is needed
+_ACTION_VERB_PATTERNS = re.compile(
+    r'\b(set|send|text|message|play|check|get|find|look up|remind|create|wake|search|call)\b',
+    re.IGNORECASE
+)
 
 
 def _enrich_tools(tools):
@@ -45,38 +78,49 @@ def _enrich_tools(tools):
 
 
 def _count_actions(messages) -> int:
-    """Heuristic: count how many distinct actions the user is asking for."""
-    text = " ".join(m["content"] for m in messages if m["role"] == "user").lower()
-    connectors = [" and ", " also ", ", and ", " then ", " plus ", " as well", " too "]
-    return 1 + sum(text.count(c) for c in connectors)
+    """Count distinct actions by matching action verbs — more robust than connector counting."""
+    text = " ".join(m["content"] for m in messages if m["role"] == "user")
+    matches = _ACTION_VERB_PATTERNS.findall(text)
+    # Deduplicate consecutive identical verbs, count unique action verb occurrences
+    unique_actions = len(set(m.lower() for m in matches))
+    # Also check for classic multi-action connectors as a fallback signal
+    connectors = len(re.findall(r'\b(and|also|then|plus)\b', text, re.IGNORECASE))
+    return max(unique_actions, connectors + 1, 1)
+
+
+def _expected_call_count(messages, tools) -> int:
+    """Estimate how many function calls are needed based on query and available tools."""
+    action_count = _count_actions(messages)
+    # Can't need more calls than tools available
+    return min(action_count, len(tools))
 
 
 def _build_system_prompt(messages, tools) -> str:
-    """Build a task-specific system prompt based on query complexity."""
+    """Build a task-specific, complexity-aware system prompt."""
     tool_names = [t["name"] for t in tools]
-    action_count = _count_actions(messages)
+    expected_calls = _expected_call_count(messages, tools)
 
     base = (
         "You are a precise function-calling assistant. "
-        "You must ONLY call functions from the provided list. "
-        "Always use exact argument types as specified (string, integer, etc). "
-        "Never make up function names or arguments not in the schema."
+        "You MUST call functions using ONLY the tools provided — never invent tool names. "
+        "Use exact argument types (string, integer) as defined in each tool's schema. "
+        "Extract argument values verbatim from the user's message where possible."
     )
 
-    if action_count >= 2:
-        multi = (
-            " The user is requesting MULTIPLE actions. "
-            f"You MUST call ALL {action_count} required functions — do not skip any. "
-            "Return all function calls in a single response."
+    if expected_calls >= 2:
+        base += (
+            f" The user is requesting {expected_calls} separate actions. "
+            f"You MUST return ALL {expected_calls} function calls — one per action. "
+            "Do NOT skip or merge actions into a single call."
         )
-        base += multi
+    else:
+        base += " The user is requesting a single action. Call exactly one function."
 
-    if len(tools) > 2:
-        picker = (
-            f" Available tools: {', '.join(tool_names)}. "
-            "Pick the most specific tool for each action."
+    if len(tools) > 1:
+        base += (
+            f" Choose carefully between: {', '.join(tool_names)}. "
+            "Read each tool's description closely — some tools look similar but are NOT interchangeable."
         )
-        base += picker
 
     return base
 
@@ -176,15 +220,25 @@ def generate_cloud(messages, tools):
 
 
 def generate_hybrid(messages, tools, confidence_threshold=0.99):
-    """Baseline hybrid inference strategy; fall back to cloud if Cactus Confidence is below threshold."""
+    """Hybrid routing: on-device first, cloud fallback on low confidence or incomplete result."""
     if CLOUD_ONLY or not CACTUS_AVAILABLE:
         cloud = generate_cloud(messages, tools)
         cloud["source"] = "cloud (fallback)"
         return cloud
 
     local = generate_cactus(messages, tools)
+    expected_calls = _expected_call_count(messages, tools)
+    got_calls = len(local["function_calls"])
 
-    if local["confidence"] >= confidence_threshold:
+    # Trust local only if: confidence high enough AND returned enough calls
+    if local["confidence"] >= confidence_threshold and got_calls >= expected_calls:
+        local["source"] = "on-device"
+        return local
+
+    # If local returned calls but confidence is low, check completeness:
+    # a complete-but-low-confidence result is still better than going to cloud
+    # only for simple single-call queries (expected_calls == 1)
+    if got_calls >= expected_calls and expected_calls == 1 and got_calls > 0:
         local["source"] = "on-device"
         return local
 
