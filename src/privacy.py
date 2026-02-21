@@ -1,5 +1,6 @@
 import re
 import copy
+
 from tools import LOCAL_ONLY_TOOLS
 
 
@@ -8,6 +9,11 @@ SENSITIVE_PATTERNS = [
     re.compile(r'\b\d+\.\d+\s*(mg|ml|mM|uM|°C|K|Pa|V|A|Hz|nm|um|mm)\b', re.IGNORECASE),  # measurements
     re.compile(r'\b(sample|batch|lot|specimen)\s*[#-]?\s*\w+', re.IGNORECASE),  # sample IDs
     re.compile(r'\b[A-Z]{2,}-\d{3,}\b'),                # lab codes like AB-1234
+    re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'),  # email addresses
+    re.compile(r'https?://\S+'),                        # URLs
+    re.compile(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b'),  # IPv4 addresses
+    re.compile(r'\b\d{4}[-/]\d{1,2}[-/]\d{1,2}\b'),    # dates (YYYY-MM-DD, YYYY/MM/DD)
+    re.compile(r'-?\d{1,3}\.\d{4,},\s*-?\d{1,3}\.\d{4,}'),  # GPS coordinates
 ]
 
 

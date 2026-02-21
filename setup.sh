@@ -16,13 +16,13 @@ echo -e "${BLUE}  Hyphae - Setup${NC}"
 echo -e "${BLUE}=============================================${NC}"
 echo ""
 
-# Step 1: Clone cactus if not present
-if [ ! -d "cactus" ]; then
-    echo -e "${BLUE}[1/6] Cloning cactus...${NC}"
-    git clone https://github.com/cactus-compute/cactus
+# Step 1: Initialize cactus submodule
+if [ ! -f "cactus/README.md" ]; then
+    echo -e "${BLUE}[1/6] Initializing cactus submodule...${NC}"
+    git submodule update --init --recursive
     echo -e "${GREEN}  Done.${NC}"
 else
-    echo -e "${GREEN}[1/6] cactus/ already exists, skipping clone.${NC}"
+    echo -e "${GREEN}[1/6] cactus/ already initialized, skipping.${NC}"
 fi
 
 # Step 2: Run cactus setup

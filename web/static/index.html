@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hyphae — Research Copilot</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<aside class="sidebar">
+    <div class="sidebar-header">
+        <h1>Hyphae</h1>
+        <p>Scientific Research Copilot</p>
+    </div>
+
+    <div class="doc-list">
+        <h3>Corpus</h3>
+        <input type="text" id="doc-search" class="doc-search" placeholder="Filter documents...">
+        <div id="doc-list-items"></div>
+    </div>
+
+    <div class="upload-area">
+        <div class="upload-btn" id="upload-btn">
+            Drop files here or click to upload
+        </div>
+        <input type="file" id="file-input" multiple accept=".pdf,.txt,.md,.csv,.log,.json">
+    </div>
+</aside>
+
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+<main class="main">
+    <button class="menu-btn" id="menu-btn" title="Toggle sidebar">☰</button>
+    <div class="messages" id="messages">
+        <div class="message assistant">
+            <div class="bubble">
+                Welcome to <strong>Hyphae</strong>. Ask questions about your research documents,
+                search literature, generate hypotheses, or manage your corpus.
+                Your confidential data stays on-device.
+            </div>
+        </div>
+    </div>
+
+    <div class="input-area">
+        <div class="input-row">
+            <textarea id="query-input" placeholder="Ask about your research..." rows="1"></textarea>
+            <button class="icon-btn" id="voice-btn" title="Voice input">🎤</button>
+            <button class="icon-btn send-btn" id="send-btn" title="Send">→</button>
+            <button class="icon-btn clear-btn" id="clear-btn" title="Clear chat">✕</button>
+        </div>
+    </div>
+</main>
+
+<div class="modal-overlay" id="preview-overlay">
+    <div class="modal">
+        <div class="modal-header">
+            <span class="modal-title" id="preview-title"></span>
+            <button class="modal-close" id="preview-close">×</button>
+        </div>
+        <pre class="modal-body" id="preview-body"></pre>
+    </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

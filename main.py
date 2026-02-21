@@ -1,9 +1,13 @@
 
-import sys
-sys.path.insert(0, "cactus/python/src")
-functiongemma_path = "cactus/weights/functiongemma-270m-it"
+import sys, os, logging
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
 
-import json, os, time
+from config import CACTUS_SRC, FUNCTIONGEMMA_PATH
+functiongemma_path = FUNCTIONGEMMA_PATH
+
+import json, time
+
+log = logging.getLogger(__name__)
 
 try:
     from cactus import cactus_init, cactus_complete, cactus_destroy
@@ -11,15 +15,19 @@ try:
 except ImportError:
     CACTUS_AVAILABLE = False
 
-# Set CLOUD_ONLY=1 to skip local inference entirely (useful when Cactus is not installed)
 CLOUD_ONLY = os.environ.get("CLOUD_ONLY", "0") == "1"
 from google import genai
 from google.genai import types
-from privacy import sanitise_for_cloud
+
+try:
+    from privacy import sanitise_for_cloud
+except ImportError:
+    def sanitise_for_cloud(messages):
+        return messages
 
 _GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 if not _GEMINI_API_KEY:
-    print("WARNING: GEMINI_API_KEY is not set. Cloud calls will fail.", file=sys.stderr)
+    log.warning("GEMINI_API_KEY is not set. Cloud calls will fail.")
 
 
 import re
@@ -148,6 +156,13 @@ def _build_system_prompt(messages, tools) -> str:
     return base
 
 
+def _repair_json(raw_str):
+    """Fix common JSON issues from small models (leading zeros, trailing commas)."""
+    raw_str = re.sub(r'(?<=:)\s*0(\d+)', r' \1', raw_str)
+    raw_str = re.sub(r',\s*([}\]])', r'\1', raw_str)
+    return raw_str
+
+
 def generate_cactus(messages, tools):
     """Run function calling on-device via FunctionGemma + Cactus."""
     if not CACTUS_AVAILABLE:
@@ -186,12 +201,6 @@ def generate_cactus(messages, tools):
         "total_time_ms": raw.get("total_time_ms", 0),
         "confidence": raw.get("confidence", 0),
     }
-
-
-def generate_cactus(messages, tools):
-    """Run function calling on-device via FunctionGemma + Cactus."""
-    cactus_tools = [{"type": "function", "function": t} for t in tools]
-    return _run_cactus_once(messages, cactus_tools)
 
 
 def generate_cloud(messages, tools):
@@ -288,7 +297,7 @@ def generate_cloud(messages, tools):
                 function_calls = retry_calls
 
     except Exception as e:
-        print(f"WARNING: Gemini API call failed: {e}", file=sys.stderr)
+        log.warning("Gemini API call failed: %s", e)
         return {"function_calls": [], "total_time_ms": (time.time() - start_time) * 1000}
 
     total_time_ms = (time.time() - start_time) * 1000
@@ -319,26 +328,37 @@ def generate_hybrid(messages, tools, confidence_threshold=0.99):
         cloud = generate_cloud(messages, tools)
         cloud["source"] = "cloud (fallback)"
         return cloud
+
     local = generate_cactus(messages, tools)
     expected_calls = _expected_call_count(messages, tools)
     got_calls = len(local["function_calls"])
 
-    # Trust local only if: confidence high enough AND returned enough calls
     if local["confidence"] >= confidence_threshold and got_calls >= expected_calls:
         local["source"] = "on-device"
         return local
 
-    # If local returned calls but confidence is low, check completeness:
-    # a complete-but-low-confidence result is still better than going to cloud
-    # only for simple single-call queries (expected_calls == 1)
     if got_calls >= expected_calls and expected_calls == 1 and got_calls > 0:
-        local["source"] = "on-device"
-        return local
+        if _calls_are_valid(local["function_calls"], tools):
+            local["source"] = "on-device"
+            return local
 
     retry = generate_cactus(messages, tools)
+    retry_calls = len(retry["function_calls"])
     retry["total_time_ms"] += local["total_time_ms"]
-    retry["source"] = "on-device"
-    return retry
+
+    if retry_calls >= expected_calls and _calls_are_valid(retry["function_calls"], tools):
+        retry["source"] = "on-device (retry)"
+        return retry
+
+    try:
+        cloud = generate_cloud(messages, tools)
+        cloud["total_time_ms"] += retry["total_time_ms"]
+        cloud["source"] = "cloud (fallback)"
+        return cloud
+    except Exception as e:
+        log.warning("Cloud fallback failed: %s", e)
+        retry["source"] = "on-device (best-effort)"
+        return retry
 
 
 def print_result(label, result):

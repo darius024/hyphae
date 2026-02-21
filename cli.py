@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Hyphae CLI — Scientific Research Copilot that respects confidential data."""
 
-import sys
-sys.path.insert(0, "cactus/python/src")
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
 
 import argparse
 import json
