@@ -62,9 +62,9 @@ function clearHistory() {
     localStorage.removeItem(HISTORY_KEY);
     messagesEl.innerHTML = `<div class="message assistant">
         <div class="bubble">
-            Welcome to <strong>Hyphae</strong>. Ask questions about your research documents,
+            <strong>Welcome to Hyphae.</strong> Ask questions about your research documents,
             search literature, generate hypotheses, or manage your corpus.
-            Your confidential data stays on-device.
+            <span class="privacy-note">Your confidential data stays on-device.</span>
         </div>
     </div>`;
 }
@@ -277,22 +277,24 @@ async function sendQuery(text) {
         const data = await res.json();
         removeThinking();
 
-        if (data.error) {
-            addErrorMessage(`Error: ${data.error}`, () => sendQuery(text));
+        if (!res.ok || data.error || data.detail) {
+            const errMsg = data.error || data.detail || `Server error (${res.status})`;
+            addErrorMessage(`Error: ${errMsg}`, () => sendQuery(text));
             return;
         }
 
         const meta = { source: data.source, routing_ms: data.routing_ms, confidence: data.confidence };
+        const calls = data.function_calls || [];
 
         if (data.answer) {
             addMessage("assistant", data.answer, meta);
-        } else if (data.function_calls.length > 0) {
-            addMessage("assistant", `Called ${data.function_calls.map(fc => fc.name).join(", ")}`, meta);
+        } else if (calls.length > 0) {
+            addMessage("assistant", `Called ${calls.map(fc => fc.name).join(", ")}`, meta);
         } else {
             addMessage("assistant", "I couldn't find a relevant tool for that query. Try rephrasing?", meta);
         }
 
-        addToolResults(data.function_calls, data.tool_results);
+        addToolResults(calls, data.tool_results);
     } catch (err) {
         removeThinking();
         addErrorMessage(`Network error: ${err.message}`, () => sendQuery(text));
@@ -331,7 +333,6 @@ async function toggleVoice() {
         mediaRecorder.start();
         isRecording = true;
         voiceBtn.classList.add("recording");
-        voiceBtn.textContent = "⏹";
     } catch (err) {
         addErrorMessage(`Microphone access denied: ${err.message}`);
     }
@@ -343,7 +344,6 @@ function stopRecording() {
     }
     isRecording = false;
     voiceBtn.classList.remove("recording");
-    voiceBtn.textContent = "🎤";
 }
 
 async function sendVoice(blob, ext = ".webm") {
@@ -357,23 +357,26 @@ async function sendVoice(blob, ext = ".webm") {
         const data = await res.json();
         removeThinking();
 
-        if (data.error) {
-            addErrorMessage(`Voice error: ${data.error}`);
+        if (!res.ok || data.error || data.detail) {
+            const errMsg = data.error || data.detail || `Server error (${res.status})`;
+            const hint = data.hint ? `\n${data.hint}` : "";
+            addErrorMessage(`Voice error: ${errMsg}${hint}`);
             return;
         }
 
         addMessage("user", `🎤 "${data.transcript}"`);
         const meta = { source: data.source, routing_ms: data.routing_ms, confidence: data.confidence };
+        const calls = data.function_calls || [];
 
         if (data.answer) {
             addMessage("assistant", data.answer, meta);
-        } else if (data.function_calls.length > 0) {
-            addMessage("assistant", `Called ${data.function_calls.map(fc => fc.name).join(", ")}`, meta);
+        } else if (calls.length > 0) {
+            addMessage("assistant", `Called ${calls.map(fc => fc.name).join(", ")}`, meta);
         } else {
             addMessage("assistant", "I couldn't process that. Try again?", meta);
         }
 
-        addToolResults(data.function_calls, data.tool_results);
+        addToolResults(calls, data.tool_results);
     } catch (err) {
         removeThinking();
         addErrorMessage(`Voice error: ${err.message}`);

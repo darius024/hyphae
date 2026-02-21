@@ -293,6 +293,11 @@ async def api_query(body: dict):
     user_message = (body.get("message") or "").strip()
     if not user_message:
         raise HTTPException(400, "message is required")
+    if generate_hybrid is None or execute_tool is None:
+        return JSONResponse(
+            status_code=503,
+            content={"error": "Hyphae core is not available. Check server logs for import errors."},
+        )
 
     messages = [{"role": "user", "content": user_message}]
     tools = body.get("tools") or list(ALL_TOOLS)
@@ -413,7 +418,9 @@ async def api_voice(audio: UploadFile = File(...)):
                 pass
 
     if not transcript.strip():
-        raise HTTPException(400, "Could not transcribe audio")
+        return JSONResponse(status_code=400, content={"error": "Could not transcribe audio. Try speaking louder or closer to the microphone."})
+    if generate_hybrid is None or execute_tool is None:
+        return JSONResponse(status_code=503, content={"error": "Hyphae core is not available. Check server logs for import errors."})
 
     messages = [{"role": "user", "content": transcript}]
     t0 = time.time()
@@ -641,8 +648,8 @@ def _persist_message(conv_id: str, nb_id: str, role: str, content: str, citation
     mid = str(uuid.uuid4())
     with get_conn() as conn:
         conn.execute(
-            "INSERT INTO messages (id, conversation_id, role, content, citations) VALUES (?,?,?,?,?)",
-            (mid, conv_id, role, content, json.dumps(citations)),
+            "INSERT INTO messages (id, conversation_id, notebook_id, role, content, citations) VALUES (?,?,?,?,?,?)",
+            (mid, conv_id, nb_id, role, content, json.dumps(citations)),
         )
         conn.execute(
             "UPDATE conversations SET updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id=?",

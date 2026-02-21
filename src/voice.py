@@ -1,10 +1,22 @@
 import json
+import logging
 import subprocess
 import tempfile
 import os
 
 from config import WHISPER_PATH
-from cactus import cactus_init, cactus_transcribe, cactus_destroy
+
+try:
+    from cactus import cactus_init, cactus_transcribe
+    CACTUS_VOICE_AVAILABLE = True
+except Exception as _e:
+    logging.getLogger(__name__).warning("Cactus voice bindings unavailable: %s", _e)
+    cactus_init = None
+    cactus_transcribe = None
+    CACTUS_VOICE_AVAILABLE = False
+
+log = logging.getLogger(__name__)
+
 WHISPER_PROMPT = "<|startoftranscript|><|en|><|transcribe|><|notimestamps|>"
 RECORD_SECONDS = 5
 SAMPLE_RATE = 16000
@@ -15,6 +27,11 @@ _whisper_model = None
 def _get_whisper_model():
     global _whisper_model
     if _whisper_model is None:
+        if not CACTUS_VOICE_AVAILABLE:
+            raise RuntimeError(
+                "Cactus voice bindings are not available. "
+                "Ensure the cactus SDK is built and the native library is accessible."
+            )
         if not os.path.isdir(WHISPER_PATH):
             raise RuntimeError(
                 f"Whisper model not found at {WHISPER_PATH}\n"
@@ -39,7 +56,7 @@ def record_audio(seconds=RECORD_SECONDS):
             check=True,
             capture_output=True,
         )
-    except FileNotFoundError:
+    except (FileNotFoundError, subprocess.CalledProcessError):
         subprocess.run(
             [
                 "ffmpeg", "-y", "-f", "avfoundation", "-i", ":0",
@@ -57,8 +74,12 @@ def transcribe_file(audio_path):
     """Transcribe an audio file and return the text."""
     model = _get_whisper_model()
     response = cactus_transcribe(model, audio_path, prompt=WHISPER_PROMPT)
-    result = json.loads(response)
-    return result.get("response", "").strip()
+    try:
+        result = json.loads(response)
+        return result.get("response", "").strip()
+    except (json.JSONDecodeError, TypeError):
+        log.warning("Whisper returned non-JSON response, using raw text")
+        return str(response).strip() if response else ""
 
 
 def listen_and_transcribe(seconds=RECORD_SECONDS):
@@ -68,4 +89,7 @@ def listen_and_transcribe(seconds=RECORD_SECONDS):
         text = transcribe_file(audio_path)
         return text
     finally:
-        os.unlink(audio_path)
+        try:
+            os.unlink(audio_path)
+        except OSError:
+            pass

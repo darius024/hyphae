@@ -6,4 +6,6 @@ python-multipart>=0.0.9
 pymupdf>=1.27
 google-genai>=1.64
 requests>=2.32
+numpy>=1.25
+faiss-cpu>=1.7
 pytest>=9.0
