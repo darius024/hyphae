@@ -326,26 +326,37 @@ def generate_hybrid(messages, tools, confidence_threshold=0.99):
         cloud = generate_cloud(messages, tools)
         cloud["source"] = "cloud (fallback)"
         return cloud
+
     local = generate_cactus(messages, tools)
     expected_calls = _expected_call_count(messages, tools)
     got_calls = len(local["function_calls"])
 
-    # Trust local only if: confidence high enough AND returned enough calls
     if local["confidence"] >= confidence_threshold and got_calls >= expected_calls:
         local["source"] = "on-device"
         return local
 
-    # If local returned calls but confidence is low, check completeness:
-    # a complete-but-low-confidence result is still better than going to cloud
-    # only for simple single-call queries (expected_calls == 1)
     if got_calls >= expected_calls and expected_calls == 1 and got_calls > 0:
-        local["source"] = "on-device"
-        return local
+        if _calls_are_valid(local["function_calls"], tools):
+            local["source"] = "on-device"
+            return local
 
     retry = generate_cactus(messages, tools)
+    retry_calls = len(retry["function_calls"])
     retry["total_time_ms"] += local["total_time_ms"]
-    retry["source"] = "on-device"
-    return retry
+
+    if retry_calls >= expected_calls and _calls_are_valid(retry["function_calls"], tools):
+        retry["source"] = "on-device (retry)"
+        return retry
+
+    try:
+        cloud = generate_cloud(messages, tools)
+        cloud["total_time_ms"] += retry["total_time_ms"]
+        cloud["source"] = "cloud (fallback)"
+        return cloud
+    except Exception as e:
+        print(f"WARNING: Cloud fallback failed: {e}", file=sys.stderr)
+        retry["source"] = "on-device (best-effort)"
+        return retry
 
 
 def print_result(label, result):
