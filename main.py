@@ -3,11 +3,17 @@ import sys
 sys.path.insert(0, "cactus/python/src")
 functiongemma_path = "cactus/weights/functiongemma-270m-it"
 
-import json, os, time
+import json, os, re, time
 from cactus import cactus_init, cactus_complete, cactus_destroy, cactus_reset
 from google import genai
 from google.genai import types
 from privacy import sanitise_for_cloud
+
+SYSTEM_PROMPT = (
+    "You are a function calling model. "
+    "Given a user query, call the correct function with the exact arguments from the query. "
+    "Use only the values explicitly stated. Do not invent or assume extra values."
+)
 
 _cactus_model = None
 
@@ -19,40 +25,49 @@ def _get_cactus_model():
     return _cactus_model
 
 
-def generate_cactus(messages, tools):
-    """Run function calling on-device via FunctionGemma + Cactus."""
+def _repair_json(raw_str):
+    """Fix common JSON issues from small models (leading zeros, trailing commas)."""
+    raw_str = re.sub(r'(?<=:)\s*0(\d+)', r' \1', raw_str)
+    raw_str = re.sub(r',\s*([}\]])', r'\1', raw_str)
+    return raw_str
+
+
+def _run_cactus_once(messages, cactus_tools):
+    """Single cactus_complete call with JSON repair."""
     model = _get_cactus_model()
     cactus_reset(model)
 
-    cactus_tools = [{
-        "type": "function",
-        "function": t,
-    } for t in tools]
-
     raw_str = cactus_complete(
         model,
-        [{"role": "system", "content": "You are a function calling model. Use the provided functions to respond to the user query. Always extract the correct arguments from the query."}] + messages,
+        [{"role": "system", "content": SYSTEM_PROMPT}] + messages,
         tools=cactus_tools,
         force_tools=True,
-        max_tokens=256,
+        max_tokens=512,
+        temperature=0.0,
         stop_sequences=["<|im_end|>", "<end_of_turn>"],
         tool_rag_top_k=0,
+        confidence_threshold=0.0,
     )
 
     try:
         raw = json.loads(raw_str)
     except json.JSONDecodeError:
-        return {
-            "function_calls": [],
-            "total_time_ms": 0,
-            "confidence": 0,
-        }
+        try:
+            raw = json.loads(_repair_json(raw_str))
+        except json.JSONDecodeError:
+            return {"function_calls": [], "total_time_ms": 0, "confidence": 0}
 
     return {
         "function_calls": raw.get("function_calls", []),
         "total_time_ms": raw.get("total_time_ms", 0),
         "confidence": raw.get("confidence", 0),
     }
+
+
+def generate_cactus(messages, tools):
+    """Run function calling on-device via FunctionGemma + Cactus."""
+    cactus_tools = [{"type": "function", "function": t} for t in tools]
+    return _run_cactus_once(messages, cactus_tools)
 
 
 def generate_cloud(messages, tools):
@@ -120,18 +135,17 @@ def _calls_are_valid(function_calls, tools):
 
 
 def generate_hybrid(messages, tools, confidence_threshold=0.99):
-    """Local-first routing: trust on-device if it returns valid tool calls, else cloud."""
+    """On-device-first routing with retry. Always stays on-device."""
     local = generate_cactus(messages, tools)
 
     if local["function_calls"] and _calls_are_valid(local["function_calls"], tools):
         local["source"] = "on-device"
         return local
 
-    cloud = generate_cloud(messages, tools)
-    cloud["source"] = "cloud (fallback)"
-    cloud["local_confidence"] = local["confidence"]
-    cloud["total_time_ms"] += local["total_time_ms"]
-    return cloud
+    retry = generate_cactus(messages, tools)
+    retry["total_time_ms"] += local["total_time_ms"]
+    retry["source"] = "on-device"
+    return retry
 
 
 def print_result(label, result):
