@@ -10,6 +10,63 @@ let isRecording = false;
 let mediaRecorder = null;
 let isBusy = false;
 
+const HISTORY_KEY = "hyphae_chat_history";
+
+function saveHistory() {
+    try {
+        const msgs = [];
+        messagesEl.querySelectorAll(".message").forEach(el => {
+            if (el.id === "thinking" || el.classList.contains("tool-details")) return;
+            const role = el.classList.contains("user") ? "user" : "assistant";
+            const bubble = el.querySelector(".bubble");
+            if (!bubble) return;
+            const meta = {};
+            const badge = el.querySelector(".badge");
+            const metaSpan = el.querySelector(".meta span:last-child");
+            if (badge) meta.source = badge.classList.contains("local") ? "on-device" : "cloud";
+            if (metaSpan) meta.routing_ms = metaSpan.textContent.replace("ms", "");
+            msgs.push({ role, text: bubble.textContent, html: bubble.innerHTML, meta: Object.keys(meta).length ? meta : null });
+        });
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(msgs));
+    } catch {}
+}
+
+function loadHistory() {
+    try {
+        const raw = localStorage.getItem(HISTORY_KEY);
+        if (!raw) return;
+        const msgs = JSON.parse(raw);
+        if (!msgs.length) return;
+        messagesEl.innerHTML = "";
+        for (const m of msgs) {
+            const div = document.createElement("div");
+            div.className = `message ${m.role}`;
+            let html = `<div class="bubble">${m.html || escapeHtml(m.text)}</div>`;
+            if (m.meta) {
+                const isLocal = m.meta.source && m.meta.source.includes("on-device");
+                const badge = isLocal
+                    ? '<span class="badge local">LOCAL</span>'
+                    : '<span class="badge cloud">CLOUD</span>';
+                html += `<div class="meta">${badge} <span>${m.meta.routing_ms}ms</span></div>`;
+            }
+            div.innerHTML = html;
+            messagesEl.appendChild(div);
+        }
+        scrollToBottom();
+    } catch {}
+}
+
+function clearHistory() {
+    localStorage.removeItem(HISTORY_KEY);
+    messagesEl.innerHTML = `<div class="message assistant">
+        <div class="bubble">
+            Welcome to <strong>Hyphae</strong>. Ask questions about your research documents,
+            search literature, generate hypotheses, or manage your corpus.
+            Your confidential data stays on-device.
+        </div>
+    </div>`;
+}
+
 function setBusy(busy) {
     isBusy = busy;
     sendBtn.disabled = busy;
@@ -55,6 +112,7 @@ function addMessage(role, content, meta) {
     div.innerHTML = html;
     messagesEl.appendChild(div);
     scrollToBottom();
+    saveHistory();
     return div;
 }
 
@@ -408,5 +466,8 @@ uploadBtn.addEventListener("drop", (e) => {
     if (e.dataTransfer.files.length > 0) uploadFiles(e.dataTransfer.files);
 });
 
+document.getElementById("clear-btn").addEventListener("click", clearHistory);
+
 // ── Init ────────────────────────────────────────────────────────────
+loadHistory();
 loadDocuments();

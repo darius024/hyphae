@@ -391,6 +391,15 @@ body {
     50% { box-shadow: 0 0 0 6px rgba(248, 113, 113, 0); }
 }
 
+.clear-btn {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+.clear-btn:hover {
+    color: var(--red);
+    border-color: var(--red);
+}
+
 .send-btn {
     background: var(--accent);
     border-color: var(--accent);
