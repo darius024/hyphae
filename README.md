@@ -4,76 +4,103 @@
 
 > **Hyphae** (pronounced *hy-fee*) are the branching, thread-like filaments of a fungal network — the hidden infrastructure that connects organisms underground, sharing nutrients and signals without exposing the network itself. Just like hyphae enable communication while keeping the root system private, our system enables research reasoning while keeping raw experimental data confidential.
 
+Built for the Cactus x Google DeepMind Hackathon.
+
+---
+
 ## What is Hyphae?
 
-A hybrid local-first + cloud AI system for scientific research. Sensitive data (PDFs, experiment logs, hardware notes) stays on-device via FunctionGemma + Cactus. Only abstract reasoning (hypothesis generation, literature reasoning) goes to the cloud via Gemini — raw experiments never leak.
+A hybrid local-first + cloud AI research platform for individual researchers. Upload your PDFs, experiment logs, and notes — Hyphae processes them **entirely on-device** using FunctionGemma via Cactus. Only abstract reasoning tasks (hypothesis generation, literature search) go to Gemini cloud, and only when you explicitly ask. Raw experimental data never leaves your machine.
 
-The key novelty: **research reasoning without leaking raw experiments.**
-
-Built for the Cactus x Google DeepMind Hackathon.
+The key innovation: **a privacy boundary you can see and verify.** Every query shows whether your data stayed local or touched the cloud, with a full audit log.
 
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────┐
-│                    Hyphae                        │
-│                                                  │
-│  ┌─────────────────┐    ┌─────────────────────┐  │
-│  │   LOCAL LAYER   │    │    CLOUD LAYER      │  │
-│  │                 │    │                     │  │
-│  │  PDFs           │    │  Hypothesis         │  │
-│  │  Experiment logs│    │  generation         │  │
-│  │  Hardware notes │    │  Literature         │  │
-│  │                 │    │  reasoning          │  │
-│  │  FunctionGemma  │    │  Gemini 2.5 Flash   │  │
-│  │  via Cactus     │    │                     │  │
-│  └────────┬────────┘    └──────────┬──────────┘  │
-│           │    ┌──────────────┐    │              │
-│           └────│   ROUTING    │────┘              │
-│                │  Confidence  │                   │
-│                │  + Privacy   │                   │
-│                └──────────────┘                   │
-└──────────────────────────────────────────────────┘
-  Raw data never leaves the device.
+┌──────────────────────────────────────────────────────────┐
+│                         Hyphae                           │
+│                                                          │
+│  ┌───────────────────┐       ┌────────────────────────┐  │
+│  │    LOCAL LAYER    │       │     CLOUD LAYER        │  │
+│  │                   │       │                        │  │
+│  │  Search corpus    │       │  Hypothesis generation │  │
+│  │  Summarise notes  │       │  Literature search     │  │
+│  │  Compare docs     │       │  Answer synthesis      │  │
+│  │  Read / list      │       │  (only for cloud       │  │
+│  │  Create notes     │       │   queries)             │  │
+│  │  Text search      │       │                        │  │
+│  │                   │       │  Gemini 2.5 Flash Lite │  │
+│  │  FunctionGemma    │       │                        │  │
+│  │  via Cactus       │       │                        │  │
+│  └─────────┬─────────┘       └───────────┬────────────┘  │
+│            │      ┌──────────────┐       │               │
+│            └──────│   ROUTING    │───────┘               │
+│                   │  Rule-based  │                       │
+│                   │  → Local AI  │                       │
+│                   │  → Cloud     │                       │
+│                   └──────────────┘                       │
+│                                                          │
+│  Privacy: local queries never call Gemini, not even      │
+│  for answer formatting. Cloud is opt-in per query.       │
+└──────────────────────────────────────────────────────────┘
 ```
 
-| Layer | What | How |
-|-------|------|-----|
-| **Local** | PDFs, experiment logs, hardware notes | FunctionGemma on-device via Cactus |
-| **Cloud** | Hypothesis generation, literature reasoning | Gemini 2.5 Flash API |
-| **Routing** | Smart confidence + privacy-aware decision | 3-tier hybrid: local → retry → cloud fallback |
+| Layer | What runs here | How |
+|-------|---------------|-----|
+| **Local** | Corpus search, summarise, compare, read, list, create notes, text search | FunctionGemma 270M on-device via Cactus SDK |
+| **Cloud** | Hypothesis generation, literature search, answer synthesis for cloud queries | Gemini 2.5 Flash Lite API |
+| **Routing** | 3-tier: rule-based → FunctionGemma → Gemini fallback | Confidence + privacy-aware decision engine |
 
 ## Setup
 
 ### Prerequisites
-- macOS with Apple Silicon (M1+)
-- Python 3.12 (`brew install python@3.12`)
-- HuggingFace account with access to [google/functiongemma-270m-it](https://huggingface.co/google/functiongemma-270m-it)
-- [Gemini API key](https://aistudio.google.com/api-keys) — claim hackathon credits via [London link](https://trygcp.dev/claim/cactus-x-gdm-hackathon-london)
+
+- macOS with Apple Silicon (M1+) or Linux
+- Python 3.12+ (`brew install python@3.12` on macOS)
+- [Gemini API key](https://aistudio.google.com/api-keys)
 - [Cactus API key](https://cactuscompute.com/dashboard/api-keys)
+- HuggingFace account with access to [google/functiongemma-270m-it](https://huggingface.co/google/functiongemma-270m-it)
 
 ### Quick Start
 
 ```bash
-# 1. Clone the repo (with submodules)
-git clone --recurse-submodules https://github.com/darius024/hyphae.git && cd hyphae
+# 1. Clone the repo with submodules
+git clone --recurse-submodules https://github.com/darius024/hyphae.git
+cd hyphae
 
 # 2. Login to HuggingFace (one-time, for gated model access)
 pip install huggingface_hub
 huggingface-cli login
 
-# 3. Run setup (initializes submodule, builds, downloads model, installs deps)
+# 3. Run setup (builds Cactus, downloads model weights, installs deps)
 bash setup.sh
 
-# 4. Activate the environment
+# 4. Activate the virtual environment
 source cactus/venv/bin/activate
 
-# 5. Set API keys
+# 5. Set your API keys
 export GEMINI_API_KEY="your-gemini-key"
-cactus auth  # enter your cactus key when prompted
+cactus auth   # enter your Cactus key when prompted
 
-# 6. Run the benchmark
-python benchmark.py
+# 6. (Optional) Install ffmpeg for voice input
+brew install ffmpeg
+
+# 7. Start the web app
+python -m uvicorn web.app:app --port 5000
+```
+
+Then open [http://localhost:5000](http://localhost:5000) in your browser.
+
+### Manual Dependency Install
+
+If `setup.sh` doesn't cover your platform, install manually:
+
+```bash
+cd hyphae
+python3 -m venv cactus/venv
+source cactus/venv/bin/activate
+pip install -r requirements.txt
+pip install sentence-transformers   # for notebook embeddings
 ```
 
 ## Usage
@@ -83,93 +110,128 @@ python benchmark.py
 ```bash
 source cactus/venv/bin/activate
 export GEMINI_API_KEY="your-key"
-python web/app.py                  # start on port 5000
-PORT=8080 python web/app.py        # custom port
+python -m uvicorn web.app:app --port 5000
 ```
 
-The web interface is the primary way to use Hyphae. It provides:
+The web interface provides:
 
-- **Natural language answers** — queries are routed through tool execution, then synthesized into a readable response via Gemini
-- **Document management** — sidebar with corpus listing, search/filter, click-to-preview, drag-and-drop upload (PDFs, text, markdown, CSV)
-- **Voice input** — record from the browser microphone, auto-converted and transcribed on-device via Whisper
-- **Routing transparency** — every response shows a LOCAL/CLOUD badge, confidence level (HIGH/MED/LOW), and latency
-- **Chat history** — conversations persist across page reloads via localStorage, with a clear button to reset
-- **Mobile responsive** — hamburger menu for sidebar access on small screens
-- **Keyboard shortcuts** — `/` to focus input, `Cmd+K` to search documents, `Escape` to dismiss, `Cmd+Enter` to send
+- **Natural language research chat** — ask questions about your documents, get answers grounded in your corpus
+- **Privacy-first routing** — every response shows LOCAL/CLOUD badge, a PRIVATE/CLOUD data badge, confidence level, and latency
+- **Route prediction** — as you type, a live indicator below the input shows whether the query will stay on-device or use the cloud
+- **Privacy audit log** — click "Audit log" to see a chronological record of every query: what ran locally, what touched the cloud, which tools were used
+- **Document management** — sidebar with corpus listing, file-type icons, search/filter, click-to-preview (with in-browser PDF viewer for uploaded PDFs), drag-and-drop upload
+- **Document sensitivity tagging** — mark individual documents as Confidential (lock icon) or Shareable; toggle with one click
+- **Research tools panel** — collapsible panel showing all 9 available tools with LOCAL/CLOUD/HYBRID badges and parameter info
+- **Quick prompts** — 4 pre-built research prompt templates (summarise with citations, compare documents, design experiment, literature + local blend)
+- **Notebook workspaces** — create isolated research notebooks, upload sources, and chat with AI grounded in those specific documents (uses Gemini + RAG)
+- **Voice input** — record from browser microphone, transcribed on-device via Whisper through Cactus
+- **Chat history** — persists across page reloads via localStorage
+- **Keyboard shortcuts** — `/` focus input, `Cmd+K` search docs, `Escape` dismiss, `Shift+Enter` newline
 
 ### CLI
 
 ```bash
-python cli.py                    # interactive text mode
-python cli.py --voice            # voice mode (Whisper on-device)
-python cli.py "your query"      # one-shot query
+python cli.py                   # interactive text mode
+python cli.py --voice           # voice mode (Whisper on-device)
+python cli.py "your query"     # one-shot query
 ```
 
-```
-  > Search my notes about battery capacity retention
-  [LOCAL] routed in 210ms
-  -> search_papers({"query": "battery capacity retention"})  [LOCAL-ONLY]
-     Found 3 passages:
-     1. [0.87] FEC-3 additive shows improved capacity retention vs baseline...
+### Corpus Management
 
-  > Generate hypotheses about why FEC-3 improves cycling stability
-  [CLOUD] routed in 850ms
-  -> generate_hypothesis({"context": "FEC-3 improves cycling stability"})  [CLOUD-SAFE]
-     1. FEC-3 forms a more stable SEI layer...
-```
-
-### Corpus management
+Upload via the web UI sidebar, or use the CLI:
 
 ```bash
-python -m src.ingest add paper.pdf        # add a PDF (text extracted via PyMuPDF)
-python -m src.ingest add notes/           # add a directory recursively
-python -m src.ingest list                 # list indexed documents
-python -m src.ingest remove <filename>    # remove a document
+# Add files to your research corpus
+python -m src.ingest add paper.pdf           # extracts text via PyMuPDF
+python -m src.ingest add experiment_data/    # add a directory recursively
+python -m src.ingest list                    # list indexed documents
+python -m src.ingest remove old_notes.txt    # remove a document
 ```
 
-Or use the web UI sidebar to upload, preview, search, and remove documents.
+Supported formats: PDF, TXT, Markdown, CSV, JSON, LOG.
 
 ## Research Tools
 
 | Tool | Privacy | Description |
 |------|---------|-------------|
-| `search_papers` | LOCAL-ONLY | Search local corpus via Cactus RAG |
-| `summarise_notes` | LOCAL-ONLY | Summarise experiment notes on a topic |
-| `create_note` | LOCAL-ONLY | Save a research note locally |
-| `list_documents` | LOCAL-ONLY | List all local documents |
-| `compare_documents` | LOCAL-ONLY | Compare two documents on a topic via RAG |
-| `generate_hypothesis` | CLOUD-SAFE | Generate hypotheses from abstract context |
-| `search_literature` | CLOUD-SAFE | Search scientific literature |
+| `search_papers` | LOCAL | Search local corpus via Cactus RAG (falls back to text scan if RAG weights unavailable) |
+| `summarise_notes` | LOCAL | Summarise experiment notes on a given topic |
+| `create_note` | LOCAL | Save a new research note to corpus |
+| `list_documents` | LOCAL | List all local documents with sizes |
+| `compare_documents` | LOCAL | Compare two documents on a topic (RAG + paragraph fallback) |
+| `read_document` | LOCAL | Open and read a corpus file (truncated for safety) |
+| `search_text` | LOCAL | Keyword search with paragraph-level snippets and filenames |
+| `generate_hypothesis` | CLOUD | Generate testable hypotheses from abstract context |
+| `search_literature` | CLOUD | Search scientific literature for prior work |
+
+## Privacy Model
+
+### Data Boundary
+
+- **Local-only queries** (search, summarise, compare, read, list, create note, text search): the entire pipeline — routing, tool execution, and answer formatting — runs on your machine. **No data is sent to any cloud service**, not even for answer synthesis.
+- **Cloud queries** (hypothesis, literature): only the user's abstract query is sent to Gemini. Raw corpus data is never included.
+- **Answer synthesis**: only used for cloud queries. Local queries are formatted on-device.
+
+### Sanitisation
+
+Messages sent to the cloud are automatically sanitised by `src/privacy.py`:
+
+- File paths → `[REDACTED]`
+- Measurements, sample IDs, batch codes, lab codes
+- Email addresses, URLs, IP addresses
+- Dates, GPS coordinates
+
+### Audit Log
+
+Every query is logged with: timestamp, query text, tools used, whether data stayed local, and routing latency. View the log from the UI via the "Audit log" button, or fetch it programmatically at `GET /api/privacy-log`.
+
+### Document Sensitivity
+
+Tag individual documents as **Confidential** or **Shareable** from the sidebar. Confidential documents display a lock icon. Tags are stored locally in `corpus/.sensitivity.json`.
 
 ## Hybrid Routing
 
 The routing engine (`generate_hybrid` in `main.py`) uses a 3-tier strategy:
 
-1. **Local first** — run FunctionGemma on-device via Cactus. Accept if confidence is high and the result is valid.
-2. **Local retry** — if the first attempt is incomplete or invalid, retry once on-device.
-3. **Cloud fallback** — if both local attempts fail, fall back to Gemini 2.5 Flash. If cloud also fails, return the best-effort local result.
+1. **Rule-based extraction** — pattern-matches query verbs to research tools (e.g. "search" → `search_papers`, "compare" → `compare_documents`, "hypothesis" → `generate_hypothesis`). Returns instantly (~0ms) with high confidence.
+2. **FunctionGemma on-device** — if rule-based matching fails, the 270M-parameter model runs locally via Cactus to select the right tool and extract arguments.
+3. **Gemini cloud fallback** — if both local attempts fail or produce invalid results, falls back to Gemini 2.5 Flash Lite. If cloud also fails, returns the best-effort local result.
 
-This ensures users always get a response while maximizing on-device execution for privacy.
+This ensures users always get a response while maximizing on-device execution.
 
-## Privacy
+## Notebooks
 
-Messages sent to the cloud are automatically sanitised by `src/privacy.py`. The following are stripped before any data reaches Gemini:
+Notebooks are isolated research workspaces for deep-dive analysis:
 
-- **File paths** (`/data/experiment_1.csv` → `[REDACTED]`)
-- **Measurements** (`3.5 mg`, `25.0 °C`)
-- **Sample/batch IDs** (`sample #A42`, `batch B-17`)
-- **Lab codes** (`AB-1234`)
-- **Email addresses** (`jane@lab.org`)
-- **URLs** (`https://internal.lab.io/...`)
-- **IP addresses** (`192.168.1.42`)
-- **Dates** (`2025-03-15`)
-- **GPS coordinates** (`51.5074, -0.1278`)
+1. **Create a notebook** — click "+ New" in the notebook panel to open the creation dialog
+2. **Add sources** — upload PDFs, text files, or paste URLs; sources are ingested and embedded for retrieval
+3. **Chat with sources** — ask questions grounded in your notebook's specific documents; answers stream in real-time with inline citations
+4. **Multiple conversations** — each notebook can have multiple conversation threads
 
-Tools marked LOCAL-ONLY never send data to cloud under any circumstances.
+Notebooks use FAISS vector search + sentence-transformer embeddings for retrieval, with Gemini for response generation. Data is stored locally in `web/notebook.db` (SQLite).
 
-## Response Synthesis
+## API Endpoints
 
-After tool execution, the backend sends the user's question and tool results to Gemini to generate a natural language answer. This means the UI shows a readable response like "Your battery cycling data shows 95% capacity retention after 500 cycles..." instead of raw tool output. Tool call details are still available in a collapsible section below each response.
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/query` | Hybrid routing + tool execution + answer synthesis |
+| `POST` | `/api/classify` | Predict whether a query will stay local or use cloud |
+| `POST` | `/api/voice` | Transcribe audio + query |
+| `GET` | `/api/documents` | List corpus files with types and sensitivity |
+| `POST` | `/api/upload` | Upload files to corpus (preserves original PDFs) |
+| `GET` | `/api/documents/{name}` | Preview document text |
+| `GET` | `/api/documents/{name}/raw` | Serve original file (PDF viewer / download) |
+| `DELETE` | `/api/documents/{name}` | Remove document from corpus |
+| `GET` | `/api/tools` | List available tools with parameters and source |
+| `GET` | `/api/sensitivity` | Get document sensitivity tags |
+| `PUT` | `/api/sensitivity/{name}` | Set document sensitivity (confidential/shareable) |
+| `GET` | `/api/privacy-log` | Fetch privacy audit log entries |
+| `GET` | `/api/notebooks` | List notebooks |
+| `POST` | `/api/notebooks` | Create notebook |
+| `DELETE` | `/api/notebooks/{id}` | Delete notebook |
+| `POST` | `/api/notebooks/{id}/upload` | Upload source to notebook |
+| `POST` | `/api/notebooks/{id}/conversations` | Create conversation |
+| `POST` | `/api/notebooks/{id}/conversations/{cid}/chat/stream` | Stream chat response (SSE) |
 
 ## Tests
 
@@ -177,11 +239,7 @@ After tool execution, the backend sends the user's question and tool results to 
 python -m pytest tests/ -v
 ```
 
-34 unit tests covering:
-- **Tool registry** — all tools have required fields, local/cloud partition is complete
-- **Tool dispatch** — `execute_tool` routes correctly, handles unknown tools and missing args
-- **Privacy sanitisation** — all 9 pattern types strip correctly, normal text preserved, no mutation
-- **Corpus ingestion** — add/remove/list files, PDF handling, directory recursion, unsupported formats
+34 unit tests covering tool registry, tool dispatch, privacy sanitisation, and corpus ingestion.
 
 ## Benchmark
 
@@ -189,56 +247,68 @@ python -m pytest tests/ -v
 python benchmark.py
 ```
 
-Scoring: F1 accuracy (60%) + speed (15%) + on-device ratio (25%), weighted by difficulty (easy 20%, medium 30%, hard 50%).
+Scoring: F1 accuracy (60%) + speed (15%) + on-device ratio (25%), weighted by difficulty.
 
 ## Submit
 
 ```bash
-python submit.py --team "Hyphae" --location "London"
+python submit.py --team "Darphie" --location "London"
 ```
 
 ## Project Structure
 
 ```
 hyphae/
-├── main.py                 # Hybrid routing engine (stays at root for submit.py)
-├── benchmark.py            # Hackathon benchmark
-├── submit.py               # Leaderboard submission
-├── cli.py                  # CLI entrypoint (text, voice, one-shot)
-├── setup.sh                # One-command setup
-├── requirements.txt        # Python dependencies
+├── main.py                    # Hybrid routing engine (rule-based → local → cloud)
+├── benchmark.py               # Hackathon benchmark
+├── submit.py                  # Leaderboard submission
+├── cli.py                     # CLI entrypoint (text, voice, one-shot)
+├── setup.sh                   # One-command setup
+├── requirements.txt           # Python dependencies
 │
-├── src/                    # Library modules
-│   ├── config.py           # Centralized cactus/model paths
-│   ├── tools.py            # Research tool definitions + execution
-│   ├── privacy.py          # Cloud message sanitiser (9 pattern types)
-│   ├── voice.py            # On-device voice input via Whisper
-│   └── ingest.py           # Corpus ingestion CLI + PDF extraction
+├── src/                       # Core library modules
+│   ├── config.py              # Paths, Cactus FFI preloading
+│   ├── tools.py               # 9 research tools + LOCAL/CLOUD classification
+│   ├── privacy.py             # Cloud message sanitiser (9 pattern types)
+│   ├── voice.py               # On-device voice via Whisper + Cactus
+│   └── ingest.py              # Corpus ingestion (PDF extraction, CLI)
 │
-├── tests/                  # Unit tests (pytest, 34 tests)
-│   ├── conftest.py         # Shared fixtures (temp corpus, monkeypatch)
-│   ├── test_tools.py       # Tool dispatch + registry tests
-│   ├── test_privacy.py     # Sanitisation + cloud safety tests
-│   ├── test_ingest.py      # Ingestion + corpus management tests
-│   └── test_routing.py     # Routing integration tests
+├── web/                       # FastAPI web application
+│   ├── app.py                 # API backend (query, docs, upload, voice, notebooks,
+│   │                          #   privacy log, sensitivity, classify, tools)
+│   ├── db.py                  # SQLite schema + connection utilities
+│   ├── models.py              # Pydantic API models
+│   ├── citations.py           # Citation builder for notebook RAG
+│   ├── embed.py               # Sentence-transformer embeddings
+│   ├── retrieval.py           # FAISS hybrid search for notebooks
+│   ├── ingest_nb.py           # Notebook source ingestion
+│   ├── privacy.py             # Notebook-layer sanitisation
+│   ├── notebook_bootstrap.py  # Notebook DB seeding
+│   └── static/                # Frontend (vanilla HTML/CSS/JS)
+│       ├── index.html         # SPA shell — chat, sidebar, notebooks, modals
+│       ├── style.css          # Research-grade teal theme, responsive
+│       └── app.js             # Chat logic, tools panel, audit log, doc preview
 │
-├── web/                    # Flask web app
-│   ├── app.py              # API backend (query, docs, upload, voice, preview)
-│   └── static/             # Frontend (HTML/CSS/JS)
-│       ├── index.html      # Chat UI with sidebar + preview modal
-│       ├── style.css       # Dark theme, responsive, animations
-│       └── app.js          # Chat logic, history, shortcuts, doc management
-│
-├── examples/               # Usage examples
-│   ├── basic_query.py      # Minimal hybrid query
-│   ├── corpus_management.py # PDF ingestion demo
-│   └── voice_demo.py       # Voice transcription demo
-│
-├── docs/                   # Documentation (PLAN, DARIUS, STEFI, RESULTS)
-├── scripts/                # Utility scripts (tune_threshold.py)
-├── corpus/                 # Local research documents (never sent to cloud)
-└── cactus/                 # Cactus SDK (git submodule)
+├── tests/                     # Unit tests (pytest)
+├── corpus/                    # Local research documents (never sent to cloud)
+│   ├── .sensitivity.json      # Per-document confidential/shareable tags
+│   └── .originals/            # Preserved original PDFs from uploads
+└── cactus/                    # Cactus SDK (git submodule)
 ```
+
+## Tech Stack
+
+| Component | Technology |
+|-----------|-----------|
+| On-device AI | FunctionGemma 270M via Cactus SDK |
+| Cloud AI | Gemini 2.5 Flash Lite |
+| Backend | FastAPI + Uvicorn |
+| Database | SQLite (notebooks, sources, conversations) |
+| Vector search | FAISS + sentence-transformers |
+| PDF extraction | PyMuPDF |
+| Voice | Whisper via Cactus (on-device) |
+| Frontend | Vanilla HTML/CSS/JS, SSE streaming |
+| Fonts | Inter (UI), Lora (prose) |
 
 ## Team
 
