@@ -4,13 +4,29 @@ sys.path.insert(0, "cactus/python/src")
 functiongemma_path = "cactus/weights/functiongemma-270m-it"
 
 import json, os, time
-from cactus import cactus_init, cactus_complete, cactus_destroy
+
+try:
+    from cactus import cactus_init, cactus_complete, cactus_destroy
+    CACTUS_AVAILABLE = True
+except ImportError:
+    CACTUS_AVAILABLE = False
+
+# Set CLOUD_ONLY=1 to skip local inference entirely (useful when Cactus is not installed)
+CLOUD_ONLY = os.environ.get("CLOUD_ONLY", "0") == "1"
+
 from google import genai
 from google.genai import types
+
+_GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+if not _GEMINI_API_KEY:
+    print("WARNING: GEMINI_API_KEY is not set. Cloud calls will fail.", file=sys.stderr)
 
 
 def generate_cactus(messages, tools):
     """Run function calling on-device via FunctionGemma + Cactus."""
+    if not CACTUS_AVAILABLE:
+        return {"function_calls": [], "total_time_ms": 0, "confidence": 0}
+
     model = cactus_init(functiongemma_path)
 
     cactus_tools = [{
@@ -71,11 +87,15 @@ def generate_cloud(messages, tools):
 
     start_time = time.time()
 
-    gemini_response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=contents,
-        config=types.GenerateContentConfig(tools=gemini_tools),
-    )
+    try:
+        gemini_response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=contents,
+            config=types.GenerateContentConfig(tools=gemini_tools),
+        )
+    except Exception as e:
+        print(f"WARNING: Gemini API call failed: {e}", file=sys.stderr)
+        return {"function_calls": [], "total_time_ms": (time.time() - start_time) * 1000}
 
     total_time_ms = (time.time() - start_time) * 1000
 
@@ -96,6 +116,11 @@ def generate_cloud(messages, tools):
 
 def generate_hybrid(messages, tools, confidence_threshold=0.99):
     """Baseline hybrid inference strategy; fall back to cloud if Cactus Confidence is below threshold."""
+    if CLOUD_ONLY or not CACTUS_AVAILABLE:
+        cloud = generate_cloud(messages, tools)
+        cloud["source"] = "cloud (fallback)"
+        return cloud
+
     local = generate_cactus(messages, tools)
 
     if local["confidence"] >= confidence_threshold:
