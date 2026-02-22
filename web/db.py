@@ -121,15 +121,44 @@ END;
 """
 
 
+_DEMO_NOTEBOOK_ID = "demo-bioelectronics-notebook"
+_DEMO_CONV_ID = "demo-conversation-001"
+
+
 def init_db() -> None:
     conn = sqlite3.connect(DB_PATH)
     try:
         conn.executescript(_DDL)
         conn.executescript(_FTS_TRIGGERS)
         conn.commit()
+        _seed_defaults(conn)
+        conn.commit()
         log.info("Notebook DB ready at %s", DB_PATH)
     finally:
         conn.close()
+
+
+def _seed_defaults(conn: sqlite3.Connection) -> None:
+    """Create a demo notebook with an example conversation on first run."""
+    exists = conn.execute(
+        "SELECT 1 FROM notebooks WHERE id=?", (_DEMO_NOTEBOOK_ID,)
+    ).fetchone()
+    if exists:
+        return
+
+    conn.execute(
+        "INSERT INTO notebooks (id, name, description) VALUES (?,?,?)",
+        (
+            _DEMO_NOTEBOOK_ID,
+            "Bioelectronics Research",
+            "Self-healing conductive hydrogels for neural interfaces — "
+            "synthesis, impedance, and biocompatibility data.",
+        ),
+    )
+    conn.execute(
+        "INSERT INTO conversations (id, notebook_id, title) VALUES (?,?,?)",
+        (_DEMO_CONV_ID, _DEMO_NOTEBOOK_ID, "Project overview"),
+    )
 
 
 @contextmanager
