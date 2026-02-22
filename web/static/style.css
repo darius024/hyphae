@@ -190,7 +190,21 @@ body {
     font-weight: 600;
     margin-bottom: 10px;
     padding: 0 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
+
+.doc-count-badge {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+.doc-count-badge:empty { display: none; }
 
 .doc-search {
     width: 100%;
@@ -1278,13 +1292,6 @@ body {
     z-index: 160;
 }
 
-.nb-menu {
-    position: static;
-    top: auto;
-    left: auto;
-    margin-left: 8px;
-}
-
 .sidebar-overlay {
     display: none;
     position: fixed;
@@ -1362,12 +1369,6 @@ body {
     position: sticky;
     top: 0;
     z-index: 60;
-}
-
-.nb-inner {
-    display: flex;
-    flex: 1;
-    min-height: 0;
 }
 
 .nb-menu {
@@ -1737,44 +1738,32 @@ body {
     border-color: var(--accent-border);
 }
 
-/* ── Notebook main area ──────────────────────────────────────────── */
-
-.nb-main {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    background: var(--bg-chat);
-}
-
 .nb-placeholder {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    padding: 20px 16px;
+    text-align: center;
 }
 
 .nb-placeholder-inner {
-    text-align: center;
     color: var(--text-secondary);
 }
 
 .nb-placeholder-icon {
     color: var(--text-tertiary);
-    margin-bottom: 16px;
+    margin-bottom: 10px;
+    width: 32px;
+    height: 32px;
 }
 
 .nb-placeholder-inner h3 {
-    font-size: 17px;
+    font-size: 14px;
     font-weight: 600;
     color: var(--text-primary);
-    margin-bottom: 8px;
+    margin-bottom: 6px;
 }
 
 .nb-placeholder-inner p {
-    font-size: 14px;
-    max-width: 300px;
-    line-height: 1.6;
+    font-size: 12px;
+    line-height: 1.5;
     color: var(--text-secondary);
 }
 
