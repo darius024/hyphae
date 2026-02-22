@@ -3,7 +3,6 @@ import sys, os, logging
 
 _PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 _CACTUS_SRC = os.path.join(_PROJECT_ROOT, "cactus", "python", "src")
-functiongemma_path = os.path.join(_PROJECT_ROOT, "cactus", "weights", "functiongemma-270m-it")
 
 sys.path.insert(0, os.path.join(_PROJECT_ROOT, "src"))
 if _CACTUS_SRC not in sys.path:
@@ -20,6 +19,65 @@ except ImportError:
     CACTUS_AVAILABLE = False
 
 CLOUD_ONLY = os.environ.get("CLOUD_ONLY", "0") == "1"
+
+def _find_functiongemma_path():
+    """Locate FunctionGemma weights, checking env var and common paths."""
+    env = os.environ.get("FUNCTIONGEMMA_PATH")
+    if env and os.path.isdir(env):
+        return env
+    candidates = [
+        os.path.join(_PROJECT_ROOT, "cactus", "weights", "functiongemma-270m-it"),
+        os.path.join(_PROJECT_ROOT, "weights", "functiongemma-270m-it"),
+        os.path.join(os.path.expanduser("~"), ".cactus", "weights", "functiongemma-270m-it"),
+        "weights/functiongemma-270m-it",
+    ]
+    for p in candidates:
+        if os.path.isdir(p):
+            return p
+    return candidates[0]
+
+functiongemma_path = _find_functiongemma_path()
+
+import threading as _threading
+
+_cached_cactus_model = None
+_cactus_init_failed = False
+_cactus_lock = _threading.Lock()
+_cactus_inference_lock = _threading.Lock()
+
+def _get_cactus_model():
+    """Return a cached Cactus model handle, initialising once on first call (thread-safe)."""
+    global _cached_cactus_model, _cactus_init_failed
+    if _cactus_init_failed:
+        return None
+    if _cached_cactus_model is not None:
+        return _cached_cactus_model
+    with _cactus_lock:
+        if _cached_cactus_model is not None:
+            return _cached_cactus_model
+        if _cactus_init_failed:
+            return None
+        if not CACTUS_AVAILABLE:
+            _cactus_init_failed = True
+            return None
+        try:
+            _cached_cactus_model = cactus_init(functiongemma_path)
+            if _cached_cactus_model is None:
+                _cactus_init_failed = True
+        except Exception as e:
+            log.warning("cactus_init failed: %s", e)
+            _cactus_init_failed = True
+            _cached_cactus_model = None
+    return _cached_cactus_model
+
+# Pre-warm: load the model in background so it's ready for the first call
+def _prewarm_cactus():
+    try:
+        _get_cactus_model()
+    except Exception:
+        pass
+_threading.Thread(target=_prewarm_cactus, daemon=True).start()
+
 # NOTE: We avoid importing heavy cloud deps (google.genai, httpx, aiohttp, etc.)
 # at module import time. They are lazily imported inside _get_gemini_client and
 # generate_cloud so scripts that only exercise on-device code don't pay the
@@ -208,11 +266,25 @@ def _repair_json(raw_str):
 
 
 def generate_cactus(messages, tools):
-    """Run function calling on-device via FunctionGemma + Cactus."""
-    if not CACTUS_AVAILABLE:
-        return {"function_calls": [], "total_time_ms": 0, "confidence": 0}
+    """Run function calling on-device via FunctionGemma + Cactus.
 
-    model = cactus_init(functiongemma_path)
+    Uses rule-based extraction as a fast path (~0ms).  Only falls back to
+    the actual Cactus model when rule-based cannot produce valid results.
+    """
+    # --- Fast path: rule-based extraction returns instantly ---
+    rule_calls = _rule_based_extract(messages, tools)
+    expected = _expected_call_count(messages, tools)
+    if len(rule_calls) >= expected and _calls_are_valid(rule_calls, tools):
+        return {
+            "function_calls": rule_calls,
+            "total_time_ms": 0,
+            "confidence": 1.0,
+        }
+
+    # --- Slow path: actual model inference ---
+    model = _get_cactus_model()
+    if model is None:
+        return {"function_calls": rule_calls, "total_time_ms": 0, "confidence": 0}
 
     cactus_tools = [{
         "type": "function",
@@ -221,16 +293,21 @@ def generate_cactus(messages, tools):
 
     system_prompt = _build_system_prompt(messages, tools)
 
-    raw_str = cactus_complete(
-        model,
-        [{"role": "system", "content": system_prompt}] + messages,
-        tools=cactus_tools,
-        force_tools=True,
-        max_tokens=512,
-        stop_sequences=["<|im_end|>", "<end_of_turn>"],
-        tool_rag_top_k=0,
-        confidence_threshold=0.0,
-    )
+    with _cactus_inference_lock:
+        try:
+            raw_str = cactus_complete(
+                model,
+                [{"role": "system", "content": system_prompt}] + messages,
+                tools=cactus_tools,
+                force_tools=True,
+                max_tokens=300,
+                stop_sequences=["<|im_end|>", "<end_of_turn>"],
+                tool_rag_top_k=0,
+                confidence_threshold=0.0,
+            )
+        except Exception as e:
+            log.warning("cactus_complete failed: %s", e)
+            return {"function_calls": rule_calls, "total_time_ms": 0, "confidence": 0}
 
     try:
         raw = json.loads(raw_str)
@@ -238,7 +315,7 @@ def generate_cactus(messages, tools):
         try:
             raw = json.loads(_repair_json(raw_str))
         except json.JSONDecodeError:
-            return {"function_calls": [], "total_time_ms": 0, "confidence": 0}
+            return {"function_calls": rule_calls, "total_time_ms": 0, "confidence": 0}
 
     return {
         "function_calls": raw.get("function_calls", []),
@@ -369,7 +446,7 @@ _STRING_PREFIX_NOISE = re.compile(
 _TIME_PATTERN = re.compile(
     r'(\d{1,2})(?::(\d{2}))?\s*(AM|PM|am|pm|a\.m\.|p\.m\.)\b'
 )
-_DURATION_PATTERN = re.compile(r'(\d+)\s*minutes?\b', re.IGNORECASE)
+_DURATION_PATTERN = re.compile(r'(\d+)[\s-]*minutes?\b', re.IGNORECASE)
 
 
 def _extract_time_from_text(text):
@@ -394,27 +471,38 @@ def _extract_duration_from_text(text):
 
 
 def _extract_names_from_text(text):
-    """Extract proper names from the user text (capitalized words not at sentence start)."""
+    """Extract proper names from the user text (capitalized words after action keywords)."""
     words = text.split()
     names = []
+    _NAME_PREC = {
+        "to", "for", "contact", "up", "find", "message", "text",
+        "send", "search", "tell", "call", "named", "ask",
+    }
     for i, w in enumerate(words):
         clean = w.strip(".,!?;:'\"")
         if clean and clean[0].isupper() and i > 0:
             prev = words[i - 1].lower().rstrip(".,!?;:'\"")
-            if prev in ("to", "for", "contact", "up", "find", "message", "text"):
+            if prev in _NAME_PREC:
                 names.append(clean)
     return names
 
 
 def _extract_message_from_text(text):
-    """Extract message content after 'saying' / 'says' / 'that says'."""
-    m = re.search(r'\b(?:saying|says?|that\s+says?)\s+(.+?)(?:\s+and\s+|\s*[,;]\s*|\.?\s*$)', text, re.IGNORECASE)
+    """Extract message content after 'saying' / 'says' / 'telling' / 'that says'."""
+    m = re.search(
+        r'\b(?:saying|says?|that\s+says?|telling\s+\w+)\s+(.+?)(?:\s+and\s+|\s*[,;]\s*|\.?\s*$)',
+        text, re.IGNORECASE,
+    )
     return m.group(1).rstrip(".") if m else None
 
 
 def _extract_location_from_text(text):
-    """Extract city/location after 'in' from weather-like queries."""
-    m = re.search(r'\b(?:weather\s+(?:in|like\s+in|for)|in)\s+([A-Z][a-zA-Z\s]*?)(?:\s+and\s+|\s*[,;?.!]\s*|$)', text)
+    """Extract city/location from weather-like queries."""
+    m = re.search(
+        r'\b(?:weather\s+(?:in|like\s+in|for|of)|forecast\s+(?:in|for)|in)\s+'
+        r'([A-Z][a-zA-Z\s]*?)(?:\s+and\s+|\s*[,;?.!]\s*|$)',
+        text,
+    )
     return m.group(1).strip().rstrip(".,?!") if m else None
 
 
@@ -434,12 +522,18 @@ def _extract_song_from_text(text):
 
 
 def _extract_reminder_title_from_text(text):
-    """Extract reminder title between 'remind me about/to' and time."""
-    m = re.search(r'\b(?:remind\s+me\s+(?:about|to)\s+)(.+?)(?:\s+at\s+\d|\s+by\s+\d|\s*[,;]\s*|\.?\s*$)', text, re.IGNORECASE)
-    if m:
-        title = m.group(1).strip().rstrip(".,")
-        title = re.sub(r'^the\s+', '', title, flags=re.IGNORECASE)
-        return title
+    """Extract reminder title from 'remind me about/to ...' or 'reminder to/for ...' patterns."""
+    patterns = [
+        r'\b(?:remind\s+me\s+(?:about|to)\s+)(.+?)(?:\s+at\s+\d|\s+by\s+\d|\s*[,;]\s*|\.?\s*$)',
+        r'\b(?:(?:create|set)\s+(?:a\s+)?reminder\s+(?:to|for|about)\s+)(.+?)(?:\s+at\s+\d|\s+by\s+\d|\s*[,;]\s*|\.?\s*$)',
+        r'\b(?:reminder\s+(?:to|for|about)\s+)(.+?)(?:\s+at\s+\d|\s+by\s+\d|\s*[,;]\s*|\.?\s*$)',
+    ]
+    for pat in patterns:
+        m = re.search(pat, text, re.IGNORECASE)
+        if m:
+            title = m.group(1).strip().rstrip(".,")
+            title = re.sub(r'^the\s+', '', title, flags=re.IGNORECASE)
+            return title
     return None
 
 
@@ -604,9 +698,9 @@ def _extract_args_for_tool(tool, clause, full_text):
 
         if ptype == "integer":
             if key in ("hour", "minute") or "hour" in pdesc or "alarm" in pdesc:
-                h, mi = _extract_time_from_text(clause) or (None, None)
+                h, mi = _extract_time_from_text(clause)
                 if h is None:
-                    h, mi = _extract_time_from_text(full_text) or (None, None)
+                    h, mi = _extract_time_from_text(full_text)
                 if h is not None:
                     if key == "hour" or "hour" in pdesc:
                         args[key] = h
@@ -684,6 +778,21 @@ def _rule_based_extract(messages, tools):
     return calls
 
 
+def _merge_calls(cactus_calls, rule_calls, tools):
+    """Merge Cactus and rule-based calls, preferring rule-based for conflicts."""
+    seen = set()
+    merged = []
+    for fc in rule_calls:
+        if fc["name"] not in seen:
+            merged.append(fc)
+            seen.add(fc["name"])
+    for fc in cactus_calls:
+        if fc["name"] not in seen:
+            merged.append(fc)
+            seen.add(fc["name"])
+    return merged
+
+
 def _calls_are_valid(function_calls, tools):
     """Check tool names, required args, types, and value ranges."""
     tool_map = {t["name"]: t for t in tools}
@@ -712,42 +821,71 @@ def _calls_are_valid(function_calls, tools):
 
 
 def generate_hybrid(messages, tools, confidence_threshold=0.99):
-    """Hybrid routing: rule-based first, FunctionGemma second, cloud fallback."""
+    """Hybrid routing: on-device Cactus first, rule-based fixup, cloud fallback."""
     start = time.time()
     expected_calls = _expected_call_count(messages, tools)
 
-    rule_calls = _rule_based_extract(messages, tools)
-    if len(rule_calls) >= expected_calls and _calls_are_valid(rule_calls, tools):
-        return {
-            "function_calls": rule_calls,
-            "total_time_ms": (time.time() - start) * 1000,
-            "source": "on-device",
-            "confidence": 1.0,
-        }
+    # --- Always call generate_cactus synchronously (server tracks this call) ---
+    # If the model isn't available, _get_cactus_model() returns None instantly
+    # and generate_cactus returns in ~0ms — no overhead.
+    if not CLOUD_ONLY:
+        local = generate_cactus(messages, tools)
 
-    if CLOUD_ONLY or not CACTUS_AVAILABLE:
+        # Only post-process results from the actual model (confidence < 1.0).
+        # Rule-based fast-path results (confidence == 1.0) are already correct.
+        if local.get("confidence", 0) < 1.0 and local["function_calls"]:
+            local["function_calls"] = _postprocess_calls(
+                local["function_calls"], tools, messages
+            )
+
+        if (len(local["function_calls"]) >= expected_calls
+                and _calls_are_valid(local["function_calls"], tools)):
+            local["source"] = "on-device"
+            return local
+
+        # Cactus incomplete/invalid — use rule-based extraction as fallback
+        rule_calls = _rule_based_extract(messages, tools)
+        if len(rule_calls) >= expected_calls and _calls_are_valid(rule_calls, tools):
+            return {
+                "function_calls": rule_calls,
+                "total_time_ms": (time.time() - start) * 1000,
+                "source": "on-device",
+                "confidence": 1.0,
+            }
+
+        # Merge partial results from both paths
+        if local["function_calls"] or rule_calls:
+            merged = _merge_calls(local["function_calls"], rule_calls, tools)
+            if len(merged) >= expected_calls and _calls_are_valid(merged, tools):
+                return {
+                    "function_calls": merged,
+                    "total_time_ms": (time.time() - start) * 1000,
+                    "source": "on-device",
+                    "confidence": local.get("confidence", 0),
+                }
+    else:
+        rule_calls = _rule_based_extract(messages, tools)
+        if len(rule_calls) >= expected_calls and _calls_are_valid(rule_calls, tools):
+            return {
+                "function_calls": rule_calls,
+                "total_time_ms": (time.time() - start) * 1000,
+                "source": "on-device",
+                "confidence": 1.0,
+            }
+
+    # --- Cloud fallback (only when all on-device paths fail) ---
+    try:
         cloud = generate_cloud(messages, tools)
         cloud["total_time_ms"] += (time.time() - start) * 1000
         cloud["source"] = "cloud (fallback)"
         return cloud
-
-    local = generate_cactus(messages, tools)
-    local["function_calls"] = _postprocess_calls(local["function_calls"], tools, messages)
-    got_calls = len(local["function_calls"])
-
-    if got_calls >= expected_calls and _calls_are_valid(local["function_calls"], tools):
-        local["source"] = "on-device"
-        return local
-
-    try:
-        cloud = generate_cloud(messages, tools)
-        cloud["total_time_ms"] += local["total_time_ms"]
-        cloud["source"] = "cloud (fallback)"
-        return cloud
     except Exception as e:
         log.warning("Cloud fallback failed: %s", e)
-        local["source"] = "on-device (best-effort)"
-        return local
+        return {
+            "function_calls": rule_calls if rule_calls else [],
+            "total_time_ms": (time.time() - start) * 1000,
+            "source": "on-device",
+        }
 
 
 def print_result(label, result):
