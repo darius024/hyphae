@@ -1,0 +1,398 @@
+"""Notebook CRUD, sources, conversations, messages, and chat endpoints."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import shutil
+import uuid
+from pathlib import Path
+from typing import AsyncIterator
+
+from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
+
+router = APIRouter(prefix="/api", tags=["notebooks"])
+log = logging.getLogger(__name__)
+
+# Injected at startup from app.py
+get_conn = None
+ingest_source = None
+UPLOAD_DIR: Path = Path("uploads")
+hybrid_search = None
+delete_notebook_index = None
+build_citations = None
+build_context_prompt = None
+build_system_prompt = None
+sanitise_text = None
+_gemini_client = None
+
+
+def configure(*, conn_fn, ingest_fn, upload_dir, search_fn, delete_idx_fn,
+              citations_fn, context_fn, system_fn, sanitise_fn, gemini_fn):
+    global get_conn, ingest_source, UPLOAD_DIR, hybrid_search
+    global delete_notebook_index, build_citations, build_context_prompt
+    global build_system_prompt, sanitise_text, _gemini_client
+    get_conn = conn_fn
+    ingest_source = ingest_fn
+    UPLOAD_DIR = upload_dir
+    hybrid_search = search_fn
+    delete_notebook_index = delete_idx_fn
+    build_citations = citations_fn
+    build_context_prompt = context_fn
+    build_system_prompt = system_fn
+    sanitise_text = sanitise_fn
+    _gemini_client = gemini_fn
+
+
+# ── Helpers ────────────────────────────────────────────────────────────
+
+def _nb_or_404(nb_id: str) -> dict:
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM notebooks WHERE id=?", (nb_id,)).fetchone()
+    if row is None:
+        raise HTTPException(404, f"Notebook {nb_id} not found")
+    return dict(row)
+
+
+def _src_or_404(src_id: str, nb_id: str) -> dict:
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM sources WHERE id=? AND notebook_id=?", (src_id, nb_id)
+        ).fetchone()
+    if row is None:
+        raise HTTPException(404, f"Source {src_id} not found")
+    return dict(row)
+
+
+def _conv_or_404(conv_id: str, nb_id: str) -> dict:
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM conversations WHERE id=? AND notebook_id=?", (conv_id, nb_id)
+        ).fetchone()
+    if row is None:
+        raise HTTPException(404, f"Conversation {conv_id} not found")
+    return dict(row)
+
+
+def _persist_message(conv_id: str, nb_id: str, role: str, content: str, citations: list):
+    mid = str(uuid.uuid4())
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO messages (id, conversation_id, notebook_id, role, content, citations) VALUES (?,?,?,?,?,?)",
+            (mid, conv_id, nb_id, role, content, json.dumps(citations)),
+        )
+        conn.execute(
+            "UPDATE conversations SET updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id=?",
+            (conv_id,),
+        )
+    return mid
+
+
+# ── Notebook CRUD ──────────────────────────────────────────────────────
+
+@router.get("/notebooks")
+async def list_notebooks():
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT n.*, COUNT(s.id) AS source_count FROM notebooks n "
+            "LEFT JOIN sources s ON s.notebook_id=n.id GROUP BY n.id ORDER BY n.updated_at DESC"
+        ).fetchall()
+    return {"notebooks": [dict(r) for r in rows]}
+
+
+@router.post("/notebooks", status_code=201)
+async def create_notebook(body: dict):
+    name = (body.get("name") or "Untitled Notebook").strip()
+    nb_id = str(uuid.uuid4())
+    with get_conn() as conn:
+        conn.execute("INSERT INTO notebooks (id, name) VALUES (?,?)", (nb_id, name))
+    return {"id": nb_id, "name": name}
+
+
+@router.get("/notebooks/{nb_id}")
+async def get_notebook(nb_id: str):
+    return _nb_or_404(nb_id)
+
+
+@router.patch("/notebooks/{nb_id}")
+async def update_notebook(nb_id: str, body: dict):
+    _nb_or_404(nb_id)
+    name = (body.get("name") or "").strip()
+    if name:
+        with get_conn() as conn:
+            conn.execute(
+                "UPDATE notebooks SET name=?, updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id=?",
+                (name, nb_id),
+            )
+    return _nb_or_404(nb_id)
+
+
+@router.delete("/notebooks/{nb_id}")
+async def delete_notebook_endpoint(nb_id: str):
+    _nb_or_404(nb_id)
+    with get_conn() as conn:
+        conn.execute("DELETE FROM notebooks WHERE id=?", (nb_id,))
+    upload_path = UPLOAD_DIR / nb_id
+    if upload_path.exists():
+        shutil.rmtree(upload_path, ignore_errors=True)
+    try:
+        delete_notebook_index(nb_id)
+    except Exception:
+        pass
+    return {"deleted": nb_id}
+
+
+# ── Sources ────────────────────────────────────────────────────────────
+
+@router.get("/notebooks/{nb_id}/sources")
+async def list_sources(nb_id: str):
+    _nb_or_404(nb_id)
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM sources WHERE notebook_id=? ORDER BY created_at DESC", (nb_id,)
+        ).fetchall()
+    return {"sources": [dict(r) for r in rows]}
+
+
+@router.post("/notebooks/{nb_id}/upload", status_code=202)
+async def upload_source(nb_id: str, background_tasks: BackgroundTasks, file: UploadFile = File(...)):
+    _nb_or_404(nb_id)
+    filename = Path(file.filename).name if file.filename else "file"
+    ext = Path(filename).suffix.lower().lstrip(".")
+    src_type = ext if ext in ("pdf", "txt", "md") else "txt"
+
+    dest_dir = UPLOAD_DIR / nb_id
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / filename
+    dest.write_bytes(await file.read())
+
+    src_id = str(uuid.uuid4())
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO sources (id, notebook_id, type, filename, title, status) VALUES (?,?,?,?,?,?)",
+            (src_id, nb_id, src_type, filename, Path(filename).stem, "pending"),
+        )
+
+    background_tasks.add_task(ingest_source, src_id)
+    return {"source_id": src_id, "filename": filename, "status": "pending"}
+
+
+@router.post("/notebooks/{nb_id}/add-url", status_code=202)
+async def add_url_source(nb_id: str, background_tasks: BackgroundTasks, body: dict):
+    _nb_or_404(nb_id)
+    url = (body.get("url") or "").strip()
+    if not url:
+        raise HTTPException(400, "url is required")
+
+    src_id = str(uuid.uuid4())
+    title = body.get("title") or url[:80]
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO sources (id, notebook_id, type, url, title, status) VALUES (?,?,?,?,?,?)",
+            (src_id, nb_id, "url", url, title, "pending"),
+        )
+
+    background_tasks.add_task(ingest_source, src_id)
+    return {"source_id": src_id, "url": url, "status": "pending"}
+
+
+@router.get("/notebooks/{nb_id}/sources/{src_id}")
+async def get_source(nb_id: str, src_id: str):
+    return _src_or_404(src_id, nb_id)
+
+
+@router.delete("/notebooks/{nb_id}/sources/{src_id}")
+async def delete_source(nb_id: str, src_id: str):
+    _src_or_404(src_id, nb_id)
+    with get_conn() as conn:
+        conn.execute("DELETE FROM sources WHERE id=?", (src_id,))
+    return {"deleted": src_id}
+
+
+# ── Conversations ──────────────────────────────────────────────────────
+
+@router.get("/notebooks/{nb_id}/conversations")
+async def list_conversations(nb_id: str):
+    _nb_or_404(nb_id)
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM conversations WHERE notebook_id=? ORDER BY updated_at DESC", (nb_id,)
+        ).fetchall()
+    return {"conversations": [dict(r) for r in rows]}
+
+
+@router.post("/notebooks/{nb_id}/conversations", status_code=201)
+async def create_conversation(nb_id: str, body: dict):
+    _nb_or_404(nb_id)
+    title = (body.get("title") or "New Conversation").strip()
+    cid = str(uuid.uuid4())
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO conversations (id, notebook_id, title) VALUES (?,?,?)", (cid, nb_id, title)
+        )
+    return {"id": cid, "notebook_id": nb_id, "title": title}
+
+
+@router.patch("/notebooks/{nb_id}/conversations/{cid}")
+async def rename_conversation(nb_id: str, cid: str, body: dict):
+    _conv_or_404(cid, nb_id)
+    title = (body.get("title") or "").strip()
+    if not title:
+        raise HTTPException(400, "title is required")
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE conversations SET title=?, updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id=?",
+            (title, cid),
+        )
+    return {"id": cid, "title": title}
+
+
+@router.delete("/notebooks/{nb_id}/conversations/{cid}")
+async def delete_conversation(nb_id: str, cid: str):
+    _conv_or_404(cid, nb_id)
+    with get_conn() as conn:
+        conn.execute("DELETE FROM conversations WHERE id=?", (cid,))
+    return {"deleted": cid}
+
+
+# ── Messages ───────────────────────────────────────────────────────────
+
+@router.get("/notebooks/{nb_id}/conversations/{cid}/messages")
+async def list_messages(nb_id: str, cid: str):
+    _conv_or_404(cid, nb_id)
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM messages WHERE conversation_id=? ORDER BY created_at ASC", (cid,)
+        ).fetchall()
+    msgs = []
+    for r in rows:
+        d = dict(r)
+        d["citations"] = json.loads(d.get("citations") or "[]")
+        msgs.append(d)
+    return {"messages": msgs}
+
+
+# ── Chat ───────────────────────────────────────────────────────────────
+
+async def _nb_chat_core(nb_id: str, cid: str, question: str) -> dict:
+    nb = _nb_or_404(nb_id)
+    from embed import embed_one  # type: ignore
+    qvec = embed_one(question)
+    results = hybrid_search(nb_id, question, qvec, top_k=6)
+
+    citations = build_citations(results)
+    context = build_context_prompt(results, max_chunks=6)
+    system = build_system_prompt(context, nb["name"])
+    safe_q, _ = sanitise_text(question)
+
+    client = _gemini_client()
+    if client:
+        from google.genai import types  # type: ignore
+        resp = client.models.generate_content(
+            model="gemini-2.5-flash-lite",
+            contents=[safe_q],
+            config=types.GenerateContentConfig(system_instruction=system),
+        )
+        answer = resp.text or ""
+    else:
+        best = "\n".join([f"- {r['snippet']}" for r in results[:3]]) or "No context available."
+        answer = f"(Offline mode) Using local context only. Notebook: {nb['name']}. Question: {question}\n\nContext:\n{best}"
+
+    _persist_message(cid, nb_id, "user", question, [])
+    _persist_message(cid, nb_id, "assistant", answer,
+                     [c.model_dump() for c in citations])
+    return {"answer": answer, "citations": [c.model_dump() for c in citations]}
+
+
+@router.post("/notebooks/{nb_id}/conversations/{cid}/chat")
+async def nb_chat(nb_id: str, cid: str, body: dict):
+    _conv_or_404(cid, nb_id)
+    question = (body.get("message") or "").strip()
+    if not question:
+        raise HTTPException(400, "message is required")
+    return await _nb_chat_core(nb_id, cid, question)
+
+
+async def _stream_nb_chat(nb_id: str, cid: str, question: str) -> AsyncIterator[str]:
+    nb = _nb_or_404(nb_id)
+    from embed import embed_one  # type: ignore
+    qvec = embed_one(question)
+    results = hybrid_search(nb_id, question, qvec, top_k=6)
+
+    citations = build_citations(results)
+    context = build_context_prompt(results, max_chunks=6)
+    system = build_system_prompt(context, nb["name"])
+    safe_q, _ = sanitise_text(question)
+
+    yield f"data: {json.dumps({'type': 'citations', 'citations': [c.model_dump() for c in citations]})}\n\n"
+
+    client = _gemini_client()
+    if client:
+        from google.genai import types  # type: ignore
+        full_answer = []
+        try:
+            for chunk in client.models.generate_content_stream(
+                model="gemini-2.5-flash-lite",
+                contents=[safe_q],
+                config=types.GenerateContentConfig(system_instruction=system),
+            ):
+                text = chunk.text or ""
+                if text:
+                    full_answer.append(text)
+                    yield f"data: {json.dumps({'type': 'delta', 'text': text})}\n\n"
+                    await asyncio.sleep(0)
+        except Exception as exc:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
+            return
+
+        _persist_message(cid, nb_id, "user", question, [])
+        _persist_message(cid, nb_id, "assistant", "".join(full_answer),
+                         [c.model_dump() for c in citations])
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+    else:
+        best = "\n".join([f"- {r['snippet']}" for r in results[:3]]) or "No context available."
+        fallback = f"(Offline mode) Using local context only. Notebook: {nb['name']}. Question: {question}\n\nContext:\n{best}"
+        yield f"data: {json.dumps({'type': 'delta', 'text': fallback})}\n\n"
+        _persist_message(cid, nb_id, "user", question, [])
+        _persist_message(cid, nb_id, "assistant", fallback,
+                         [c.model_dump() for c in citations])
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+
+@router.post("/notebooks/{nb_id}/conversations/{cid}/chat/stream")
+async def nb_chat_stream(nb_id: str, cid: str, body: dict):
+    _conv_or_404(cid, nb_id)
+    question = (body.get("message") or "").strip()
+    if not question:
+        raise HTTPException(400, "message is required")
+    return StreamingResponse(
+        _stream_nb_chat(nb_id, cid, question),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+# ── Settings ───────────────────────────────────────────────────────────
+
+@router.get("/nb-settings")
+async def get_settings():
+    with get_conn() as conn:
+        rows = conn.execute("SELECT * FROM nb_settings").fetchall()
+    return {"settings": [dict(r) for r in rows]}
+
+
+@router.patch("/nb-settings/{key}")
+async def update_setting(key: str, body: dict):
+    value = body.get("value")
+    if value is None:
+        raise HTTPException(400, "value is required")
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO nb_settings (key, value) VALUES (?,?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value, "
+            "updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')",
+            (key, str(value)),
+        )
+    return {"key": key, "value": str(value)}
