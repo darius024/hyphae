@@ -1116,26 +1116,77 @@ document.getElementById("nb-url-btn").addEventListener("click", async () => {
 
 // ── Conversations ─────────────────────────────────────────────────────
 
+let _convCache = [];
+
+function relativeTime(dateStr) {
+    if (!dateStr) return "";
+    const d = new Date(dateStr);
+    const now = Date.now();
+    const sec = Math.floor((now - d.getTime()) / 1000);
+    if (sec < 60) return "now";
+    const min = Math.floor(sec / 60);
+    if (min < 60) return min + "m";
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return hr + "h";
+    const day = Math.floor(hr / 24);
+    if (day < 7) return day + "d";
+    return d.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
 async function loadConversations(nbId) {
     const res  = await fetch(`/api/notebooks/${nbId}/conversations`);
     const data = await res.json();
-    renderConversations(nbId, data.conversations || []);
+    _convCache = data.conversations || [];
+    renderConversations(nbId, _convCache);
 }
 
 function renderConversations(nbId, convs) {
     if (!convs.length) {
-        nbConvList.innerHTML = '<div class="doc-empty" style="font-size:12px">No conversations yet.</div>';
+        nbConvList.innerHTML = `<div class="conv-empty">
+            <p>No conversations yet</p>
+            <button class="conv-empty-create" onclick="document.getElementById('nb-conv-new-btn').click()">Start a conversation</button>
+        </div>`;
         return;
     }
     nbConvList.innerHTML = convs.map(c => `
-        <div class="nb-conv-item${c.id === currentConvId ? " active" : ""}" data-id="${c.id}">
+        <div class="nb-conv-item${c.id === currentConvId ? " active" : ""}" data-id="${c.id}" data-title="${escapeHtml(c.title)}">
+            <svg class="conv-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
             <span class="nb-conv-title">${escapeHtml(c.title)}</span>
+            <span class="conv-time">${relativeTime(c.updated_at)}</span>
+            <div class="conv-actions">
+                <button class="conv-action-btn conv-rename-btn" data-id="${c.id}" title="Rename">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                </button>
+                <button class="conv-action-btn conv-delete-btn" data-id="${c.id}" title="Delete">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </button>
+            </div>
         </div>
     `).join("");
 
     nbConvList.querySelectorAll(".nb-conv-item").forEach(el => {
-        el.addEventListener("click", () => selectConversation(nbId, el.dataset.id,
-            convs.find(c => c.id === el.dataset.id)?.title || "Conversation"));
+        el.addEventListener("click", (e) => {
+            if (e.target.closest(".conv-actions")) return;
+            selectConversation(nbId, el.dataset.id, el.dataset.title);
+        });
+        el.addEventListener("dblclick", (e) => {
+            if (e.target.closest(".conv-actions")) return;
+            startConvRename(nbId, el.dataset.id);
+        });
+    });
+
+    nbConvList.querySelectorAll(".conv-rename-btn").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            startConvRename(nbId, btn.dataset.id);
+        });
+    });
+
+    nbConvList.querySelectorAll(".conv-delete-btn").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            deleteConversation(nbId, btn.dataset.id);
+        });
     });
 }
 
@@ -1158,6 +1209,61 @@ async function selectConversation(nbId, convId, title) {
         }
     }
     nbScrollBottom();
+}
+
+function startConvRename(nbId, convId) {
+    const item = nbConvList.querySelector(`.nb-conv-item[data-id="${convId}"]`);
+    if (!item) return;
+    const titleEl = item.querySelector(".nb-conv-title");
+    const oldTitle = item.dataset.title;
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "conv-rename-input";
+    input.value = oldTitle;
+    titleEl.replaceWith(input);
+    input.focus();
+    input.select();
+
+    item.querySelector(".conv-actions").style.display = "none";
+    item.querySelector(".conv-time").style.display = "none";
+
+    async function commitRename() {
+        const newTitle = input.value.trim();
+        if (!newTitle || newTitle === oldTitle) {
+            loadConversations(nbId);
+            return;
+        }
+        try {
+            await fetch(`/api/notebooks/${nbId}/conversations/${convId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ title: newTitle }),
+            });
+            if (currentConvId === convId) {
+                document.getElementById("nb-chat-title").textContent =
+                    nbNameDisplay.textContent + " \u2014 " + newTitle;
+            }
+        } catch {}
+        loadConversations(nbId);
+    }
+
+    input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); commitRename(); }
+        if (e.key === "Escape") { loadConversations(nbId); }
+    });
+    input.addEventListener("blur", commitRename);
+}
+
+async function deleteConversation(nbId, convId) {
+    if (!confirm("Delete this conversation?")) return;
+    try {
+        await fetch(`/api/notebooks/${nbId}/conversations/${convId}`, { method: "DELETE" });
+    } catch {}
+    if (currentConvId === convId) {
+        exitNotebookChat();
+    }
+    loadConversations(nbId);
 }
 
 document.getElementById("nb-conv-new-btn").addEventListener("click", async () => {
