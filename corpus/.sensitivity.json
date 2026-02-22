@@ -1,8 +1,9 @@
 {
+  "battery_cycling_log.txt": "confidential",
   "conductive_hydrogel_synthesis.txt": "confidential",
   "electrode_impedance_study.txt": "confidential",
-  "battery_cycling_log.txt": "confidential",
+  "biocompatibility_assay.txt": "confidential",
+  "polymer_synthesis_notes.txt": "confidential",
   "hardware_setup.txt": "shareable",
-  "literature_review_self_healing.txt": "shareable",
-  "N1 (2).txt": "shareable"
+  "literature_review_self_healing.txt": "shareable"
 }
