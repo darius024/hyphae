@@ -806,6 +806,28 @@ async def create_conversation(nb_id: str, body: dict):
     return {"id": cid, "notebook_id": nb_id, "title": title}
 
 
+@app.patch("/api/notebooks/{nb_id}/conversations/{cid}")
+async def rename_conversation(nb_id: str, cid: str, body: dict):
+    _conv_or_404(cid, nb_id)
+    title = (body.get("title") or "").strip()
+    if not title:
+        raise HTTPException(400, "title is required")
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE conversations SET title=?, updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id=?",
+            (title, cid),
+        )
+    return {"id": cid, "title": title}
+
+
+@app.delete("/api/notebooks/{nb_id}/conversations/{cid}")
+async def delete_conversation(nb_id: str, cid: str):
+    _conv_or_404(cid, nb_id)
+    with get_conn() as conn:
+        conn.execute("DELETE FROM conversations WHERE id=?", (cid,))
+    return {"deleted": cid}
+
+
 @app.get("/api/notebooks/{nb_id}/conversations/{cid}/messages")
 async def list_messages(nb_id: str, cid: str):
     _conv_or_404(cid, nb_id)
