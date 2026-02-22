@@ -414,6 +414,7 @@ async function loadDocuments() {
         const q = docSearchInput.value.toLowerCase();
         const filtered = q ? allDocuments.filter(d => d.name.toLowerCase().includes(q)) : allDocuments;
         renderDocuments(filtered);
+        loadQuickPrompts();
     } catch {
         docListEl.innerHTML = '<div class="doc-item"><span class="name" style="color:var(--red)">Failed to load</span></div>';
     }
@@ -438,6 +439,9 @@ function sensitivityBadge(doc) {
 }
 
 function renderDocuments(docs) {
+    const badge = document.getElementById("doc-count-badge");
+    if (badge) badge.textContent = docs && docs.length ? `(${docs.length})` : "";
+
     if (!docs || docs.length === 0) {
         docListEl.innerHTML = '<div class="doc-empty">No documents yet. Upload PDFs or text files to get started.</div>';
         return;
@@ -450,12 +454,19 @@ function renderDocuments(docs) {
             ${d.has_pdf ? '<span class="badge doc-badge-pdf">PDF</span>' : ''}
             ${sensitivityBadge(d)}
             <span class="size">${d.size_kb} KB</span>
-            <button class="remove-btn" onclick="removeDoc('${escapeHtml(d.name)}')" title="Remove">×</button>
+            <button class="remove-btn" data-doc="${escapeHtml(d.name)}" title="Remove">×</button>
         </div>
     `).join("");
 
     docListEl.querySelectorAll(".doc-preview-link").forEach(el => {
         el.addEventListener("click", () => previewDoc(el.dataset.doc));
+    });
+
+    docListEl.querySelectorAll(".remove-btn").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            removeDoc(btn.dataset.doc);
+        });
     });
 
     docListEl.querySelectorAll(".sens-btn").forEach(btn => {
@@ -532,6 +543,11 @@ if (toolPanelToggle) {
 
 function loadQuickPrompts() {
     if (!quickButtonsEl) return;
+
+    const names = allDocuments.map(d => d.name);
+    const doc1 = names[0] || "document_a.txt";
+    const doc2 = names.length > 1 ? names[1] : "document_b.txt";
+
     const prompts = [
         {
             title: "Summary with citations",
@@ -542,19 +558,19 @@ function loadQuickPrompts() {
         {
             title: "Compare documents",
             hint: "Contrast two files on a topic",
-            text: "Compare polymer_synthesis_notes.txt vs battery_cycling_log.txt on conductive additives; output key differences with citations.",
+            text: `Compare ${doc1} vs ${doc2} — output key differences with citations.`,
             icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
         },
         {
             title: "Design experiment",
             hint: "Propose next steps and metrics",
-            text: "Propose the next experiment to improve conductivity >1 S/cm while keeping self-healing >85%; include materials, protocol steps, and measurement plan with citations.",
+            text: "Based on the corpus, propose the next experiment to pursue; include materials, protocol steps, and measurement plan with citations.",
             icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v11"/><path d="M15 3v4"/><path d="M9 14l-4 7h14l-4-7"/><circle cx="9" cy="14" r="2"/></svg>',
         },
         {
             title: "Literature + local",
             hint: "Blend local corpus with web search",
-            text: "Search literature on PEDOT:PSS self-healing hydrogels and combine with local corpus findings; cite online papers as [L1], [L2] and local files by name.",
+            text: "Search recent literature on the topics in my corpus and combine with local findings; cite online papers as [L1], [L2] and local files by name.",
             icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
         }
     ];
@@ -631,10 +647,13 @@ document.addEventListener("keydown", (e) => {
         return;
     }
 
-    // Escape → close preview modal, clear doc search, or blur input
     if (e.key === "Escape") {
         if (previewOverlay.classList.contains("open")) {
             closePreview();
+        } else if (privacyLogOverlay.classList.contains("open")) {
+            privacyLogOverlay.classList.remove("open");
+        } else if (nbCreateOverlay && nbCreateOverlay.classList.contains("open")) {
+            closeNbCreateModal();
         } else if (document.activeElement === docSearchInput) {
             docSearchInput.value = "";
             docSearchInput.dispatchEvent(new Event("input"));
@@ -1089,9 +1108,6 @@ async function deleteSource(nbId, srcId) {
 // File upload
 document.getElementById("nb-file-input").addEventListener("change", async (e) => {
     if (!currentNbId || !e.target.files.length) return;
-    const form = new FormData();
-    for (const f of e.target.files) form.append("file", f);
-    // upload each file separately (API takes one file per request)
     for (const f of e.target.files) {
         const fd = new FormData();
         fd.append("file", f);
@@ -1116,8 +1132,6 @@ document.getElementById("nb-url-btn").addEventListener("click", async () => {
 
 // ── Conversations ─────────────────────────────────────────────────────
 
-let _convCache = [];
-
 function relativeTime(dateStr) {
     if (!dateStr) return "";
     const d = new Date(dateStr);
@@ -1136,8 +1150,7 @@ function relativeTime(dateStr) {
 async function loadConversations(nbId) {
     const res  = await fetch(`/api/notebooks/${nbId}/conversations`);
     const data = await res.json();
-    _convCache = data.conversations || [];
-    renderConversations(nbId, _convCache);
+    renderConversations(nbId, data.conversations || []);
 }
 
 function renderConversations(nbId, convs) {
@@ -1194,6 +1207,11 @@ async function selectConversation(nbId, convId, title) {
     currentConvId = convId;
     enterNotebookChat(nbNameDisplay.textContent, title);
 
+    if (window.innerWidth <= 1200) {
+        nbColumn.classList.add("closed");
+        nbSidebarOverlay.classList.remove("open");
+    }
+
     nbConvList.querySelectorAll(".nb-conv-item").forEach(el => {
         el.classList.toggle("active", el.dataset.id === convId);
     });
@@ -1201,11 +1219,16 @@ async function selectConversation(nbId, convId, title) {
     const res  = await fetch(`/api/notebooks/${nbId}/conversations/${convId}/messages`);
     const data = await res.json();
     nbMessagesEl.innerHTML = "";
-    for (const m of data.messages || []) {
-        if (m.role === "user") {
-            nbAddMessage("user", m.content);
-        } else {
-            nbAddMessage("assistant", m.content, m.citations || []);
+    const msgs = data.messages || [];
+    if (msgs.length === 0) {
+        nbAddMessage("assistant", "Ask a question about your sources. I'll ground my answers in the documents you've uploaded to this notebook.");
+    } else {
+        for (const m of msgs) {
+            if (m.role === "user") {
+                nbAddMessage("user", m.content);
+            } else {
+                nbAddMessage("assistant", m.content, m.citations || []);
+            }
         }
     }
     nbScrollBottom();
