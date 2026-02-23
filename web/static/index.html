@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=1771880000">
+    <link rel="stylesheet" href="/static/style.css?v=1771890000">
     <!-- MathJax for LaTeX math rendering in preview -->
     <script>window.MathJax = { tex: { inlineMath: [['$','$'],['\\(','\\)']], displayMath: [['$$','$$'],['\\[','\\]']] }, svg: { fontCache: 'global' }, startup: { typeset: false } };</script>
     <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
@@ -103,7 +103,7 @@
 
         <!-- Dark mode toggle -->
         <div class="sidebar-footer">
-            <button class="theme-toggle" id="theme-toggle" title="Toggle dark mode">
+            <button class="theme-toggle" id="theme-toggle" title="Toggle dark mode" onclick="window._toggleTheme && window._toggleTheme()">
                 <svg class="theme-icon-light" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
                 <svg class="theme-icon-dark" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
                 <span class="theme-label">Dark mode</span>
@@ -119,64 +119,203 @@
             <button class="menu-btn" id="menu-btn" title="Toggle sidebar" aria-label="Toggle sidebar">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
             </button>
-            <div class="messages" id="messages">
-                <div class="message assistant">
-                    <div class="bubble">
-                        <strong>Welcome back, researcher.</strong> Your documents are loaded and ready. Ask questions,
-                        search your corpus, compare papers, or generate hypotheses.
-                        <span class="privacy-note">Confidential data stays on-device — cloud is only used when you need external resources.</span>
+
+            <!-- Main-area tab bar (visible when a notebook is selected) -->
+            <div class="main-tabs" id="main-tabs" style="display:none">
+                <button class="main-tab active" id="main-tab-chat" data-tab="chat">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    Chat
+                </button>
+                <button class="main-tab" id="main-tab-write" data-tab="write">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                    Write
+                </button>
+                <button class="main-tab" id="main-tab-cal" data-tab="cal">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    Calendar
+                </button>
+                <span class="main-tab-nb-name" id="main-tab-nb-name"></span>
+            </div>
+
+            <!-- CHAT panel (default main view) -->
+            <div class="main-panel" id="main-panel-chat">
+                <div class="messages" id="messages">
+                    <div class="message assistant">
+                        <div class="bubble">
+                            <strong>Welcome back, researcher.</strong> Your documents are loaded and ready. Ask questions,
+                            search your corpus, compare papers, or generate hypotheses.
+                            <span class="privacy-note">Confidential data stays on-device — cloud is only used when you need external resources.</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="input-area" id="main-input-area">
+                    <div class="input-row">
+                        <textarea id="query-input" placeholder="Ask about your research..." rows="1"></textarea>
+                        <button class="icon-btn voice-btn" id="voice-btn" title="Voice input" aria-label="Voice input">
+                            <svg class="voice-icon-idle" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                            <svg class="voice-icon-rec" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                        </button>
+                        <button class="icon-btn send-btn" id="send-btn" title="Send" aria-label="Send message">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                        </button>
+                        <button class="icon-btn clear-btn" id="clear-btn" title="Clear chat" aria-label="Clear chat">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </button>
+                    </div>
+                    <div class="input-hints">
+                        <div class="route-indicator" id="route-indicator"></div>
+                        <span><kbd>/</kbd> focus</span>
+                        <span><kbd>Enter</kbd> send</span>
+                        <span><kbd>Shift+Enter</kbd> newline</span>
+                        <button class="privacy-log-btn" id="privacy-log-btn" title="Privacy audit log" aria-label="Privacy audit log">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                            Audit log
+                        </button>
+                    </div>
+                </div>
+
+                <div id="nb-chat-wrap" style="display:none" class="nb-chat-wrap">
+                    <div class="nb-chat-header">
+                        <button id="nb-chat-back" class="nb-chat-back-btn" title="Back to main chat">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+                            <span>Back to chat</span>
+                        </button>
+                        <span class="nb-chat-title" id="nb-chat-title"></span>
+                    </div>
+                    <div class="messages" id="nb-messages"></div>
+                    <div id="nb-citations-bar" class="nb-citations-bar" style="display:none">
+                        <span class="citations-label">Sources:</span>
+                        <div id="nb-citations-list"></div>
+                    </div>
+                    <div class="input-area">
+                        <div class="input-row">
+                            <textarea id="nb-query-input" placeholder="Ask about your sources..." rows="1"></textarea>
+                            <button class="icon-btn send-btn" id="nb-send-btn" title="Send" aria-label="Send">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                            </button>
+                            <button class="icon-btn clear-btn" id="nb-clear-btn" title="Clear chat" aria-label="Clear chat">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <div class="input-area" id="main-input-area">
-                <div class="input-row">
-                    <textarea id="query-input" placeholder="Ask about your research..." rows="1"></textarea>
-                    <button class="icon-btn voice-btn" id="voice-btn" title="Voice input" aria-label="Voice input">
-                        <svg class="voice-icon-idle" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-                        <svg class="voice-icon-rec" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-                    </button>
-                    <button class="icon-btn send-btn" id="send-btn" title="Send" aria-label="Send message">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                    </button>
-                    <button class="icon-btn clear-btn" id="clear-btn" title="Clear chat" aria-label="Clear chat">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                    </button>
-                </div>
-                <div class="input-hints">
-                    <div class="route-indicator" id="route-indicator"></div>
-                    <span><kbd>/</kbd> focus</span>
-                    <span><kbd>Enter</kbd> send</span>
-                    <span><kbd>Shift+Enter</kbd> newline</span>
-                    <button class="privacy-log-btn" id="privacy-log-btn" title="Privacy audit log" aria-label="Privacy audit log">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                        Audit log
-                    </button>
+            <!-- WRITE panel (main area — shown when Write tab active) -->
+            <div class="main-panel" id="main-panel-write" style="display:none">
+                <div class="write-main-container">
+                    <div class="write-editor-area">
+                        <div class="paper-toolbar write-toolbar-main">
+                            <div class="paper-toolbar-left">
+                                <button class="paper-tool-btn" data-snippet="\section{}" title="Section">§</button>
+                                <button class="paper-tool-btn" data-snippet="\subsection{}" title="Subsection">§§</button>
+                                <span class="paper-sep"></span>
+                                <button class="paper-tool-btn" data-snippet="\textbf{}" title="Bold"><b>B</b></button>
+                                <button class="paper-tool-btn" data-snippet="\emph{}" title="Italic"><i>I</i></button>
+                                <button class="paper-tool-btn" data-snippet="\texttt{}" title="Monospace"><code>T</code></button>
+                                <span class="paper-sep"></span>
+                                <button class="paper-tool-btn" data-snippet="$  $" title="Inline math">∑</button>
+                                <button class="paper-tool-btn" data-snippet="\begin{equation}\n\n\end{equation}" title="Equation block">∫</button>
+                                <button class="paper-tool-btn" data-snippet="\cite{}" title="Citation">📎</button>
+                                <button class="paper-tool-btn" data-snippet="\begin{itemize}\n  \item \n\end{itemize}" title="Bullet list">•</button>
+                            </div>
+                            <div class="paper-toolbar-right">
+                                <span class="paper-word-count" id="paper-word-count-main"></span>
+                                <span class="paper-save-status" id="paper-save-status-main"></span>
+                                <button class="icon-btn-sm" id="paper-export-btn-main" title="Export .tex">⬇ .tex</button>
+                                <button class="icon-btn-sm" id="paper-pdf-btn-main" title="Save as PDF">📄 PDF</button>
+                                <button class="icon-btn-sm" id="paper-save-btn-main" title="Save draft">💾 Save</button>
+                            </div>
+                        </div>
+                        <div class="write-split">
+                            <textarea class="latex-source write-source-main" id="latex-source-main" spellcheck="false" placeholder="Start writing your paper here…&#10;&#10;Use LaTeX commands or plain text.&#10;The preview updates live as you type."></textarea>
+                            <div class="latex-preview write-preview-main" id="latex-preview-main">
+                                <div class="write-preview-placeholder">
+                                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" style="opacity:0.3"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                                    <p>Live preview appears here</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- AI Writing copilot sidebar -->
+                    <div class="write-copilot" id="write-copilot">
+                        <div class="write-copilot-header">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                            <span>AI Writing Assistant</span>
+                        </div>
+                        <div class="write-copilot-messages" id="write-copilot-messages">
+                            <div class="write-copilot-hint">
+                                <p>Ask me to help write, edit, or improve your paper.</p>
+                                <div class="write-copilot-suggestions">
+                                    <button class="write-copilot-suggest" data-prompt="Write an abstract for this paper">Write abstract</button>
+                                    <button class="write-copilot-suggest" data-prompt="Expand the introduction section">Expand intro</button>
+                                    <button class="write-copilot-suggest" data-prompt="Add a related work section">Related work</button>
+                                    <button class="write-copilot-suggest" data-prompt="Improve the writing style and clarity">Improve style</button>
+                                    <button class="write-copilot-suggest" data-prompt="Add citations from the notebook sources">Add citations</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="write-copilot-input">
+                            <textarea id="write-copilot-input" placeholder="Ask AI to write or edit…" rows="2"></textarea>
+                            <button class="icon-btn send-btn" id="write-copilot-send" title="Send">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <div id="nb-chat-wrap" style="display:none" class="nb-chat-wrap">
-                <div class="nb-chat-header">
-                    <button id="nb-chat-back" class="nb-chat-back-btn" title="Back to main chat">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-                        <span>Back to chat</span>
-                    </button>
-                    <span class="nb-chat-title" id="nb-chat-title"></span>
-                </div>
-                <div class="messages" id="nb-messages"></div>
-                <div id="nb-citations-bar" class="nb-citations-bar" style="display:none">
-                    <span class="citations-label">Sources:</span>
-                    <div id="nb-citations-list"></div>
-                </div>
-                <div class="input-area">
-                    <div class="input-row">
-                        <textarea id="nb-query-input" placeholder="Ask about your sources..." rows="1"></textarea>
-                        <button class="icon-btn send-btn" id="nb-send-btn" title="Send" aria-label="Send">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            <!-- CALENDAR panel (main area — shown when Calendar tab active) -->
+            <div class="main-panel" id="main-panel-cal" style="display:none">
+                <div class="cal-main-container">
+                    <div class="cal-toolbar cal-toolbar-main">
+                        <button class="cal-nav-btn" id="cal-prev-btn-main" title="Previous month">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
                         </button>
-                        <button class="icon-btn clear-btn" id="nb-clear-btn" title="Clear chat" aria-label="Clear chat">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        <span class="cal-month-label cal-month-label-main" id="cal-month-label-main"></span>
+                        <button class="cal-nav-btn" id="cal-next-btn-main" title="Next month">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
                         </button>
+                        <button class="cal-today-btn" id="cal-today-btn-main">Today</button>
+                        <button class="icon-btn-sm cal-add-btn" id="cal-add-btn-main" title="Add event">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            Add event
+                        </button>
+                    </div>
+                    <div class="cal-grid-wrap cal-grid-wrap-main">
+                        <div class="cal-day-headers">
+                            <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+                        </div>
+                        <div class="cal-grid cal-grid-main" id="cal-grid-main"></div>
+                    </div>
+                    <!-- Add event form -->
+                    <div class="cal-add-form" id="cal-add-form-main" style="display:none">
+                        <div class="cal-form-row">
+                            <input type="text" class="cal-input" id="cal-event-title-main" placeholder="Event title" maxlength="120">
+                        </div>
+                        <div class="cal-form-row">
+                            <input type="date" class="cal-input" id="cal-event-date-main">
+                            <select class="cal-input cal-type-sel" id="cal-event-type-main">
+                                <option value="deadline">⏰ Deadline</option>
+                                <option value="conference">🎤 Conference</option>
+                                <option value="meeting">👥 Meeting</option>
+                                <option value="event" selected>📌 Event</option>
+                                <option value="reminder">🔔 Reminder</option>
+                            </select>
+                        </div>
+                        <div class="cal-form-row">
+                            <input type="text" class="cal-input" id="cal-event-note-main" placeholder="Note (optional)">
+                        </div>
+                        <div class="cal-form-actions">
+                            <button class="icon-btn-sm" id="cal-save-event-btn-main">Save event</button>
+                            <button class="icon-btn-sm cal-cancel-btn" id="cal-cancel-event-btn-main">Cancel</button>
+                        </div>
+                    </div>
+                    <!-- Upcoming events list -->
+                    <div class="cal-upcoming" id="cal-upcoming-main">
+                        <h3 class="cal-upcoming-title">Upcoming Events</h3>
+                        <div class="cal-upcoming-list" id="cal-upcoming-list-main"></div>
                     </div>
                 </div>
             </div>
@@ -214,7 +353,7 @@
                     </div>
                 </div>
 
-                <!-- Tab bar: Files | Chats | Write | Calendar (shown when a notebook is selected) -->
+                <!-- Tab bar: Files | Chats (shown when a notebook is selected) -->
                 <div class="nb-tabs-wrap" id="nb-tabs-wrap" style="display:none">
                     <div class="nb-tab-bar">
                         <button class="nb-tab active" id="nb-tab-files" data-tab="files">
@@ -224,14 +363,6 @@
                         <button class="nb-tab" id="nb-tab-chats" data-tab="chats">
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                             Chats
-                        </button>
-                        <button class="nb-tab" id="nb-tab-write" data-tab="write">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-                            Write
-                        </button>
-                        <button class="nb-tab" id="nb-tab-cal" data-tab="cal">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                            Calendar
                         </button>
                     </div>
 
@@ -265,92 +396,6 @@
                                 </button>
                             </div>
                             <div id="nb-conv-list"></div>
-                        </div>
-                    </div>
-
-                    <!-- WRITE tab -->
-                    <div class="nb-tab-panel nb-panel-write" id="nb-panel-write" style="display:none">
-                        <div class="paper-toolbar">
-                            <div class="paper-toolbar-left">
-                                <button class="paper-tool-btn" data-snippet="\section{}" title="Section">\section</button>
-                                <button class="paper-tool-btn" data-snippet="\subsection{}" title="Subsection">\subsect</button>
-                                <span class="paper-sep"></span>
-                                <button class="paper-tool-btn" data-snippet="\textbf{}" title="Bold">\textbf</button>
-                                <button class="paper-tool-btn" data-snippet="\emph{}" title="Italic">\emph</button>
-                                <button class="paper-tool-btn" data-snippet="\texttt{}" title="Monospace">\texttt</button>
-                                <span class="paper-sep"></span>
-                                <button class="paper-tool-btn" data-snippet="\begin{equation}\n\n\end{equation}" title="Equation block">eq</button>
-                                <button class="paper-tool-btn" data-snippet="$  $" title="Inline math">$…$</button>
-                                <button class="paper-tool-btn" data-snippet="\cite{}" title="Citation">\cite</button>
-                                <button class="paper-tool-btn" data-snippet="\begin{itemize}\n  \item \n\end{itemize}" title="Bullet list">list</button>
-                            </div>
-                            <div class="paper-toolbar-right">
-                                <span class="paper-word-count" id="paper-word-count"></span>
-                                <span class="paper-save-status" id="paper-save-status"></span>
-                                <button class="icon-btn-sm" id="paper-export-btn" title="Export .tex file">
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                                    .tex
-                                </button>
-                                <button class="icon-btn-sm" id="paper-pdf-btn" title="Save as PDF (print dialog)">
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
-                                    PDF
-                                </button>
-                                <button class="icon-btn-sm" id="paper-save-btn" title="Save draft">
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-                                    Save
-                                </button>
-                            </div>
-                        </div>
-                        <div class="latex-panes">
-                            <textarea class="latex-source" id="latex-source" spellcheck="false" placeholder="\documentclass{article}&#10;\begin{document}&#10;&#10;\end{document}"></textarea>
-                            <div class="latex-preview" id="latex-preview"></div>
-                        </div>
-                    </div>
-
-                    <!-- CALENDAR tab -->
-                    <div class="nb-tab-panel nb-panel-cal" id="nb-panel-cal" style="display:none">
-                        <div class="cal-toolbar">
-                            <button class="cal-nav-btn" id="cal-prev-btn" title="Previous month">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
-                            </button>
-                            <span class="cal-month-label" id="cal-month-label"></span>
-                            <button class="cal-nav-btn" id="cal-next-btn" title="Next month">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
-                            </button>
-                            <button class="cal-today-btn" id="cal-today-btn">Today</button>
-                            <button class="icon-btn-sm cal-add-btn" id="cal-add-btn" title="Add event">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                                Add
-                            </button>
-                        </div>
-                        <div class="cal-grid-wrap">
-                            <div class="cal-day-headers">
-                                <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
-                            </div>
-                            <div class="cal-grid" id="cal-grid"></div>
-                        </div>
-                        <!-- Add event form (shown inline) -->
-                        <div class="cal-add-form" id="cal-add-form" style="display:none">
-                            <div class="cal-form-row">
-                                <input type="text" class="cal-input" id="cal-event-title" placeholder="Event title" maxlength="120">
-                            </div>
-                            <div class="cal-form-row">
-                                <input type="date" class="cal-input" id="cal-event-date">
-                                <select class="cal-input cal-type-sel" id="cal-event-type">
-                                    <option value="deadline">⏰ Deadline</option>
-                                    <option value="conference">🎤 Conference</option>
-                                    <option value="meeting">👥 Meeting</option>
-                                    <option value="event" selected>📌 Event</option>
-                                    <option value="reminder">🔔 Reminder</option>
-                                </select>
-                            </div>
-                            <div class="cal-form-row">
-                                <input type="text" class="cal-input" id="cal-event-note" placeholder="Note (optional)">
-                            </div>
-                            <div class="cal-form-actions">
-                                <button class="icon-btn-sm" id="cal-save-event-btn">Save event</button>
-                                <button class="icon-btn-sm cal-cancel-btn" id="cal-cancel-event-btn">Cancel</button>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -417,6 +462,6 @@
     </div>
 </div>
 
-<script src="/static/app.js?v=1771880000"></script>
+<script src="/static/app.js?v=1771890000"></script>
 </body>
 </html>

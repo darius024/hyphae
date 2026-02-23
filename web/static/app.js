@@ -836,12 +836,8 @@ const nbPlaceholder   = document.getElementById("nb-placeholder");
 const nbTabsWrap      = document.getElementById("nb-tabs-wrap");
 const nbPanelFiles    = document.getElementById("nb-panel-files");
 const nbPanelChats    = document.getElementById("nb-panel-chats");
-const nbPanelWrite    = document.getElementById("nb-panel-write");
 const nbTabFiles      = document.getElementById("nb-tab-files");
 const nbTabChats      = document.getElementById("nb-tab-chats");
-const nbTabWrite      = document.getElementById("nb-tab-write");
-const nbPanelCal      = document.getElementById("nb-panel-cal");
-const nbTabCal        = document.getElementById("nb-tab-cal");
 const nbChatWrap      = document.getElementById("nb-chat-wrap");
 const nbMessagesEl    = document.getElementById("nb-messages");
 const nbQueryInput    = document.getElementById("nb-query-input");
@@ -851,30 +847,51 @@ const nbCitationsBar  = document.getElementById("nb-citations-bar");
 const nbCitationsList = document.getElementById("nb-citations-list");
 const mainInputArea   = document.getElementById("main-input-area");
 
-// ── Notebook tab switching ───────────────────────────────────────────
+// Main-area tabs & panels
+const mainTabsBar      = document.getElementById("main-tabs");
+const mainTabChat      = document.getElementById("main-tab-chat");
+const mainTabWrite     = document.getElementById("main-tab-write");
+const mainTabCal       = document.getElementById("main-tab-cal");
+const mainPanelChat    = document.getElementById("main-panel-chat");
+const mainPanelWrite   = document.getElementById("main-panel-write");
+const mainPanelCal     = document.getElementById("main-panel-cal");
+const mainTabNbName    = document.getElementById("main-tab-nb-name");
+
+// ── Notebook sidebar tab switching (Files | Chats only) ──────────────
 function switchNbTab(tab) {
-    [nbTabFiles, nbTabChats, nbTabWrite, nbTabCal].forEach(t => t && t.classList.remove("active"));
-    [nbPanelFiles, nbPanelChats, nbPanelWrite, nbPanelCal].forEach(p => p && (p.style.display = "none"));
+    [nbTabFiles, nbTabChats].forEach(t => t && t.classList.remove("active"));
+    [nbPanelFiles, nbPanelChats].forEach(p => p && (p.style.display = "none"));
     if (tab === "files") {
-        nbTabFiles.classList.add("active");
-        nbPanelFiles.style.display = "";
+        nbTabFiles?.classList.add("active");
+        if (nbPanelFiles) nbPanelFiles.style.display = "";
     } else if (tab === "chats") {
-        nbTabChats.classList.add("active");
-        nbPanelChats.style.display = "";
-    } else if (tab === "write") {
-        nbTabWrite.classList.add("active");
-        nbPanelWrite.style.display = "";
-        loadPaper(currentNbId);
-    } else if (tab === "cal") {
-        nbTabCal.classList.add("active");
-        nbPanelCal.style.display = "";
-        loadCalendar(currentNbId);
+        nbTabChats?.classList.add("active");
+        if (nbPanelChats) nbPanelChats.style.display = "";
     }
 }
-nbTabFiles.addEventListener("click", () => switchNbTab("files"));
-nbTabChats.addEventListener("click", () => switchNbTab("chats"));
-nbTabWrite.addEventListener("click",  () => switchNbTab("write"));
-nbTabCal.addEventListener("click",   () => switchNbTab("cal"));
+nbTabFiles?.addEventListener("click", () => switchNbTab("files"));
+nbTabChats?.addEventListener("click", () => switchNbTab("chats"));
+
+// ── Main-area tab switching (Chat | Write | Calendar) ────────────────
+function switchMainTab(tab) {
+    [mainTabChat, mainTabWrite, mainTabCal].forEach(t => t && t.classList.remove("active"));
+    [mainPanelChat, mainPanelWrite, mainPanelCal].forEach(p => p && (p.style.display = "none"));
+    if (tab === "chat") {
+        mainTabChat?.classList.add("active");
+        if (mainPanelChat) mainPanelChat.style.display = "";
+    } else if (tab === "write") {
+        mainTabWrite?.classList.add("active");
+        if (mainPanelWrite) mainPanelWrite.style.display = "";
+        loadPaperMain(currentNbId);
+    } else if (tab === "cal") {
+        mainTabCal?.classList.add("active");
+        if (mainPanelCal) mainPanelCal.style.display = "";
+        loadCalendarMain(currentNbId);
+    }
+}
+mainTabChat?.addEventListener("click", () => switchMainTab("chat"));
+mainTabWrite?.addEventListener("click", () => switchMainTab("write"));
+mainTabCal?.addEventListener("click", () => switchMainTab("cal"));
 
 function enterNotebookChat(nbName, convTitle) {
     messagesEl.style.display = "none";
@@ -944,8 +961,13 @@ async function selectNotebook(nbId, name) {
     nbTabsWrap.style.display   = "";
     nbPlaceholder.style.display = "none";
 
-    // always start on Files tab when switching notebooks
+    // Show main-area tab bar when notebook is selected
+    if (mainTabsBar) mainTabsBar.style.display = "";
+    if (mainTabNbName) mainTabNbName.textContent = name;
+
+    // always start on Files tab in sidebar and Chat tab in main
     switchNbTab("files");
+    switchMainTab("chat");
 
     nbListEl.querySelectorAll(".nb-item").forEach(el => {
         el.classList.toggle("active", el.dataset.id === nbId);
@@ -1041,6 +1063,9 @@ async function deleteNotebook(nbId) {
         nbNameDisplay.textContent = "Notebooks";
         nbTabsWrap.style.display   = "none";
         nbPlaceholder.style.display = "";
+        // Hide main-area tabs and reset to chat
+        if (mainTabsBar) mainTabsBar.style.display = "none";
+        switchMainTab("chat");
     }
     loadNotebooks();
 }
@@ -1201,14 +1226,14 @@ async function deleteSource(nbId, srcId) {
     loadSources(nbId);
 }
 
-// ── LaTeX editor ─────────────────────────────────────────────────────
+// ── LaTeX editor (main area Write panel) ─────────────────────────────
 
-const latexSource     = document.getElementById("latex-source");
-const latexPreview    = document.getElementById("latex-preview");
-const paperSaveBtn    = document.getElementById("paper-save-btn");
-const paperSaveStatus = document.getElementById("paper-save-status");
-const paperWordCount  = document.getElementById("paper-word-count");
-const paperExportBtn  = document.getElementById("paper-export-btn");
+const latexSource     = document.getElementById("latex-source-main");
+const latexPreview    = document.getElementById("latex-preview-main");
+const paperSaveBtn    = document.getElementById("paper-save-btn-main");
+const paperSaveStatus = document.getElementById("paper-save-status-main");
+const paperWordCount  = document.getElementById("paper-word-count-main");
+const paperExportBtn  = document.getElementById("paper-export-btn-main");
 
 let _paperSaveTimer = null;
 
@@ -1331,9 +1356,10 @@ async function loadPaper(nbId) {
         const data = await res.json();
         latexSource.value = data.content || "";
         renderLatexPreview();
-        paperSaveStatus.textContent = "";
+        if (paperSaveStatus) paperSaveStatus.textContent = "";
     } catch {}
 }
+const loadPaperMain = loadPaper; // alias for main-area tab switch
 
 async function savePaper(nbId) {
     if (!nbId || !latexSource) return;
@@ -1390,7 +1416,7 @@ if (paperExportBtn) {
 }
 
 // PDF: open a print window scoped to the rendered preview
-const paperPdfBtn = document.getElementById("paper-pdf-btn");
+const paperPdfBtn = document.getElementById("paper-pdf-btn-main");
 if (paperPdfBtn) {
     paperPdfBtn.addEventListener("click", () => {
         if (!latexPreview) return;
@@ -1840,13 +1866,13 @@ let _calYear  = new Date().getFullYear();
 let _calMonth = new Date().getMonth(); // 0-indexed
 let _calEvents = [];
 
-const calGrid       = document.getElementById("cal-grid");
-const calMonthLabel = document.getElementById("cal-month-label");
-const calAddForm    = document.getElementById("cal-add-form");
-const calEventTitle = document.getElementById("cal-event-title");
-const calEventDate  = document.getElementById("cal-event-date");
-const calEventType  = document.getElementById("cal-event-type");
-const calEventNote  = document.getElementById("cal-event-note");
+const calGrid       = document.getElementById("cal-grid-main");
+const calMonthLabel = document.getElementById("cal-month-label-main");
+const calAddForm    = document.getElementById("cal-add-form-main");
+const calEventTitle = document.getElementById("cal-event-title-main");
+const calEventDate  = document.getElementById("cal-event-date-main");
+const calEventType  = document.getElementById("cal-event-type-main");
+const calEventNote  = document.getElementById("cal-event-note-main");
 
 const MONTHS = ["January","February","March","April","May","June",
                 "July","August","September","October","November","December"];
@@ -1859,11 +1885,13 @@ async function loadCalendar(nbId) {
         _calEvents = data.events || [];
     } catch { _calEvents = []; }
     renderCalendar();
+    renderUpcomingEvents();
 }
+const loadCalendarMain = loadCalendar; // alias for main-area tab switch
 
 function renderCalendar() {
     if (!calGrid) return;
-    calMonthLabel.textContent = `${MONTHS[_calMonth]} ${_calYear}`;
+    if (calMonthLabel) calMonthLabel.textContent = `${MONTHS[_calMonth]} ${_calYear}`;
 
     // Build a map: "YYYY-MM-DD" → [events]
     const byDay = {};
@@ -1883,7 +1911,7 @@ function renderCalendar() {
     let html = "";
     // Empty cells before first day
     for (let i = 0; i < startOffset; i++) {
-        html += `<div class="cal-cell cal-cell-empty"></div>`;
+        html += `<div class="cal-day outside"></div>`;
     }
     for (let d = 1; d <= totalDays; d++) {
         const dateStr = `${_calYear}-${String(_calMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
@@ -1891,25 +1919,24 @@ function renderCalendar() {
         const isToday = dateStr === todayStr;
         const evChips = evs.map(ev => {
             const meta = EVENT_TYPE_META[ev.type] || EVENT_TYPE_META.event;
-            return `<div class="cal-chip ${meta.cls}" data-id="${ev.id}" title="${escapeHtml(ev.title)}${ev.note ? ' — ' + escapeHtml(ev.note) : ''}">
-                <span class="cal-chip-emoji">${meta.emoji}</span>
-                <span class="cal-chip-title">${escapeHtml(ev.title)}</span>
-                <button class="cal-chip-del" data-id="${ev.id}" title="Remove">×</button>
+            return `<div class="cal-day-event ${meta.cls}" data-id="${ev.id}" title="${escapeHtml(ev.title)}${ev.note ? ' — ' + escapeHtml(ev.note) : ''}">
+                ${meta.emoji} ${escapeHtml(ev.title)}
+                <button class="cal-chip-del" data-id="${ev.id}" title="Remove" style="float:right;border:none;background:none;cursor:pointer;font-size:12px;line-height:1;opacity:0.6">×</button>
             </div>`;
         }).join("");
-        html += `<div class="cal-cell${isToday ? " cal-today" : ""}${evs.length ? " cal-has-events" : ""}" data-date="${dateStr}">
+        html += `<div class="cal-day${isToday ? " today" : ""}" data-date="${dateStr}">
             <span class="cal-day-num">${d}</span>
-            <div class="cal-chips">${evChips}</div>
+            <div class="cal-day-events">${evChips}</div>
         </div>`;
     }
 
     calGrid.innerHTML = html;
 
     // Click on day cell → pre-fill date and open form
-    calGrid.querySelectorAll(".cal-cell[data-date]").forEach(cell => {
+    calGrid.querySelectorAll(".cal-day[data-date]").forEach(cell => {
         cell.addEventListener("click", (e) => {
             if (e.target.closest(".cal-chip-del")) return;
-            calEventDate.value = cell.dataset.date;
+            if (calEventDate) calEventDate.value = cell.dataset.date;
             showCalForm();
         });
     });
@@ -1936,29 +1963,29 @@ function hideCalForm() {
 }
 
 // Nav buttons
-document.getElementById("cal-prev-btn")?.addEventListener("click", () => {
+document.getElementById("cal-prev-btn-main")?.addEventListener("click", () => {
     _calMonth--;
     if (_calMonth < 0) { _calMonth = 11; _calYear--; }
     renderCalendar();
 });
-document.getElementById("cal-next-btn")?.addEventListener("click", () => {
+document.getElementById("cal-next-btn-main")?.addEventListener("click", () => {
     _calMonth++;
     if (_calMonth > 11) { _calMonth = 0; _calYear++; }
     renderCalendar();
 });
-document.getElementById("cal-today-btn")?.addEventListener("click", () => {
+document.getElementById("cal-today-btn-main")?.addEventListener("click", () => {
     _calYear  = new Date().getFullYear();
     _calMonth = new Date().getMonth();
     renderCalendar();
 });
-document.getElementById("cal-add-btn")?.addEventListener("click", () => {
+document.getElementById("cal-add-btn-main")?.addEventListener("click", () => {
     const todayStr = new Date().toISOString().slice(0, 10);
     if (calEventDate) calEventDate.value = todayStr;
     showCalForm();
 });
-document.getElementById("cal-cancel-event-btn")?.addEventListener("click", hideCalForm);
+document.getElementById("cal-cancel-event-btn-main")?.addEventListener("click", hideCalForm);
 
-document.getElementById("cal-save-event-btn")?.addEventListener("click", async () => {
+document.getElementById("cal-save-event-btn-main")?.addEventListener("click", async () => {
     const title = calEventTitle?.value.trim();
     const date  = calEventDate?.value.trim();
     if (!title || !date || !currentNbId) return;
@@ -1977,6 +2004,171 @@ document.getElementById("cal-save-event-btn")?.addEventListener("click", async (
     await loadCalendar(currentNbId);
 });
 
+// Render upcoming events list below calendar
+function renderUpcomingEvents() {
+    const list = document.getElementById("cal-upcoming-list-main");
+    if (!list) return;
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const upcoming = _calEvents
+        .filter(ev => ev.date >= todayStr)
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .slice(0, 10);
+    if (!upcoming.length) {
+        list.innerHTML = '<p style="font-size:13px;color:var(--text-secondary);padding:8px 0">No upcoming events</p>';
+        return;
+    }
+    const meta = { deadline: { emoji: "⏰", cls: "deadline" }, conference: { emoji: "🎤", cls: "conference" }, meeting: { emoji: "👥", cls: "meeting" }, event: { emoji: "📌", cls: "event" }, reminder: { emoji: "🔔", cls: "reminder" } };
+    list.innerHTML = upcoming.map(ev => {
+        const m = meta[ev.type] || meta.event;
+        const d = new Date(ev.date + "T00:00:00");
+        const dayLabel = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        return `<div class="cal-upcoming-item">
+            <div class="cal-upcoming-date">${dayLabel}</div>
+            <div class="cal-upcoming-info">
+                <div class="cal-upcoming-info-title">${escapeHtml(ev.title)}</div>
+                ${ev.note ? `<div class="cal-upcoming-info-note">${escapeHtml(ev.note)}</div>` : ""}
+            </div>
+            <span class="cal-upcoming-badge cal-day-event ${m.cls}">${m.emoji} ${ev.type}</span>
+        </div>`;
+    }).join("");
+}
+
+// ── AI Writing Copilot ───────────────────────────────────────────────
+
+const copilotMessagesEl = document.getElementById("write-copilot-messages");
+const copilotInput      = document.getElementById("write-copilot-input");
+const copilotSendBtn    = document.getElementById("write-copilot-send");
+
+function addCopilotMessage(text, role) {
+    if (!copilotMessagesEl) return;
+    // Remove hint if present
+    const hint = copilotMessagesEl.querySelector(".write-copilot-hint");
+    if (hint) hint.remove();
+    const msg = document.createElement("div");
+    msg.className = `write-copilot-msg ${role}`;
+    msg.textContent = text;
+    copilotMessagesEl.appendChild(msg);
+    copilotMessagesEl.scrollTop = copilotMessagesEl.scrollHeight;
+    return msg;
+}
+
+async function sendCopilotMessage(prompt) {
+    if (!prompt || !currentNbId) return;
+    addCopilotMessage(prompt, "user");
+
+    // Get current document content for context
+    const docContent = latexSource ? latexSource.value : "";
+    const systemPrompt = `You are an AI writing assistant for academic papers. The user is working on a LaTeX document. Help them write, edit, or improve their paper. If the user asks to write content, return LaTeX-formatted text that can be directly inserted. Current document content:\n\n${docContent.slice(0, 3000)}`;
+
+    // Add a placeholder message
+    const assistantMsg = addCopilotMessage("Thinking…", "assistant");
+
+    try {
+        const res = await fetch(`/api/notebooks/${currentNbId}/chat`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                message: prompt,
+                system_prompt: systemPrompt,
+                conversation_id: null,
+            }),
+        });
+
+        if (!res.ok) {
+            assistantMsg.textContent = "Sorry, something went wrong. Try again.";
+            return;
+        }
+
+        // Try to read streamed response
+        const reader = res.body?.getReader();
+        if (reader) {
+            const decoder = new TextDecoder();
+            let fullText = "";
+            assistantMsg.textContent = "";
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                const chunk = decoder.decode(value, { stream: true });
+                // Parse SSE lines
+                for (const line of chunk.split("\n")) {
+                    if (line.startsWith("data: ")) {
+                        try {
+                            const data = JSON.parse(line.slice(6));
+                            if (data.token) {
+                                fullText += data.token;
+                                assistantMsg.textContent = fullText;
+                            } else if (data.text) {
+                                fullText = data.text;
+                                assistantMsg.textContent = fullText;
+                            } else if (data.answer) {
+                                fullText = data.answer;
+                                assistantMsg.textContent = fullText;
+                            }
+                        } catch {
+                            // plain text fallback
+                            const txt = line.slice(6).trim();
+                            if (txt && txt !== "[DONE]") {
+                                fullText += txt;
+                                assistantMsg.textContent = fullText;
+                            }
+                        }
+                    }
+                }
+                copilotMessagesEl.scrollTop = copilotMessagesEl.scrollHeight;
+            }
+            // If we got content, offer to insert it
+            if (fullText.trim()) {
+                const insertBtn = document.createElement("button");
+                insertBtn.className = "write-copilot-suggest";
+                insertBtn.textContent = "📝 Insert into document";
+                insertBtn.style.marginTop = "8px";
+                insertBtn.addEventListener("click", () => {
+                    if (latexSource) {
+                        const pos = latexSource.selectionStart || latexSource.value.length;
+                        const before = latexSource.value.slice(0, pos);
+                        const after = latexSource.value.slice(pos);
+                        latexSource.value = before + "\n\n" + fullText.trim() + "\n\n" + after;
+                        renderLatexPreview();
+                        savePaper(currentNbId);
+                        showToast("Content inserted into document", "success");
+                    }
+                });
+                assistantMsg.appendChild(document.createElement("br"));
+                assistantMsg.appendChild(insertBtn);
+            }
+        } else {
+            const data = await res.json();
+            assistantMsg.textContent = data.answer || data.text || data.response || "No response.";
+        }
+    } catch (err) {
+        console.error("Copilot error:", err);
+        assistantMsg.textContent = "Failed to get response. Check server connection.";
+    }
+}
+
+// Copilot send button
+copilotSendBtn?.addEventListener("click", () => {
+    const text = copilotInput?.value.trim();
+    if (!text) return;
+    copilotInput.value = "";
+    sendCopilotMessage(text);
+});
+
+// Enter to send in copilot
+copilotInput?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        copilotSendBtn?.click();
+    }
+});
+
+// Suggestion buttons in copilot
+document.querySelectorAll(".write-copilot-suggest[data-prompt]").forEach(btn => {
+    btn.addEventListener("click", () => {
+        sendCopilotMessage(btn.dataset.prompt);
+    });
+});
+
 // ── Dark mode ─────────────────────────────────────────────────────────
 
 const THEME_KEY = "hyphae_theme";
@@ -1988,6 +2180,11 @@ function applyTheme(dark) {
     try { localStorage.setItem(THEME_KEY, dark ? "dark" : "light"); } catch {}
 }
 
+// Expose globally so the inline onclick on the button can call it
+window._toggleTheme = function() {
+    applyTheme(!document.body.classList.contains("dark"));
+};
+
 // Restore saved preference or system preference
 (function initTheme() {
     const saved = localStorage.getItem(THEME_KEY);
@@ -1996,8 +2193,11 @@ function applyTheme(dark) {
     else if (window.matchMedia("(prefers-color-scheme: dark)").matches) applyTheme(true);
 })();
 
-document.getElementById("theme-toggle")?.addEventListener("click", () => {
-    applyTheme(!document.body.classList.contains("dark"));
+// Belt-and-suspenders: also attach via delegated click
+document.addEventListener("click", (e) => {
+    if (e.target.closest && e.target.closest("#theme-toggle")) {
+        applyTheme(!document.body.classList.contains("dark"));
+    }
 });
 
 // ── Notebook search / filter ──────────────────────────────────────────
