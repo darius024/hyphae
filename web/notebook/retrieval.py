@@ -29,7 +29,8 @@ def _faiss():
         import faiss  # type: ignore
         return faiss
     except ImportError:
-        raise RuntimeError("faiss-cpu is required. pip install faiss-cpu")
+        log.warning("faiss-cpu not installed; vector search will be skipped")
+        return None
 
 
 def _np():
@@ -48,6 +49,10 @@ def _idmap_path(notebook_id: str) -> Path:
 def get_index(notebook_id: str):
     if notebook_id not in _indexes:
         faiss = _faiss()
+        if faiss is None:
+            _indexes[notebook_id] = None
+            _id_maps[notebook_id] = []
+            return _indexes[notebook_id], _id_maps[notebook_id]
         idx_path = _index_path(notebook_id)
         idmap_path = _idmap_path(notebook_id)
         if idx_path.exists():
@@ -63,6 +68,8 @@ def get_index(notebook_id: str):
 
 def _save_index(notebook_id: str) -> None:
     faiss = _faiss()
+    if faiss is None or _indexes.get(notebook_id) is None:
+        return
     index, id_map = _indexes[notebook_id], _id_maps[notebook_id]
     faiss.write_index(index, str(_index_path(notebook_id)))
     _idmap_path(notebook_id).write_text("\n".join(id_map))
@@ -72,6 +79,9 @@ def add_chunks(notebook_id: str, chunk_ids: List[str], vectors: List[List[float]
     """Add vectors to the notebook FAISS index. Returns list of assigned FAISS IDs."""
     np = _np()
     index, id_map = get_index(notebook_id)
+    if index is None:
+        log.warning("Skipping vector add: faiss not available")
+        return []
     mat = np.array(vectors, dtype=np.float32)
     norms = np.linalg.norm(mat, axis=1, keepdims=True)
     norms = np.where(norms == 0, 1, norms)
@@ -87,6 +97,8 @@ def vector_search(notebook_id: str, query_vec: List[float], top_k: int = 6) -> L
     """Return [(chunk_id, cosine_score)] sorted descending."""
     np = _np()
     index, id_map = get_index(notebook_id)
+    if index is None:
+        return []
     if index.ntotal == 0:
         return []
     q = np.array([query_vec], dtype=np.float32)
