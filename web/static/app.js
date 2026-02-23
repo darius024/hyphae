@@ -2296,11 +2296,6 @@ function applyTheme(dark) {
     try { localStorage.setItem(THEME_KEY, dark ? "dark" : "light"); } catch {}
 }
 
-// Expose globally so the inline onclick on the button can call it
-window._toggleTheme = function() {
-    applyTheme(!document.body.classList.contains("dark"));
-};
-
 // Restore saved preference or system preference
 (function initTheme() {
     const saved = localStorage.getItem(THEME_KEY);
@@ -2309,7 +2304,7 @@ window._toggleTheme = function() {
     else if (window.matchMedia("(prefers-color-scheme: dark)").matches) applyTheme(true);
 })();
 
-// Direct listener on the toggle button (most reliable)
+// Direct listener on the toggle button (single handler — no duplicates)
 const _themeBtn = document.getElementById("theme-toggle");
 if (_themeBtn) {
     _themeBtn.addEventListener("click", (e) => {
@@ -2318,13 +2313,6 @@ if (_themeBtn) {
         applyTheme(!document.body.classList.contains("dark"));
     });
 }
-
-// Belt-and-suspenders: also attach via delegated click
-document.addEventListener("click", (e) => {
-    if (e.target.closest && e.target.closest("#theme-toggle")) {
-        applyTheme(!document.body.classList.contains("dark"));
-    }
-});
 
 // ── Notebook search / filter ──────────────────────────────────────────
 
