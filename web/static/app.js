@@ -1465,6 +1465,25 @@ document.getElementById("nb-conv-new-btn").addEventListener("click", async () =>
 
 // ── Notebook chat (merged with all corpus chat features) ──────────────
 
+async function _ensureNbConversation() {
+    if (currentConvId) return currentConvId;
+    if (!currentNbId) return null;
+    try {
+        const res = await fetch(`/api/notebooks/${currentNbId}/conversations`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title: "Chat" }),
+        });
+        if (!res.ok) return null;
+        const data = await res.json();
+        currentConvId = data.id;
+        try { await loadConversations(currentNbId); } catch {}
+        return currentConvId;
+    } catch {
+        return null;
+    }
+}
+
 function nbAddMessage(role, content, citations = [], meta = null) {
     const div = document.createElement("div");
     div.className = `message ${role}`;
@@ -1662,8 +1681,12 @@ async function nbSendToolQuery(text) {
 
 function nbSmartSend(text) {
     if (!text.trim() || nbBusy) return;
-    if (!currentNbId || !currentConvId) {
-        showToast("Open a conversation first", "info");
+    if (!currentNbId) { showToast("Select a notebook first", "info"); return; }
+    if (!currentConvId) {
+        _ensureNbConversation().then(id => {
+            if (!id) { showToast("Cannot create conversation. Check server.", "error"); return; }
+            nbSmartSend(text);
+        });
         return;
     }
     // If the text matches a known tool-trigger pattern, use /api/query
@@ -2052,7 +2075,8 @@ async function _ensureCopilotConversation() {
 }
 
 async function sendCopilotMessage(prompt) {
-    if (!prompt || !currentNbId) return;
+    if (!prompt) return;
+    if (!currentNbId) { showToast("Select a notebook first", "info"); return; }
     addCopilotMessage(prompt, "user");
 
     // Ensure we have a conversation for the copilot
