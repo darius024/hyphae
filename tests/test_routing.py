@@ -14,14 +14,14 @@ Usage:
 import sys, os
 
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, _project_root)
 sys.path.insert(0, os.path.join(_project_root, "src"))
+sys.path.insert(0, _project_root)
 os.environ["CACTUS_NO_CLOUD_TELE"] = "1"
 
 import json
-from main import generate_hybrid
+from core.engine import generate_hybrid
 from benchmark import compute_f1, compute_total_score
-from tools import (
+from core.tools import (
     TOOL_SEARCH_PAPERS,
     TOOL_SUMMARISE_NOTES,
     TOOL_CREATE_NOTE,
@@ -205,7 +205,6 @@ def run_research_tests(difficulty_filter=None):
     score = compute_total_score(results)
     print(f"\n  overall  F1={avg_f1:.2f}  score={score:.1f}%")
 
-    # Show failures
     failures = [r for r in results if r["f1"] < 1.0]
     if failures:
         print(f"\n--- Failures ({len(failures)}) ---")

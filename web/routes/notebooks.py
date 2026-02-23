@@ -278,7 +278,7 @@ async def list_messages(nb_id: str, cid: str):
 
 async def _nb_chat_core(nb_id: str, cid: str, question: str) -> dict:
     nb = _nb_or_404(nb_id)
-    from embed import embed_one  # type: ignore
+    from notebook.embed import embed_one  # type: ignore
     qvec = embed_one(question)
     results = hybrid_search(nb_id, question, qvec, top_k=6)
 
@@ -317,7 +317,7 @@ async def nb_chat(nb_id: str, cid: str, body: dict):
 
 async def _stream_nb_chat(nb_id: str, cid: str, question: str) -> AsyncIterator[str]:
     nb = _nb_or_404(nb_id)
-    from embed import embed_one  # type: ignore
+    from notebook.embed import embed_one  # type: ignore
     qvec = embed_one(question)
     results = hybrid_search(nb_id, question, qvec, top_k=6)
 

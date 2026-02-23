@@ -14,7 +14,7 @@ import logging
 import os
 import sys
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 CACTUS_DIR = os.path.join(PROJECT_ROOT, "cactus")
 CACTUS_SRC = os.path.join(CACTUS_DIR, "python", "src")

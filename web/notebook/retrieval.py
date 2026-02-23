@@ -12,15 +12,14 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from db import get_conn
-from embed import EMBED_DIM
+from .db import get_conn
+from .embed import EMBED_DIM
 
 log = logging.getLogger(__name__)
 
-FAISS_DIR = Path(__file__).parent / "indexes"
+FAISS_DIR = Path(__file__).parents[1] / "indexes"
 FAISS_DIR.mkdir(exist_ok=True)
 
-# In-memory cache: notebook_id → (index, id_map)
 _indexes: Dict[str, Any] = {}
 _id_maps: Dict[str, List[str]] = {}
 
@@ -105,7 +104,6 @@ def vector_search(notebook_id: str, query_vec: List[float], top_k: int = 6) -> L
 
 def bm25_search(notebook_id: str, query: str, top_k: int = 6) -> List[Tuple[str, float]]:
     """Full-text BM25 search via FTS5. Returns [(chunk_id, rank_score)]."""
-    # Escape FTS5 special chars
     safe_query = re.sub(r'[^\w\s]', ' ', query).strip()
     if not safe_query:
         return []
@@ -118,7 +116,6 @@ def bm25_search(notebook_id: str, query: str, top_k: int = 6) -> List[Tuple[str,
                LIMIT ?""",
             (safe_query, notebook_id, top_k),
         ).fetchall()
-    # FTS5 rank is negative (more negative = more relevant) — invert for scoring
     results = []
     for r in rows:
         score = -r["rank"] if r["rank"] is not None else 0.0

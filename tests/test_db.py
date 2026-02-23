@@ -1,21 +1,18 @@
-"""Unit tests for the database layer (web/db.py)."""
+"""Unit tests for the database layer (web/notebook/db.py)."""
 
 import sqlite3
 import sys
 import os
 import pytest
 
-_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(_project_root, "web"))
-
-from db import init_db, get_conn, DB_PATH, _DEMO_NOTEBOOK_ID, _DEMO_CONV_ID
+from notebook.db import init_db, get_conn, DB_PATH, _DEMO_NOTEBOOK_ID, _DEMO_CONV_ID
 
 
 @pytest.fixture(autouse=True)
 def _use_temp_db(tmp_path, monkeypatch):
     """Redirect DB_PATH to a temp directory so tests don't touch real data."""
     temp_db = tmp_path / "test_notebook.db"
-    import db as db_mod
+    from notebook import db as db_mod
     monkeypatch.setattr(db_mod, "DB_PATH", temp_db)
     init_db()
     yield temp_db

@@ -9,13 +9,8 @@ import os
 import json
 import pytest
 
-_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(_project_root, "web"))
-sys.path.insert(0, os.path.join(_project_root, "src"))
-sys.path.insert(0, _project_root)
-
-import db as db_mod
-from db import init_db, get_conn
+from notebook import db as db_mod
+from notebook.db import init_db, get_conn
 
 
 @pytest.fixture(autouse=True)

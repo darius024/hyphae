@@ -13,8 +13,8 @@ from typing import Generator
 
 log = logging.getLogger(__name__)
 
-# DB file lives next to this module (web/notebook.db)
-DB_PATH = Path(__file__).parent / "notebook.db"
+# DB file lives in web/ (one level up from this module)
+DB_PATH = Path(__file__).parents[1] / "notebook.db"
 
 _DDL = """
 PRAGMA journal_mode=WAL;

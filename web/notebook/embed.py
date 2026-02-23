@@ -14,11 +14,7 @@ from typing import List, Optional
 
 log = logging.getLogger(__name__)
 
-# Default to an offline/dummy embedder to avoid network downloads hanging
-# notebooks or background workers. Set USE_DUMMY_EMBED=0 to load the real model.
 os.environ.setdefault("USE_DUMMY_EMBED", "1")
-
-# Reduce noisy parallelism warnings if/when transformers is used.
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 EMBED_MODEL = "all-MiniLM-L6-v2"
@@ -41,10 +37,8 @@ class _DummyEmbedder:
         vecs = []
         for t in texts:
             h = hashlib.sha256(t.encode("utf-8", errors="ignore")).digest()
-            # Repeat/trim to desired dim
             raw = (h * ((self.dim // len(h)) + 1))[: self.dim]
             arr = np.frombuffer(raw, dtype=np.uint8).astype(np.float32)
-            # Normalize
             norm = np.linalg.norm(arr) or 1.0
             vecs.append(arr / norm)
         return np.vstack(vecs)
@@ -52,7 +46,6 @@ class _DummyEmbedder:
 
 @lru_cache(maxsize=1)
 def _get_model():
-    # Fast opt-out to avoid network downloads / heavy deps.
     if os.environ.get("USE_DUMMY_EMBED", "1") == "1":
         os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
         os.environ.setdefault("HF_HUB_OFFLINE", "1")
@@ -63,7 +56,6 @@ def _get_model():
         from sentence_transformers import SentenceTransformer
         return SentenceTransformer(EMBED_MODEL)
     except Exception as exc:
-        # If huggingface/transformers import fails (network timeout, etc.), fallback immediately.
         os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
         os.environ.setdefault("HF_HUB_OFFLINE", "1")
         log.warning("Falling back to dummy embedder: %s", exc)

@@ -8,10 +8,10 @@ All data stays local. Extracted text is stored in corpus/ for Cactus RAG
 to index automatically.
 
 Usage:
-    python ingest.py add paper.pdf
-    python ingest.py add notes/
-    python ingest.py list
-    python ingest.py remove <filename>
+    python -m ingestion.corpus add paper.pdf
+    python -m ingestion.corpus add notes/
+    python -m ingestion.corpus list
+    python -m ingestion.corpus remove <filename>
 """
 
 import argparse
@@ -21,7 +21,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from config import CORPUS_DIR
+from core.config import CORPUS_DIR
 
 log = logging.getLogger(__name__)
 
@@ -137,10 +137,10 @@ def main():
         description="Hyphae corpus ingestion tool",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="Examples:\n"
-               "  python ingest.py add paper.pdf\n"
-               "  python ingest.py add research_data/\n"
-               "  python ingest.py list\n"
-               "  python ingest.py remove old_notes.txt\n",
+               "  python -m ingestion.corpus add paper.pdf\n"
+               "  python -m ingestion.corpus add research_data/\n"
+               "  python -m ingestion.corpus list\n"
+               "  python -m ingestion.corpus remove old_notes.txt\n",
     )
     sub = parser.add_subparsers(dest="command")
 

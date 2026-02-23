@@ -1,11 +1,14 @@
-flask>=3.1
 fastapi>=0.115.0
 uvicorn[standard]>=0.30.0
 python-dotenv>=1.0.1
 python-multipart>=0.0.9
 pymupdf>=1.27
 google-genai>=1.64
-requests>=2.32
 numpy>=1.25
 faiss-cpu>=1.7
+pydantic>=2.0
+httpx>=0.27
+sentence-transformers>=2.2
+trafilatura>=1.6
+requests>=2.32
 pytest>=9.0

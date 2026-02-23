@@ -4,7 +4,7 @@ import subprocess
 import tempfile
 import os
 
-from config import WHISPER_PATH
+from .config import WHISPER_PATH
 
 try:
     from cactus import cactus_init, cactus_transcribe

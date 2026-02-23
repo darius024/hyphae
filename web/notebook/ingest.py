@@ -15,7 +15,7 @@ from typing import List, Tuple
 
 log = logging.getLogger(__name__)
 
-UPLOAD_DIR = Path(__file__).parent / "uploads"
+UPLOAD_DIR = Path(__file__).parents[1] / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 CHUNK_SIZE    = 400   # words
@@ -101,7 +101,7 @@ def chunk_pages(pages: List[str]) -> List[dict]:
 # ── Main pipeline ─────────────────────────────────────────────────────────
 
 def _set_source_status(source_id: str, status: str, error: str = None):
-    from db import get_conn
+    from .db import get_conn
     with get_conn() as conn:
         conn.execute(
             "UPDATE sources SET status=?, error=?, updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id=?",
@@ -110,9 +110,9 @@ def _set_source_status(source_id: str, status: str, error: str = None):
 
 
 async def ingest_source(source_id: str) -> None:
-    from db import get_conn
-    from embed import embed
-    from retrieval import add_chunks
+    from .db import get_conn
+    from .embed import embed
+    from .retrieval import add_chunks
 
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM sources WHERE id=?", (source_id,)).fetchone()

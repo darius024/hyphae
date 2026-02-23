@@ -1,7 +1,7 @@
 import re
 import copy
 
-from tools import LOCAL_ONLY_TOOLS
+from .tools import LOCAL_ONLY_TOOLS
 
 
 SENSITIVE_PATTERNS = [

@@ -1,0 +1,48 @@
+[project]
+name = "hyphae"
+version = "2.0.0"
+description = "Privacy-first scientific research copilot with hybrid local/cloud AI"
+readme = "README.md"
+requires-python = ">=3.12"
+license = {text = "MIT"}
+authors = [
+    {name = "Team Darphie"},
+]
+keywords = ["research", "ai", "privacy", "local-first", "gemini", "cactus"]
+
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "python-dotenv>=1.0.1",
+    "python-multipart>=0.0.9",
+    "pymupdf>=1.27",
+    "google-genai>=1.64",
+    "numpy>=1.25",
+    "faiss-cpu>=1.7",
+    "pydantic>=2.0",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+embeddings = [
+    "sentence-transformers>=2.2",
+]
+scraping = [
+    "trafilatura>=1.6",
+]
+dev = [
+    "pytest>=9.0",
+    "requests>=2.32",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "web", "."]
+addopts = "-v --tb=short"
+
+[tool.setuptools.packages.find]
+where = ["src", "web"]

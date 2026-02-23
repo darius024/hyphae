@@ -3,7 +3,7 @@
 import os
 import pytest
 from pathlib import Path
-from ingest import add_file, add_directory, list_documents, remove_document
+from ingestion.corpus import add_file, add_directory, list_documents, remove_document
 
 
 class TestAddFile:
@@ -61,8 +61,8 @@ class TestListDocuments:
         assert "polymer_log.txt" in captured.out
 
     def test_list_empty_corpus(self, tmp_path, capsys, monkeypatch):
-        import ingest
-        monkeypatch.setattr(ingest, "CORPUS_DIR", str(tmp_path / "nonexistent"))
+        from ingestion import corpus as ingest_mod
+        monkeypatch.setattr(ingest_mod, "CORPUS_DIR", str(tmp_path / "nonexistent"))
         list_documents()
         captured = capsys.readouterr()
         assert "empty" in captured.out.lower()

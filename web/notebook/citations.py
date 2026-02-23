@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import List
 
-from models import Citation
+from .models import Citation
 
 
 # ── Public API ────────────────────────────────────────────────────────────

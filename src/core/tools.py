@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 from datetime import datetime
 
-from config import CACTUS_SRC, RAG_MODEL_PATH, CORPUS_DIR
+from .config import CACTUS_SRC, RAG_MODEL_PATH, CORPUS_DIR
 from cactus import cactus_init, cactus_rag_query, cactus_complete, cactus_reset
 
 NOTES_DIR = os.path.join(CORPUS_DIR, "notes")
@@ -366,7 +366,6 @@ def _exec_compare_documents(doc_a, doc_b, topic):
         hits = [p for p in paras if topic_low in p.lower()]
         if hits:
             return hits
-        # fallback: any token match (looser)
         loose = []
         for p in paras:
             pl = p.lower()
@@ -382,7 +381,6 @@ def _exec_compare_documents(doc_a, doc_b, topic):
         chunks_a = chunks_b = []
 
     if not chunks_a and not chunks_b:
-        # Fallback to paragraph scan if RAG missing or no hits
         chunks_a = [{"text": p} for p in _paragraph_hits(doc_a)[:3]]
         chunks_b = [{"text": p} for p in _paragraph_hits(doc_b)[:3]]
 

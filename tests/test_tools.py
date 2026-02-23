@@ -2,7 +2,7 @@
 
 import os
 import pytest
-from tools import (
+from core.tools import (
     execute_tool,
     ALL_TOOLS,
     LOCAL_ONLY_TOOLS,
@@ -63,8 +63,8 @@ class TestExecuteTool:
     def test_list_documents_empty_corpus(self, tmp_path, monkeypatch):
         empty = tmp_path / "empty_corpus"
         empty.mkdir()
-        import tools
-        monkeypatch.setattr(tools, "CORPUS_DIR", str(empty))
+        from core import tools as tools_mod
+        monkeypatch.setattr(tools_mod, "CORPUS_DIR", str(empty))
         result = execute_tool("list_documents", {})
         assert result["count"] == 0
 

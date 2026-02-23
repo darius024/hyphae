@@ -3,8 +3,9 @@
 import sys, os
 
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, _project_root)
 sys.path.insert(0, os.path.join(_project_root, "src"))
+sys.path.insert(0, os.path.join(_project_root, "web"))
+sys.path.insert(0, _project_root)
 
 import pytest
 import tempfile
@@ -31,11 +32,11 @@ def tmp_corpus(tmp_path, monkeypatch):
         "Temperature: 180°C, reaction time: 4h\n"
     )
 
-    import ingest
-    import tools
-    monkeypatch.setattr(ingest, "CORPUS_DIR", str(corpus))
-    monkeypatch.setattr(tools, "CORPUS_DIR", str(corpus))
-    monkeypatch.setattr(tools, "NOTES_DIR", os.path.join(str(corpus), "notes"))
+    from ingestion import corpus as ingest_mod
+    from core import tools as tools_mod
+    monkeypatch.setattr(ingest_mod, "CORPUS_DIR", str(corpus))
+    monkeypatch.setattr(tools_mod, "CORPUS_DIR", str(corpus))
+    monkeypatch.setattr(tools_mod, "NOTES_DIR", os.path.join(str(corpus), "notes"))
 
     yield corpus
 

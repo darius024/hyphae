@@ -1,13 +1,8 @@
 """Unit tests for privacy sanitisation."""
 
-import sys, os
-_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# Insert src/ BEFORE web/ so the correct privacy module is found
-sys.path.insert(0, os.path.join(_project_root, "src"))
-
 import pytest
-from privacy import sanitise_for_cloud, is_cloud_safe, filter_tools_for_cloud, filter_tools_for_local
-from tools import ALL_TOOLS, LOCAL_ONLY_TOOLS, CLOUD_SAFE_TOOLS
+from core.privacy import sanitise_for_cloud, is_cloud_safe, filter_tools_for_cloud, filter_tools_for_local
+from core.tools import ALL_TOOLS, LOCAL_ONLY_TOOLS, CLOUD_SAFE_TOOLS
 
 
 class TestSanitiseForCloud:
