@@ -27,7 +27,8 @@ if CACTUS_SRC not in sys.path:
     sys.path.insert(0, CACTUS_SRC)
 
 _ffi_path = os.path.join(CACTUS_SRC, "cactus.py")
-if os.path.isfile(_ffi_path) and "cactus" not in sys.modules:
+_cloud_only = os.environ.get("CLOUD_ONLY", "0") == "1"
+if os.path.isfile(_ffi_path) and "cactus" not in sys.modules and not _cloud_only:
     try:
         _spec = importlib.util.spec_from_file_location("cactus", _ffi_path)
         _mod = importlib.util.module_from_spec(_spec)

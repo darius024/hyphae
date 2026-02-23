@@ -7,14 +7,15 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/style.css?v=1771880000">
+    <!-- MathJax for LaTeX math rendering in preview -->
+    <script>window.MathJax = { tex: { inlineMath: [['$','$'],['\\(','\\)']], displayMath: [['$$','$$'],['\\[','\\]']] }, svg: { fontCache: 'global' }, startup: { typeset: false } };</script>
+    <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 </head>
 <body>
 
 <div class="app-shell">
-<button class="menu-btn nb-open-btn" id="nb-open-btn" title="Toggle notebooks" aria-label="Toggle notebooks">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
-</button>
+<!-- notebook toggle button removed (unused) -->
 <aside class="sidebar">
     <div class="sidebar-header">
         <div class="brand">
@@ -43,10 +44,6 @@
     </div>
 
     <div class="doc-list">
-        <h3>Corpus <span class="doc-count-badge" id="doc-count-badge"></span></h3>
-        <input type="text" id="doc-search" class="doc-search" placeholder="Search documents..." aria-label="Search documents">
-        <div id="doc-list-items"></div>
-
         <div class="tool-panel">
             <div class="tool-panel-header" id="tool-panel-toggle">
                 <h3><span class="toggle-caret">&#9660;</span> Tools</h3>
@@ -65,15 +62,53 @@
             </div>
             <div class="quick-buttons" id="quick-buttons"></div>
         </div>
-    </div>
 
-    <div class="upload-area">
-        <div class="upload-btn" id="upload-btn">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            <span>Upload documents</span>
-            <span class="upload-hint">PDF, TXT, Markdown, CSV, JSON</span>
+        <!-- ── Researcher Quick Links ─────────────────────────────── -->
+        <div class="researcher-tools">
+            <div class="tool-panel-header" id="res-tools-toggle">
+                <h3><span class="toggle-caret">&#9660;</span> Quick Links</h3>
+            </div>
+            <div class="res-tool-grid" id="res-tool-grid">
+                <a class="res-tool-btn" href="https://scholar.google.com" target="_blank" title="Google Scholar">
+                    <span class="res-tool-icon">📚</span><span>Scholar</span>
+                </a>
+                <a class="res-tool-btn" href="https://arxiv.org" target="_blank" title="arXiv preprints">
+                    <span class="res-tool-icon">📄</span><span>arXiv</span>
+                </a>
+                <a class="res-tool-btn" href="https://www.semanticscholar.org" target="_blank" title="Semantic Scholar">
+                    <span class="res-tool-icon">🔍</span><span>Semantic</span>
+                </a>
+                <a class="res-tool-btn" href="https://pubmed.ncbi.nlm.nih.gov" target="_blank" title="PubMed">
+                    <span class="res-tool-icon">🧬</span><span>PubMed</span>
+                </a>
+                <a class="res-tool-btn" href="https://www.connectedpapers.com" target="_blank" title="Connected Papers — visualise citation network">
+                    <span class="res-tool-icon">🕸️</span><span>Graph</span>
+                </a>
+                <a class="res-tool-btn" href="https://paperswithcode.com" target="_blank" title="Papers with Code">
+                    <span class="res-tool-icon">⌨️</span><span>Code</span>
+                </a>
+                <a class="res-tool-btn" href="https://elicit.org" target="_blank" title="Elicit AI Research Assistant">
+                    <span class="res-tool-icon">🤖</span><span>Elicit</span>
+                </a>
+                <a class="res-tool-btn" href="https://www.zotero.org/styles" target="_blank" title="Zotero CSL Citation Styles">
+                    <span class="res-tool-icon">📝</span><span>Cite</span>
+                </a>
+            </div>
+            <!-- DOI quick resolver -->
+            <div class="doi-row">
+                <input type="text" id="doi-input" class="doi-input" placeholder="Paste DOI or arXiv ID…">
+                <button class="icon-btn-sm" id="doi-go-btn">Go</button>
+            </div>
         </div>
-        <input type="file" id="file-input" multiple accept=".pdf,.txt,.md,.csv,.log,.json">
+
+        <!-- Dark mode toggle -->
+        <div class="sidebar-footer">
+            <button class="theme-toggle" id="theme-toggle" title="Toggle dark mode">
+                <svg class="theme-icon-light" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                <svg class="theme-icon-dark" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                <span class="theme-label">Dark mode</span>
+            </button>
+        </div>
     </div>
 </aside>
 
@@ -148,12 +183,12 @@
         </main>
 
         <!-- Notebook column -->
-        <section id="panel-notebook" class="notebook-column closed">
+        <section id="panel-notebook" class="notebook-column">
             <div class="nb-bar">
                 <div class="nb-header-row">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.5"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
                     <h2 id="nb-name-display">Notebooks</h2>
-                    <button class="nb-new-btn-pill" id="nb-new-btn" title="New notebook">
+                    <button class="nb-new-btn-pill" id="nb-new-btn" title="New notebook" onclick="openNbCreateModal()">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                         New
                     </button>
@@ -164,10 +199,13 @@
             </div>
 
             <aside class="sidebar nb-sidebar nb-sidebar-full">
+                <!-- Notebook list (always visible at top) -->
                 <div class="nb-list-wrap" id="nb-list-wrap">
+                    <input type="text" id="nb-search" class="nb-search-input" placeholder="Search notebooks…">
                     <div id="nb-list"></div>
                 </div>
 
+                <!-- Placeholder when no notebook is selected -->
                 <div id="nb-placeholder" class="nb-placeholder">
                     <div class="nb-placeholder-inner">
                         <svg class="nb-placeholder-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/><line x1="9" y1="7" x2="15" y2="7"/><line x1="9" y1="11" x2="13" y2="11"/></svg>
@@ -176,28 +214,145 @@
                     </div>
                 </div>
 
-                <div class="nb-sources-wrap" id="nb-sources-wrap" style="display:none">
-                    <div class="nb-section-header">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                        <span>Sources</span>
-                        <label class="icon-btn-sm" id="nb-upload-label" title="Add file">+ File
-                            <input type="file" id="nb-file-input" multiple accept=".pdf,.txt,.md" style="display:none">
-                        </label>
+                <!-- Tab bar: Files | Chats | Write | Calendar (shown when a notebook is selected) -->
+                <div class="nb-tabs-wrap" id="nb-tabs-wrap" style="display:none">
+                    <div class="nb-tab-bar">
+                        <button class="nb-tab active" id="nb-tab-files" data-tab="files">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                            Files
+                        </button>
+                        <button class="nb-tab" id="nb-tab-chats" data-tab="chats">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                            Chats
+                        </button>
+                        <button class="nb-tab" id="nb-tab-write" data-tab="write">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                            Write
+                        </button>
+                        <button class="nb-tab" id="nb-tab-cal" data-tab="cal">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                            Calendar
+                        </button>
                     </div>
-                    <div id="nb-source-list"></div>
-                    <div class="nb-url-row">
-                        <input type="text" id="nb-url-input" class="doc-search" placeholder="Paste URL...">
-                        <button class="icon-btn-sm" id="nb-url-btn">Add</button>
-                    </div>
-                </div>
 
-                <div class="nb-conv-wrap" id="nb-conv-wrap" style="display:none">
-                    <div class="nb-section-header">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                        <span>Conversations</span>
-                        <button class="icon-btn-sm" id="nb-conv-new-btn" title="New conversation">+ New</button>
+                    <!-- FILES tab -->
+                    <div class="nb-tab-panel" id="nb-panel-files">
+                        <div class="nb-sources-wrap" id="nb-sources-wrap">
+                            <div class="nb-section-header">
+                                <span>Sources</span>
+                                <label class="icon-btn-sm" id="nb-upload-label" title="Add file">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                    Add file
+                                    <input type="file" id="nb-file-input" multiple accept=".pdf,.txt,.md" style="display:none">
+                                </label>
+                            </div>
+                            <div id="nb-source-list"></div>
+                            <div class="nb-url-row">
+                                <input type="text" id="nb-url-input" class="doc-search" placeholder="Paste URL to add source...">
+                                <button class="icon-btn-sm" id="nb-url-btn">Add</button>
+                            </div>
+                        </div>
                     </div>
-                    <div id="nb-conv-list"></div>
+
+                    <!-- CHATS tab -->
+                    <div class="nb-tab-panel" id="nb-panel-chats" style="display:none">
+                        <div class="nb-conv-wrap" id="nb-conv-wrap">
+                            <div class="nb-section-header">
+                                <span>Conversations</span>
+                                <button class="icon-btn-sm" id="nb-conv-new-btn" title="New conversation">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                    New chat
+                                </button>
+                            </div>
+                            <div id="nb-conv-list"></div>
+                        </div>
+                    </div>
+
+                    <!-- WRITE tab -->
+                    <div class="nb-tab-panel nb-panel-write" id="nb-panel-write" style="display:none">
+                        <div class="paper-toolbar">
+                            <div class="paper-toolbar-left">
+                                <button class="paper-tool-btn" data-snippet="\section{}" title="Section">\section</button>
+                                <button class="paper-tool-btn" data-snippet="\subsection{}" title="Subsection">\subsect</button>
+                                <span class="paper-sep"></span>
+                                <button class="paper-tool-btn" data-snippet="\textbf{}" title="Bold">\textbf</button>
+                                <button class="paper-tool-btn" data-snippet="\emph{}" title="Italic">\emph</button>
+                                <button class="paper-tool-btn" data-snippet="\texttt{}" title="Monospace">\texttt</button>
+                                <span class="paper-sep"></span>
+                                <button class="paper-tool-btn" data-snippet="\begin{equation}\n\n\end{equation}" title="Equation block">eq</button>
+                                <button class="paper-tool-btn" data-snippet="$  $" title="Inline math">$…$</button>
+                                <button class="paper-tool-btn" data-snippet="\cite{}" title="Citation">\cite</button>
+                                <button class="paper-tool-btn" data-snippet="\begin{itemize}\n  \item \n\end{itemize}" title="Bullet list">list</button>
+                            </div>
+                            <div class="paper-toolbar-right">
+                                <span class="paper-word-count" id="paper-word-count"></span>
+                                <span class="paper-save-status" id="paper-save-status"></span>
+                                <button class="icon-btn-sm" id="paper-export-btn" title="Export .tex file">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                    .tex
+                                </button>
+                                <button class="icon-btn-sm" id="paper-pdf-btn" title="Save as PDF (print dialog)">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+                                    PDF
+                                </button>
+                                <button class="icon-btn-sm" id="paper-save-btn" title="Save draft">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                                    Save
+                                </button>
+                            </div>
+                        </div>
+                        <div class="latex-panes">
+                            <textarea class="latex-source" id="latex-source" spellcheck="false" placeholder="\documentclass{article}&#10;\begin{document}&#10;&#10;\end{document}"></textarea>
+                            <div class="latex-preview" id="latex-preview"></div>
+                        </div>
+                    </div>
+
+                    <!-- CALENDAR tab -->
+                    <div class="nb-tab-panel nb-panel-cal" id="nb-panel-cal" style="display:none">
+                        <div class="cal-toolbar">
+                            <button class="cal-nav-btn" id="cal-prev-btn" title="Previous month">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+                            </button>
+                            <span class="cal-month-label" id="cal-month-label"></span>
+                            <button class="cal-nav-btn" id="cal-next-btn" title="Next month">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+                            </button>
+                            <button class="cal-today-btn" id="cal-today-btn">Today</button>
+                            <button class="icon-btn-sm cal-add-btn" id="cal-add-btn" title="Add event">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                Add
+                            </button>
+                        </div>
+                        <div class="cal-grid-wrap">
+                            <div class="cal-day-headers">
+                                <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+                            </div>
+                            <div class="cal-grid" id="cal-grid"></div>
+                        </div>
+                        <!-- Add event form (shown inline) -->
+                        <div class="cal-add-form" id="cal-add-form" style="display:none">
+                            <div class="cal-form-row">
+                                <input type="text" class="cal-input" id="cal-event-title" placeholder="Event title" maxlength="120">
+                            </div>
+                            <div class="cal-form-row">
+                                <input type="date" class="cal-input" id="cal-event-date">
+                                <select class="cal-input cal-type-sel" id="cal-event-type">
+                                    <option value="deadline">⏰ Deadline</option>
+                                    <option value="conference">🎤 Conference</option>
+                                    <option value="meeting">👥 Meeting</option>
+                                    <option value="event" selected>📌 Event</option>
+                                    <option value="reminder">🔔 Reminder</option>
+                                </select>
+                            </div>
+                            <div class="cal-form-row">
+                                <input type="text" class="cal-input" id="cal-event-note" placeholder="Note (optional)">
+                            </div>
+                            <div class="cal-form-actions">
+                                <button class="icon-btn-sm" id="cal-save-event-btn">Save event</button>
+                                <button class="icon-btn-sm cal-cancel-btn" id="cal-cancel-event-btn">Cancel</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </aside>
         </section>
@@ -257,11 +412,11 @@
             <input type="text" id="nb-create-name" class="nb-create-input" placeholder="e.g. Polymer Synthesis Review" autofocus>
             <label class="nb-create-label" for="nb-create-desc">Description <span class="nb-create-optional">(optional)</span></label>
             <textarea id="nb-create-desc" class="nb-create-input" rows="2" placeholder="What is this notebook for?"></textarea>
-            <button class="nb-create-submit" id="nb-create-submit">Create notebook</button>
+            <button class="nb-create-submit" id="nb-create-submit" onclick="submitNewNotebook()">Create notebook</button>
         </div>
     </div>
 </div>
 
-<script src="/static/app.js"></script>
+<script src="/static/app.js?v=1771880000"></script>
 </body>
 </html>

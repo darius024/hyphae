@@ -2,15 +2,35 @@ const messagesEl = document.getElementById("messages");
 const queryInput = document.getElementById("query-input");
 const sendBtn = document.getElementById("send-btn");
 const voiceBtn = document.getElementById("voice-btn");
-const docListEl = document.getElementById("doc-list-items");
 const toolListEl = document.getElementById("tool-list");
+// Doc search input (used for Cmd/Ctrl+K). Fallback to any .doc-search field.
+const docSearchInput = document.getElementById("nb-url-input") || document.querySelector(".doc-search");
 const quickButtonsEl = document.getElementById("quick-buttons");
-const fileInput = document.getElementById("file-input");
-const uploadBtn = document.getElementById("upload-btn");
 
 let isRecording = false;
 let mediaRecorder = null;
 let isBusy = false;
+
+// ── Toast notification system ───────────────────────────────────────
+function showToast(message, type = "info", duration = 3000) {
+    let container = document.getElementById("toast-container");
+    if (!container) {
+        container = document.createElement("div");
+        container.id = "toast-container";
+        container.style.cssText = "position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none;";
+        document.body.appendChild(container);
+    }
+    const toast = document.createElement("div");
+    const colors = { success: "#34c759", error: "#ff3b30", info: "#1a5c5e", warn: "#ff9f0a" };
+    toast.style.cssText = `pointer-events:auto;padding:10px 18px;border-radius:10px;background:${colors[type]||colors.info};color:#fff;font-size:13px;font-weight:500;font-family:Inter,system-ui,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.18);transform:translateY(12px);opacity:0;transition:all 0.25s cubic-bezier(0.16,1,0.3,1);max-width:340px;`;
+    toast.textContent = message;
+    container.appendChild(toast);
+    requestAnimationFrame(() => { toast.style.opacity = "1"; toast.style.transform = "translateY(0)"; });
+    setTimeout(() => {
+        toast.style.opacity = "0"; toast.style.transform = "translateY(12px)";
+        setTimeout(() => toast.remove(), 300);
+    }, duration);
+}
 
 const HISTORY_KEY = "hyphae_chat_history";
 
@@ -394,98 +414,6 @@ async function sendVoice(blob, ext = ".webm") {
     }
 }
 
-// ── Documents ───────────────────────────────────────────────────────
-
-let allDocuments = [];
-const docSearchInput = document.getElementById("doc-search");
-
-docSearchInput.addEventListener("input", () => {
-    const q = docSearchInput.value.toLowerCase();
-    const filtered = q ? allDocuments.filter(d => d.name.toLowerCase().includes(q)) : allDocuments;
-    renderDocuments(filtered);
-});
-
-async function loadDocuments() {
-    docListEl.innerHTML = '<div class="doc-skeleton"><div></div><div></div><div></div></div>';
-    try {
-        const res = await fetch("/api/documents");
-        const data = await res.json();
-        allDocuments = data.documents || [];
-        const q = docSearchInput.value.toLowerCase();
-        const filtered = q ? allDocuments.filter(d => d.name.toLowerCase().includes(q)) : allDocuments;
-        renderDocuments(filtered);
-        loadQuickPrompts();
-    } catch {
-        docListEl.innerHTML = '<div class="doc-item"><span class="name" style="color:var(--red)">Failed to load</span></div>';
-    }
-}
-
-function docTypeIcon(doc) {
-    if (doc.has_pdf || doc.type === "pdf") {
-        return '<svg class="doc-type-icon pdf" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
-    }
-    if (doc.type === "md") {
-        return '<svg class="doc-type-icon md" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>';
-    }
-    return '<svg class="doc-type-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>';
-}
-
-function sensitivityBadge(doc) {
-    const isConf = doc.sensitivity === "confidential";
-    if (isConf) {
-        return `<button class="sens-btn sens-conf" data-doc="${escapeHtml(doc.name)}" data-level="confidential" title="Confidential — click to make shareable"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></button>`;
-    }
-    return `<button class="sens-btn sens-share" data-doc="${escapeHtml(doc.name)}" data-level="shareable" title="Shareable — click to mark confidential"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 5-5 5 5 0 0 1 5 5"/></svg></button>`;
-}
-
-function renderDocuments(docs) {
-    const badge = document.getElementById("doc-count-badge");
-    if (badge) badge.textContent = docs && docs.length ? `(${docs.length})` : "";
-
-    if (!docs || docs.length === 0) {
-        docListEl.innerHTML = '<div class="doc-empty">No documents yet. Upload PDFs or text files to get started.</div>';
-        return;
-    }
-
-    docListEl.innerHTML = docs.map(d => `
-        <div class="doc-item">
-            ${docTypeIcon(d)}
-            <span class="name doc-preview-link" data-doc="${escapeHtml(d.name)}">${escapeHtml(d.name)}</span>
-            ${d.has_pdf ? '<span class="badge doc-badge-pdf">PDF</span>' : ''}
-            ${sensitivityBadge(d)}
-            <span class="size">${d.size_kb} KB</span>
-            <button class="remove-btn" data-doc="${escapeHtml(d.name)}" title="Remove">×</button>
-        </div>
-    `).join("");
-
-    docListEl.querySelectorAll(".doc-preview-link").forEach(el => {
-        el.addEventListener("click", () => previewDoc(el.dataset.doc));
-    });
-
-    docListEl.querySelectorAll(".remove-btn").forEach(btn => {
-        btn.addEventListener("click", (e) => {
-            e.stopPropagation();
-            removeDoc(btn.dataset.doc);
-        });
-    });
-
-    docListEl.querySelectorAll(".sens-btn").forEach(btn => {
-        btn.addEventListener("click", async (e) => {
-            e.stopPropagation();
-            const name = btn.dataset.doc;
-            const newLevel = btn.dataset.level === "confidential" ? "shareable" : "confidential";
-            try {
-                await fetch(`/api/sensitivity/${encodeURIComponent(name)}`, {
-                    method: "PUT",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ level: newLevel }),
-                });
-                loadDocuments();
-            } catch {}
-        });
-    });
-}
-
 // ── Tools list (UI helper) ─────────────────────────────────────────
 
 function toolSourceBadge(source) {
@@ -506,28 +434,66 @@ async function loadTools() {
     }
 }
 
+// Friendly prompt starters for each tool
+const TOOL_PROMPTS = {
+    search_papers:       "Search my notes for…",
+    summarise_notes:     "Summarise my notes on…",
+    create_note:         "Save a note: …",
+    list_documents:      "List all my documents",
+    compare_documents:   "Compare these two documents: …",
+    read_document:       "Read and explain this document: …",
+    search_text:         "Find text in my documents: …",
+    generate_hypothesis: "Generate a hypothesis about…",
+    search_literature:   "Search the literature for…",
+};
+
+// Icon per tool
+const TOOL_ICONS = {
+    search_papers:       "🔍",
+    summarise_notes:     "📝",
+    create_note:         "✏️",
+    list_documents:      "📂",
+    compare_documents:   "⚖️",
+    read_document:       "📖",
+    search_text:         "🔎",
+    generate_hypothesis: "💡",
+    search_literature:   "🌐",
+};
+
 function renderTools(tools) {
     if (!tools || tools.length === 0) {
         toolListEl.innerHTML = '<div class="doc-empty">No tools available.</div>';
         return;
     }
 
-    toolListEl.innerHTML = tools.map(t => {
-        const params = (t.parameters || []).map(p => {
-            const req = p.required ? '<span style="color:var(--red)">*</span>' : '';
-            return `<div class="tool-param"><strong>${escapeHtml(p.name)}</strong>${req} <span class="param-type">(${escapeHtml(p.type || "string")})</span> — ${escapeHtml(p.description || "")}</div>`;
-        }).join("") || "<div class=\"tool-param\">No parameters</div>";
-        const requiredNames = (t.parameters || []).filter(p => p.required).map(p => p.name);
-        const usage = requiredNames.length ? `${t.name}(${requiredNames.map(n => `${n}: …`).join(", ")})` : `${t.name}()`;
-        return `
-            <div class="tool-item">
-                <div class="tool-name">${escapeHtml(t.name || "tool")}${toolSourceBadge(t.source)}</div>
-                <div class="tool-desc">${escapeHtml(t.description || "")}</div>
-                <div class="tool-params">${params}</div>
-                <div class="tool-usage">Example call: <code>${escapeHtml(usage)}</code></div>
-            </div>
-        `;
-    }).join("");
+    const local = tools.filter(t => t.source !== "cloud");
+    const cloud = tools.filter(t => t.source === "cloud");
+
+    function renderGroup(group) {
+        return group.map(t => {
+            const icon   = TOOL_ICONS[t.name] || "🔧";
+            const prompt = TOOL_PROMPTS[t.name] || t.name.replace(/_/g, " ");
+            const badge  = toolSourceBadge(t.source);
+            return `
+                <div class="tool-item" title="${escapeHtml(t.description || "")}"
+                     onclick="(()=>{const q=document.getElementById('query-input');if(q){q.value=${JSON.stringify(prompt)};q.focus();q.style.height='auto';q.style.height=Math.min(q.scrollHeight,120)+'px';}})()">
+                    <span class="tool-icon">${icon}</span>
+                    <div class="tool-text">
+                        <div class="tool-name">${badge} ${escapeHtml(t.name.replace(/_/g, " "))}</div>
+                        <div class="tool-desc">${escapeHtml(t.description || "")}</div>
+                    </div>
+                </div>`;
+        }).join("");
+    }
+
+    let html = "";
+    if (local.length) {
+        html += `<div class="tool-group-label">🔒 On-device</div>${renderGroup(local)}`;
+    }
+    if (cloud.length) {
+        html += `<div class="tool-group-label">☁️ Cloud</div>${renderGroup(cloud)}`;
+    }
+    toolListEl.innerHTML = html;
 }
 
 // ── Tool panel collapse toggle ──────────────────────────────────────
@@ -538,6 +504,40 @@ if (toolPanelToggle) {
         toolListEl.classList.toggle("collapsed");
     });
 }
+
+// ── Researcher Quick Links collapse toggle ──────────────────────────
+const resToolsToggle = document.getElementById("res-tools-toggle");
+if (resToolsToggle) {
+    const resToolGrid = document.getElementById("res-tool-grid");
+    resToolsToggle.addEventListener("click", () => {
+        resToolsToggle.classList.toggle("collapsed");
+        if (resToolGrid) resToolGrid.classList.toggle("collapsed");
+    });
+}
+
+// ── DOI / arXiv quick resolver ───────────────────────────────────────
+document.getElementById("doi-go-btn")?.addEventListener("click", () => {
+    const raw = (document.getElementById("doi-input")?.value || "").trim();
+    if (!raw) return;
+    let url;
+    // arXiv: 1234.56789 or arxiv:1234.56789 or https://arxiv.org/abs/...
+    if (/^arxiv:/i.test(raw)) {
+        url = `https://arxiv.org/abs/${raw.replace(/^arxiv:/i, "")}`;
+    } else if (/^\d{4}\.\d+/.test(raw)) {
+        url = `https://arxiv.org/abs/${raw}`;
+    } else if (/^https?:\/\//.test(raw)) {
+        url = raw;
+    } else {
+        // Assume DOI
+        const doi = raw.replace(/^doi:\s*/i, "");
+        url = `https://doi.org/${doi}`;
+    }
+    window.open(url, "_blank");
+    if (document.getElementById("doi-input")) document.getElementById("doi-input").value = "";
+});
+document.getElementById("doi-input")?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") document.getElementById("doi-go-btn")?.click();
+});
 
 // ── Quick research prompts ─────────────────────────────────────────
 
@@ -591,36 +591,6 @@ function loadQuickPrompts() {
     });
 }
 
-async function removeDoc(name) {
-    try {
-        await fetch(`/api/documents/${encodeURIComponent(name)}`, { method: "DELETE" });
-        loadDocuments();
-    } catch {}
-}
-
-async function uploadFiles(files) {
-    const form = new FormData();
-    for (const f of files) form.append("file", f);
-
-    uploadBtn.classList.add("uploading");
-    uploadBtn.querySelector("span:not(.upload-hint)").textContent = "Uploading…";
-
-    try {
-        const res = await fetch("/api/upload", { method: "POST", body: form });
-        const data = await res.json();
-        loadDocuments();
-        const count = data.uploaded.filter(u => u.added).length;
-        if (count > 0) {
-            addMessage("assistant", `Uploaded ${count} document(s) to corpus.`);
-        }
-    } catch (err) {
-        addErrorMessage(`Upload failed: ${err.message}`);
-    } finally {
-        uploadBtn.classList.remove("uploading");
-        uploadBtn.querySelector("span:not(.upload-hint)").textContent = "Upload documents";
-    }
-}
-
 // ── Event listeners ─────────────────────────────────────────────────
 
 sendBtn.addEventListener("click", () => sendQuery(queryInput.value));
@@ -639,10 +609,12 @@ document.addEventListener("keydown", (e) => {
 
     // Cmd/Ctrl+K → focus doc search
     if (mod && e.key === "k") {
-        e.preventDefault();
-        docSearchInput.focus();
-        if (window.innerWidth <= 768 && !sidebar.classList.contains("open")) {
-            toggleSidebar();
+        if (docSearchInput) {
+            e.preventDefault();
+            docSearchInput.focus();
+            if (window.innerWidth <= 768 && !sidebar.classList.contains("open")) {
+                toggleSidebar();
+            }
         }
         return;
     }
@@ -652,9 +624,9 @@ document.addEventListener("keydown", (e) => {
             closePreview();
         } else if (privacyLogOverlay.classList.contains("open")) {
             privacyLogOverlay.classList.remove("open");
-        } else if (nbCreateOverlay && nbCreateOverlay.classList.contains("open")) {
+        } else if (document.getElementById("nb-create-overlay")?.classList.contains("open")) {
             closeNbCreateModal();
-        } else if (document.activeElement === docSearchInput) {
+        } else if (docSearchInput && document.activeElement === docSearchInput) {
             docSearchInput.value = "";
             docSearchInput.dispatchEvent(new Event("input"));
             docSearchInput.blur();
@@ -684,24 +656,6 @@ queryInput.addEventListener("input", () => {
 });
 
 voiceBtn.addEventListener("click", toggleVoice);
-
-uploadBtn.addEventListener("click", () => fileInput.click());
-fileInput.addEventListener("change", () => {
-    if (fileInput.files.length > 0) uploadFiles(fileInput.files);
-    fileInput.value = "";
-});
-
-// Drag and drop
-uploadBtn.addEventListener("dragover", (e) => {
-    e.preventDefault();
-    uploadBtn.classList.add("dragover");
-});
-uploadBtn.addEventListener("dragleave", () => uploadBtn.classList.remove("dragover"));
-uploadBtn.addEventListener("drop", (e) => {
-    e.preventDefault();
-    uploadBtn.classList.remove("dragover");
-    if (e.dataTransfer.files.length > 0) uploadFiles(e.dataTransfer.files);
-});
 
 document.getElementById("clear-btn").addEventListener("click", clearHistory);
 
@@ -819,7 +773,7 @@ function showPreviewTab(tab) {
         previewTabPdf.classList.add("active");
         previewTabText.classList.remove("active");
         if (!previewPdf.src || previewPdf.src === "about:blank") {
-            previewPdf.src = `/api/documents/${encodeURIComponent(_previewPdfName)}/raw`;
+            previewPdf.src = _previewPdfName; // already a full URL for notebook sources
         }
     } else {
         previewBody.style.display = "";
@@ -830,43 +784,9 @@ function showPreviewTab(tab) {
 }
 
 async function previewDoc(name) {
-    previewTitle.textContent = name;
-    previewBody.textContent = "Loading…";
-    previewPdf.src = "about:blank";
-    previewPdf.style.display = "none";
-    previewBody.style.display = "";
-    previewTabPdf.style.display = "none";
-    previewTabText.classList.add("active");
-    previewTabPdf.classList.remove("active");
-    _previewHasPdf = false;
-    _previewPdfName = null;
-    previewOverlay.classList.add("open");
-
-    try {
-        const res = await fetch(`/api/documents/${encodeURIComponent(name)}`);
-        const data = await res.json();
-        if (data.error) {
-            previewBody.textContent = `Error: ${data.error}`;
-            return;
-        }
-        previewBody.textContent = data.preview;
-        previewTitle.textContent = `${name} (${data.size_kb} KB)`;
-
-        if (data.has_pdf && data.pdf_name) {
-            _previewHasPdf = true;
-            _previewPdfName = data.pdf_name;
-            previewTabPdf.style.display = "";
-            previewDownload.href = `/api/documents/${encodeURIComponent(data.pdf_name)}/raw`;
-            previewDownload.download = data.pdf_name;
-            showPreviewTab("pdf");
-        } else {
-            previewDownload.href = `/api/documents/${encodeURIComponent(name)}/raw`;
-            previewDownload.download = name;
-        }
-    } catch (err) {
-        previewBody.textContent = `Failed to load: ${err.message}`;
-    }
+    // Legacy shim — no longer used (corpus removed). No-op.
 }
+
 
 function closePreview() {
     previewOverlay.classList.remove("open");
@@ -894,12 +814,7 @@ function toggleSidebar() {
 menuBtn.addEventListener("click", toggleSidebar);
 sidebarOverlay.addEventListener("click", toggleSidebar);
 
-// ── Init ────────────────────────────────────────────────────────────
-loadHistory();
-loadDocuments();
-loadTools();
-loadNotebooks();
-loadQuickPrompts();
+// ── Init (moved below notebook state declarations — see bottom of NOTEBOOK STATE) ──
 
 // ════════════════════════════════════════════════════════════════════════
 //  NOTEBOOK STATE
@@ -909,22 +824,57 @@ let currentNbId   = null;
 let currentConvId = null;
 let nbBusy        = false;
 let nbSseCtrl     = null;   // AbortController for active SSE stream
+let _allNotebooks = [];     // Cached for search/filter
 
-const nbListEl       = document.getElementById("nb-list");
-const nbNameDisplay  = document.getElementById("nb-name-display");
-const nbSourcesWrap  = document.getElementById("nb-sources-wrap");
-const nbConvWrap     = document.getElementById("nb-conv-wrap");
-const nbSourceList   = document.getElementById("nb-source-list");
-const nbConvList     = document.getElementById("nb-conv-list");
-const nbPlaceholder  = document.getElementById("nb-placeholder");
-const nbChatWrap     = document.getElementById("nb-chat-wrap");
-const nbMessagesEl   = document.getElementById("nb-messages");
-const nbQueryInput   = document.getElementById("nb-query-input");
-const nbSendBtn      = document.getElementById("nb-send-btn");
-const nbClearBtn     = document.getElementById("nb-clear-btn");
-const nbCitationsBar = document.getElementById("nb-citations-bar");
-const nbCitationsList= document.getElementById("nb-citations-list");
-const mainInputArea  = document.getElementById("main-input-area");
+const nbListEl        = document.getElementById("nb-list");
+const nbNameDisplay   = document.getElementById("nb-name-display");
+const nbSourcesWrap   = document.getElementById("nb-sources-wrap");
+const nbConvWrap      = document.getElementById("nb-conv-wrap");
+const nbSourceList    = document.getElementById("nb-source-list");
+const nbConvList      = document.getElementById("nb-conv-list");
+const nbPlaceholder   = document.getElementById("nb-placeholder");
+const nbTabsWrap      = document.getElementById("nb-tabs-wrap");
+const nbPanelFiles    = document.getElementById("nb-panel-files");
+const nbPanelChats    = document.getElementById("nb-panel-chats");
+const nbPanelWrite    = document.getElementById("nb-panel-write");
+const nbTabFiles      = document.getElementById("nb-tab-files");
+const nbTabChats      = document.getElementById("nb-tab-chats");
+const nbTabWrite      = document.getElementById("nb-tab-write");
+const nbPanelCal      = document.getElementById("nb-panel-cal");
+const nbTabCal        = document.getElementById("nb-tab-cal");
+const nbChatWrap      = document.getElementById("nb-chat-wrap");
+const nbMessagesEl    = document.getElementById("nb-messages");
+const nbQueryInput    = document.getElementById("nb-query-input");
+const nbSendBtn       = document.getElementById("nb-send-btn");
+const nbClearBtn      = document.getElementById("nb-clear-btn");
+const nbCitationsBar  = document.getElementById("nb-citations-bar");
+const nbCitationsList = document.getElementById("nb-citations-list");
+const mainInputArea   = document.getElementById("main-input-area");
+
+// ── Notebook tab switching ───────────────────────────────────────────
+function switchNbTab(tab) {
+    [nbTabFiles, nbTabChats, nbTabWrite, nbTabCal].forEach(t => t && t.classList.remove("active"));
+    [nbPanelFiles, nbPanelChats, nbPanelWrite, nbPanelCal].forEach(p => p && (p.style.display = "none"));
+    if (tab === "files") {
+        nbTabFiles.classList.add("active");
+        nbPanelFiles.style.display = "";
+    } else if (tab === "chats") {
+        nbTabChats.classList.add("active");
+        nbPanelChats.style.display = "";
+    } else if (tab === "write") {
+        nbTabWrite.classList.add("active");
+        nbPanelWrite.style.display = "";
+        loadPaper(currentNbId);
+    } else if (tab === "cal") {
+        nbTabCal.classList.add("active");
+        nbPanelCal.style.display = "";
+        loadCalendar(currentNbId);
+    }
+}
+nbTabFiles.addEventListener("click", () => switchNbTab("files"));
+nbTabChats.addEventListener("click", () => switchNbTab("chats"));
+nbTabWrite.addEventListener("click",  () => switchNbTab("write"));
+nbTabCal.addEventListener("click",   () => switchNbTab("cal"));
 
 function enterNotebookChat(nbName, convTitle) {
     messagesEl.style.display = "none";
@@ -948,38 +898,41 @@ document.getElementById("nb-chat-back").addEventListener("click", exitNotebookCh
 // ── Notebook list ────────────────────────────────────────────────────
 
 async function loadNotebooks() {
-    const res = await fetch("/api/notebooks");
-    const data = await res.json();
-    renderNotebookList(data.notebooks || []);
+    // Show loading shimmer while fetching
+    if (nbListEl) {
+        nbListEl.innerHTML = '<div class="nb-loading"></div><div class="nb-loading" style="width:80%"></div><div class="nb-loading" style="width:60%"></div>';
+    }
+    try {
+        const res = await fetch("/api/notebooks");
+        const data = await res.json();
+        try { console.debug('loadNotebooks: fetched', Array.isArray(data?.notebooks) ? data.notebooks.length : data); } catch {}
+        renderNotebookList(data.notebooks || []);
+    } catch (err) {
+        if (nbListEl) nbListEl.innerHTML = '<div class="doc-empty" style="font-size:12px;padding:12px 8px;color:var(--red)">Failed to load notebooks.</div>';
+        showToast("Failed to load notebooks", "error");
+    }
 }
 
 function renderNotebookList(notebooks) {
-    if (!notebooks.length) {
-        nbListEl.innerHTML = `<div class="nb-empty-state">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-tertiary);margin-bottom:8px"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
-            <p>No notebooks yet</p>
-            <button class="nb-empty-create" onclick="document.getElementById('nb-new-btn').click()">Create your first notebook</button>
-        </div>`;
-        return;
-    }
-    nbListEl.innerHTML = notebooks.map(nb => `
-        <div class="nb-item${nb.id === currentNbId ? " active" : ""}" data-id="${nb.id}">
-            <svg class="nb-item-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
-            <span class="nb-item-name">${escapeHtml(nb.name)}</span>
-            <span class="nb-item-count">${nb.source_count || 0}</span>
-            <button class="nb-item-del" data-id="${nb.id}" title="Delete notebook">×</button>
-        </div>
-    `).join("");
-
-    nbListEl.querySelectorAll(".nb-item").forEach(el => {
-        el.addEventListener("click", (e) => {
-            if (e.target.classList.contains("nb-item-del")) return;
-            selectNotebook(el.dataset.id, notebooks.find(n => n.id === el.dataset.id)?.name || "Notebook");
-        });
-    });
-    nbListEl.querySelectorAll(".nb-item-del").forEach(btn => {
-        btn.addEventListener("click", (e) => { e.stopPropagation(); deleteNotebook(btn.dataset.id); });
-    });
+    _allNotebooks = notebooks || [];
+    try { console.debug('renderNotebookList: notebooks count', _allNotebooks.length); } catch {}
+    _renderNbItems(_allNotebooks);
+    // Small visual debug: show a non-intrusive count badge in the notebook list header
+    try {
+        const wrap = document.getElementById('nb-list-wrap');
+        if (wrap) {
+            let badge = wrap.querySelector('.nb-count-badge');
+            if (!badge) {
+                badge = document.createElement('span');
+                badge.className = 'nb-count-badge';
+                badge.style.cssText = 'display:inline-block;margin-left:8px;font-size:11px;color:var(--text-secondary);';
+                const search = wrap.querySelector('#nb-search');
+                if (search && search.parentNode) search.parentNode.insertBefore(badge, search.nextSibling);
+                else wrap.insertBefore(badge, wrap.firstChild);
+            }
+            badge.textContent = `${_allNotebooks.length} notebooks`;
+        }
+    } catch (e) { console.debug('nb count badge error', e); }
 }
 
 async function selectNotebook(nbId, name) {
@@ -988,9 +941,11 @@ async function selectNotebook(nbId, name) {
     currentConvId = null;
 
     nbNameDisplay.textContent = name;
-    nbSourcesWrap.style.display = "";
-    nbConvWrap.style.display    = "";
+    nbTabsWrap.style.display   = "";
     nbPlaceholder.style.display = "none";
+
+    // always start on Files tab when switching notebooks
+    switchNbTab("files");
 
     nbListEl.querySelectorAll(".nb-item").forEach(el => {
         el.classList.toggle("active", el.dataset.id === nbId);
@@ -1000,58 +955,91 @@ async function selectNotebook(nbId, name) {
 }
 
 // ── Notebook creation modal ───────────────────────────────────────────
-const nbCreateOverlay = document.getElementById("nb-create-overlay");
-const nbCreateName = document.getElementById("nb-create-name");
-const nbCreateDesc = document.getElementById("nb-create-desc");
-const nbCreateSubmit = document.getElementById("nb-create-submit");
+// Look up elements fresh each time to avoid stale / null references.
+function _nbModal(id) { return document.getElementById(id); }
 
 function openNbCreateModal() {
-    nbCreateName.value = "";
-    nbCreateDesc.value = "";
-    nbCreateOverlay.classList.add("open");
-    setTimeout(() => nbCreateName.focus(), 100);
+    const overlay = _nbModal("nb-create-overlay");
+    const nameEl  = _nbModal("nb-create-name");
+    const descEl  = _nbModal("nb-create-desc");
+    if (!overlay || !nameEl) { console.warn("nb-create modal elements missing"); return; }
+    nameEl.value = "";
+    if (descEl) descEl.value = "";
+    overlay.classList.add("open");
+    setTimeout(() => nameEl.focus(), 50);
 }
 
 function closeNbCreateModal() {
-    nbCreateOverlay.classList.remove("open");
+    const overlay = _nbModal("nb-create-overlay");
+    if (overlay) overlay.classList.remove("open");
 }
 
 async function submitNewNotebook() {
-    const name = nbCreateName.value.trim();
-    if (!name) { nbCreateName.focus(); return; }
-    nbCreateSubmit.disabled = true;
-    nbCreateSubmit.textContent = "Creating…";
+    const nameEl   = _nbModal("nb-create-name");
+    const submitEl = _nbModal("nb-create-submit");
+    if (!nameEl || !submitEl) return;
+    const name = nameEl.value.trim();
+    if (!name) { nameEl.focus(); return; }
+    submitEl.disabled = true;
+    submitEl.textContent = "Creating…";
+
+    /* ── Step 1: create on server ─────────────────────────────── */
+    let data;
     try {
         const res = await fetch("/api/notebooks", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ name }),
         });
-        const data = await res.json();
-        closeNbCreateModal();
-        await loadNotebooks();
-        selectNotebook(data.id, data.name);
+        if (!res.ok) {
+            const errBody = await res.text().catch(() => "");
+            console.error("Create notebook failed:", res.status, errBody);
+            showToast(`Failed to create notebook (${res.status})`, "error");
+            return;                     // stop here — nothing was created
+        }
+        data = await res.json();
+    } catch (err) {
+        console.error("Create notebook network error:", err);
+        showToast("Cannot reach server — is it running?", "error");
+        return;
     } finally {
-        nbCreateSubmit.disabled = false;
-        nbCreateSubmit.textContent = "Create notebook";
+        submitEl.disabled = false;
+        submitEl.textContent = "Create notebook";
+    }
+
+    /* ── Step 2: close modal & refresh UI (non-critical) ──────── */
+    closeNbCreateModal();
+    showToast(`Notebook "${name}" created`, "success");
+    try {
+        await loadNotebooks();
+        if (data?.id) selectNotebook(data.id, data.name || name);
+    } catch (uiErr) {
+        console.warn("Notebook created but UI refresh failed:", uiErr);
     }
 }
 
-document.getElementById("nb-new-btn").addEventListener("click", openNbCreateModal);
-document.getElementById("nb-create-close").addEventListener("click", closeNbCreateModal);
-nbCreateOverlay.addEventListener("click", (e) => { if (e.target === nbCreateOverlay) closeNbCreateModal(); });
-nbCreateSubmit.addEventListener("click", submitNewNotebook);
-nbCreateName.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submitNewNotebook(); } });
+// Bind modal event listeners (safe with ?.)
+document.getElementById("nb-new-btn")?.addEventListener("click", openNbCreateModal);
+document.getElementById("nb-create-close")?.addEventListener("click", closeNbCreateModal);
+document.getElementById("nb-create-overlay")?.addEventListener("click", (e) => { if (e.target === e.currentTarget) closeNbCreateModal(); });
+document.getElementById("nb-create-submit")?.addEventListener("click", submitNewNotebook);
+document.getElementById("nb-create-name")?.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submitNewNotebook(); } });
+
+// ── Init (runs AFTER all DOM refs are captured) ─────────────────────
+loadHistory();
+loadTools();
+loadNotebooks();
+loadQuickPrompts();
 
 async function deleteNotebook(nbId) {
     if (!confirm("Delete this notebook and all its sources?")) return;
     await fetch(`/api/notebooks/${nbId}`, { method: "DELETE" });
+    showToast("Notebook deleted", "info");
     if (currentNbId === nbId) {
         if (currentConvId) exitNotebookChat();
         currentNbId = null;
         nbNameDisplay.textContent = "Notebooks";
-        nbSourcesWrap.style.display = "none";
-        nbConvWrap.style.display    = "none";
+        nbTabsWrap.style.display   = "none";
         nbPlaceholder.style.display = "";
     }
     loadNotebooks();
@@ -1067,21 +1055,83 @@ async function loadSources(nbId) {
     renderSources(nbId, data.sources || []);
 }
 
+function srcTypeIcon(s) {
+    const name = (s.filename || s.url || "").toLowerCase();
+    if (name.endsWith(".pdf"))
+        return `<svg class="src-type-icon pdf" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
+    if (name.endsWith(".md"))
+        return `<svg class="src-type-icon md" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>`;
+    if (s.url)
+        return `<svg class="src-type-icon url" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`;
+    return `<svg class="src-type-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>`;
+}
+
 function renderSources(nbId, sources) {
     if (!sources.length) {
-        nbSourceList.innerHTML = '<div class="doc-empty" style="font-size:12px">No sources yet.</div>';
+        nbSourceList.innerHTML = '<div class="doc-empty" style="font-size:12px;padding:12px 8px">No sources yet — add a file or URL above.</div>';
         return;
     }
-    nbSourceList.innerHTML = sources.map(s => `
-        <div class="nb-source-item" data-src-id="${s.id}">
-            <span class="src-dot ${s.status}"></span>
-            <span class="src-name" title="${escapeHtml(s.title || s.filename || s.url || '')}">${escapeHtml(s.title || s.filename || s.url || 'Source')}</span>
-            <button class="src-del" data-id="${s.id}" title="Remove">×</button>
-        </div>
-    `).join("");
+    nbSourceList.innerHTML = sources.map(s => {
+        const label = escapeHtml(s.title || s.filename || s.url || "Source");
+        const canPreview = s.filename || s.url;
+        // "locked" = on-device only, never sent to cloud
+        const isLocked = s.sensitivity === "confidential" || s.sensitivity === "locked";
+        const lockBtn = `<button class="src-lock-btn${isLocked ? " locked" : ""}" data-src-id="${s.id}" data-nb-id="${nbId}" data-locked="${isLocked}" title="${isLocked ? "Locked — on-device only, click to unlock" : "Unlocked — click to lock from cloud"}">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2"/>
+                ${isLocked
+                    ? '<path d="M7 11V7a5 5 0 0 1 10 0v4"/>'
+                    : '<path d="M7 11V7a5 5 0 0 1 5-5 5 5 0 0 1 5 5v4"/>'}
+            </svg>
+        </button>`;
+        const rawHref = s.filename ? `/api/notebooks/${nbId}/sources/${s.id}/raw` : (s.url || "#");
+        return `
+        <div class="nb-source-item${canPreview ? " nb-source-clickable" : ""}${isLocked ? " src-item-locked" : ""}" data-src-id="${s.id}" data-nb-id="${nbId}" data-filename="${escapeHtml(s.filename || "")}" data-url="${escapeHtml(s.url || "")}" data-title="${label}" title="${label}">
+            <span class="src-dot ${s.status}" title="${s.status}"></span>
+            ${srcTypeIcon(s)}
+            <span class="src-name">${label}</span>
+            ${isLocked ? '<span class="src-locked-badge" title="On-device only — excluded from cloud"><svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M18 10h-1V7a5 5 0 0 0-10 0v3H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2z"/></svg></span>' : ""}
+            <div class="src-actions">
+                ${lockBtn}
+                ${canPreview ? `<button class="src-preview-btn" data-src-id="${s.id}" title="Preview">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>` : ""}
+                <a class="src-download-btn" href="${rawHref}" download title="Download" ${s.filename ? "" : 'target="_blank" rel="noopener"'}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                </a>
+                <button class="src-del" data-id="${s.id}" title="Remove">×</button>
+            </div>
+        </div>`;
+    }).join("");
+
+    // preview on click (whole row)
+    nbSourceList.querySelectorAll(".nb-source-clickable").forEach(el => {
+        el.addEventListener("click", (e) => {
+            if (e.target.closest(".src-del, .src-lock-btn, .src-download-btn")) return;
+            previewNbSource(el);
+        });
+    });
 
     nbSourceList.querySelectorAll(".src-del").forEach(btn => {
-        btn.addEventListener("click", () => deleteSource(nbId, btn.dataset.id));
+        btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            deleteSource(nbId, btn.dataset.id);
+        });
+    });
+
+    // lock / unlock toggle
+    nbSourceList.querySelectorAll(".src-lock-btn").forEach(btn => {
+        btn.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            const nowLocked = btn.dataset.locked === "true";
+            const newLevel  = nowLocked ? "shareable" : "confidential";
+            await fetch(`/api/notebooks/${btn.dataset.nbId}/sources/${btn.dataset.srcId}/sensitivity`, {
+                method:  "PUT",
+                headers: { "Content-Type": "application/json" },
+                body:    JSON.stringify({ level: newLevel }),
+            });
+            loadSources(nbId);
+        });
     });
 
     // poll for processing sources
@@ -1100,34 +1150,342 @@ function renderSources(nbId, sources) {
     });
 }
 
+async function previewNbSource(el) {
+    const filename = el.dataset.filename;
+    const url      = el.dataset.url;
+    const title    = el.dataset.title || filename || url;
+    const nbId     = el.dataset.nbId;
+    const srcId    = el.dataset.srcId;
+
+    previewTitle.textContent = title;
+    previewBody.textContent = "Loading…";
+    previewPdf.src = "about:blank";
+    previewPdf.style.display = "none";
+    previewBody.style.display = "";
+    previewTabPdf.style.display = "none";
+    previewTabText.classList.add("active");
+    previewTabPdf.classList.remove("active");
+    _previewHasPdf = false;
+    _previewPdfName = null;
+    previewOverlay.classList.add("open");
+
+    try {
+        const res = await fetch(`/api/notebooks/${nbId}/sources/${srcId}/preview`);
+        if (res.ok) {
+            const data = await res.json();
+            previewBody.textContent = data.preview || "(no preview)";
+            previewTitle.textContent = `${title} (${data.size_kb ?? "?"} KB)`;
+            if (data.has_pdf) {
+                _previewHasPdf = true;
+                _previewPdfName = `/api/notebooks/${nbId}/sources/${srcId}/raw`;
+                previewTabPdf.style.display = "";
+                previewDownload.href = _previewPdfName;
+                previewDownload.download = filename || "file.pdf";
+                showPreviewTab("pdf");
+            } else {
+                previewDownload.href = filename ? `/api/notebooks/${nbId}/sources/${srcId}/raw` : (url || "#");
+                previewDownload.download = filename || "";
+            }
+            return;
+        }
+        previewBody.textContent = url
+            ? `URL source: ${url}\n\nPreview not available.`
+            : "Preview not available.";
+    } catch (err) {
+        previewBody.textContent = `Failed to load: ${err.message}`;
+    }
+}
+
 async function deleteSource(nbId, srcId) {
     await fetch(`/api/notebooks/${nbId}/sources/${srcId}`, { method: "DELETE" });
     loadSources(nbId);
 }
 
+// ── LaTeX editor ─────────────────────────────────────────────────────
+
+const latexSource     = document.getElementById("latex-source");
+const latexPreview    = document.getElementById("latex-preview");
+const paperSaveBtn    = document.getElementById("paper-save-btn");
+const paperSaveStatus = document.getElementById("paper-save-status");
+const paperWordCount  = document.getElementById("paper-word-count");
+const paperExportBtn  = document.getElementById("paper-export-btn");
+
+let _paperSaveTimer = null;
+
+// ── Light LaTeX → HTML renderer ──────────────────────────────────────
+function latexToHtml(src) {
+    if (!src || !src.trim()) {
+        return '<div class="latex-placeholder">Your LaTeX preview will appear here…</div>';
+    }
+
+    // Strip preamble (everything before \begin{document})
+    let body = src;
+    const bodyMatch = src.match(/\\begin\{document\}([\s\S]*?)\\end\{document\}/);
+    if (bodyMatch) body = bodyMatch[1];
+
+    // Protect math zones from further processing
+    const mathSlots = [];
+    function protectMath(s) {
+        return s
+            .replace(/\\\[([\s\S]*?)\\\]/g, (_, m) => { mathSlots.push('\\[' + m + '\\]'); return `\x00MATH${mathSlots.length-1}\x00`; })
+            .replace(/\$\$([\s\S]*?)\$\$/g, (_, m) => { mathSlots.push('$$' + m + '$$'); return `\x00MATH${mathSlots.length-1}\x00`; })
+            .replace(/\\\(([\s\S]*?)\\\)/g, (_, m) => { mathSlots.push('\\(' + m + '\\)'); return `\x00MATH${mathSlots.length-1}\x00`; })
+            .replace(/\$([^\$\n]+?)\$/g,   (_, m) => { mathSlots.push('$' + m + '$'); return `\x00MATH${mathSlots.length-1}\x00`; });
+    }
+    function restoreMath(s) {
+        return s.replace(/\x00MATH(\d+)\x00/g, (_, i) => mathSlots[+i]);
+    }
+
+    body = protectMath(body);
+
+    // Abstract
+    body = body.replace(/\\begin\{abstract\}([\s\S]*?)\\end\{abstract\}/g,
+        (_, c) => `<div class="latex-abstract">${c.trim()}</div>`);
+
+    // Environments: equation / align / figure → pass through for MathJax
+    body = body.replace(/\\begin\{(equation\*?|align\*?|gather\*?|multline\*?)\}([\s\S]*?)\\end\{\1\}/g,
+        (_, env, c) => `\\begin{${env}}${c}\\end{${env}}`);
+    body = body.replace(/\\begin\{figure\}[\s\S]*?\\end\{figure\}/g, '[figure]');
+    body = body.replace(/\\begin\{table\}[\s\S]*?\\end\{table\}/g, '[table]');
+
+    // itemize / enumerate
+    body = body.replace(/\\begin\{itemize\}([\s\S]*?)\\end\{itemize\}/g,
+        (_, c) => '<ul>' + c.replace(/\\item\s+/g, '<li>').replace(/<li>([\s\S]*?)(?=<li>|$)/g, '<li>$1</li>') + '</ul>');
+    body = body.replace(/\\begin\{enumerate\}([\s\S]*?)\\end\{enumerate\}/g,
+        (_, c) => '<ol>' + c.replace(/\\item\s+/g, '<li>').replace(/<li>([\s\S]*?)(?=<li>|$)/g, '<li>$1</li>') + '</ol>');
+
+    // Sections
+    body = body.replace(/\\part\{([^}]*)\}/g,       '<h1>$1</h1>');
+    body = body.replace(/\\chapter\{([^}]*)\}/g,    '<h1>$1</h1>');
+    body = body.replace(/\\section\{([^}]*)\}/g,    '<h2>$1</h2>');
+    body = body.replace(/\\subsection\{([^}]*)\}/g, '<h3>$1</h3>');
+    body = body.replace(/\\subsubsection\{([^}]*)\}/g, '<h4>$1</h4>');
+    body = body.replace(/\\paragraph\{([^}]*)\}/g, '<strong>$1</strong> ');
+
+    // Title / author / date
+    body = body.replace(/\\title\{([^}]*)\}/g,  '<h1 style="text-align:center">$1</h1>');
+    body = body.replace(/\\author\{([^}]*)\}/g, '<p style="text-align:center;font-style:italic">$1</p>');
+    body = body.replace(/\\date\{([^}]*)\}/g,   '<p style="text-align:center;color:var(--text-tertiary)">$1</p>');
+    body = body.replace(/\\maketitle/g, '');
+
+    // Inline formatting
+    body = body.replace(/\\textbf\{([^}]*)\}/g,   '<strong>$1</strong>');
+    body = body.replace(/\\textit\{([^}]*)\}/g,   '<em>$1</em>');
+    body = body.replace(/\\emph\{([^}]*)\}/g,     '<em class="latex-emph">$1</em>');
+    body = body.replace(/\\texttt\{([^}]*)\}/g,   '<code>$1</code>');
+    body = body.replace(/\\underline\{([^}]*)\}/g,'<u>$1</u>');
+    body = body.replace(/\\footnote\{([^}]*)\}/g, '<sup title="$1">[fn]</sup>');
+    body = body.replace(/\\cite\{([^}]*)\}/g,     '<sup>[<em>$1</em>]</sup>');
+    body = body.replace(/\\ref\{([^}]*)\}/g,      '[ref:$1]');
+    body = body.replace(/\\label\{([^}]*)\}/g,    '<span class="latex-label" data-label="$1"></span>');
+    body = body.replace(/\\url\{([^}]*)\}/g,      '<a href="$1" target="_blank">$1</a>');
+    body = body.replace(/\\href\{([^}]*)\}\{([^}]*)\}/g, '<a href="$1" target="_blank">$2</a>');
+
+    // Horizontal rule
+    body = body.replace(/\\(?:hrule|noindent\\rule\{[^}]*\}\{[^}]*\})/g, '<hr>');
+
+    // Special chars
+    body = body.replace(/\\ldots/g, '…');
+    body = body.replace(/---/g, '—').replace(/--/g, '–');
+    body = body.replace(/``/g, '\u201C').replace(/''/g, '\u201D');
+    body = body.replace(/`/g,  '\u2018').replace(/'/g,  '\u2019');
+    body = body.replace(/~/g,  '\u00A0');
+    body = body.replace(/\\%/g, '%').replace(/\\&/g, '&amp;').replace(/\\\$/g, '&#36;');
+
+    // Strip remaining unknown commands
+    body = body.replace(/\\[a-zA-Z]+(\{[^}]*\}|\[[^\]]*\])*/g, '');
+    body = body.replace(/[{}]/g, '');
+
+    // Paragraphs: blank lines → <p>
+    body = restoreMath(body);
+    const paras = body.split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
+    const html = paras.map(p => {
+        if (/^<(h[1-6]|ul|ol|div|hr|table|blockquote)/.test(p)) return p;
+        return '<p>' + p.replace(/\n/g, ' ') + '</p>';
+    }).join('\n');
+
+    return html;
+}
+
+function updateWordCount() {
+    if (!latexSource || !paperWordCount) return;
+    const text = latexSource.value.replace(/\\[a-zA-Z]+(\{[^}]*\}|\[[^\]]*\])*/g, ' ').replace(/[{}%\\]/g, ' ');
+    const words = text.trim().split(/\s+/).filter(w => w.length > 0);
+    paperWordCount.textContent = words.length + ' words';
+}
+
+function renderLatexPreview() {
+    if (!latexSource || !latexPreview) return;
+    latexPreview.innerHTML = latexToHtml(latexSource.value);
+    updateWordCount();
+    // Trigger MathJax typeset
+    if (window.MathJax && window.MathJax.typesetPromise) {
+        window.MathJax.typesetPromise([latexPreview]).catch(() => {});
+    }
+}
+
+async function loadPaper(nbId) {
+    if (!nbId || !latexSource) return;
+    try {
+        const res  = await fetch(`/api/notebooks/${nbId}/paper`);
+        const data = await res.json();
+        latexSource.value = data.content || "";
+        renderLatexPreview();
+        paperSaveStatus.textContent = "";
+    } catch {}
+}
+
+async function savePaper(nbId) {
+    if (!nbId || !latexSource) return;
+    paperSaveStatus.textContent = "Saving…";
+    try {
+        await fetch(`/api/notebooks/${nbId}/paper`, {
+            method:  "POST",
+            headers: { "Content-Type": "application/json" },
+            body:    JSON.stringify({ content: latexSource.value }),
+        });
+        paperSaveStatus.textContent = "Saved ✓";
+        setTimeout(() => { paperSaveStatus.textContent = ""; }, 2000);
+    } catch {
+        paperSaveStatus.textContent = "Save failed";
+    }
+}
+
+// Snippet insertion helper
+function insertSnippet(snippet) {
+    if (!latexSource) return;
+    latexSource.focus();
+    const start = latexSource.selectionStart;
+    const end   = latexSource.selectionEnd;
+    const val   = latexSource.value;
+    const resolved = snippet.replace(/\\n/g, '\n');
+    // If snippet has {}, place cursor inside; else after
+    const insertPos = resolved.indexOf('{}') !== -1
+        ? start + resolved.indexOf('{}') + 1
+        : start + resolved.length;
+    latexSource.value = val.slice(0, start) + resolved + val.slice(end);
+    latexSource.selectionStart = latexSource.selectionEnd = insertPos;
+    renderLatexPreview();
+}
+
+// Toolbar snippet buttons
+document.querySelectorAll(".paper-tool-btn[data-snippet]").forEach(btn => {
+    btn.addEventListener("click", () => insertSnippet(btn.dataset.snippet));
+});
+
+if (paperSaveBtn) paperSaveBtn.addEventListener("click", () => savePaper(currentNbId));
+
+// Export .tex
+if (paperExportBtn) {
+    paperExportBtn.addEventListener("click", () => {
+        if (!latexSource) return;
+        const blob = new Blob([latexSource.value], { type: "text/plain" });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement("a");
+        a.href     = url;
+        a.download = (currentNbId ? `paper_${currentNbId}` : "paper") + ".tex";
+        a.click();
+        URL.revokeObjectURL(url);
+    });
+}
+
+// PDF: open a print window scoped to the rendered preview
+const paperPdfBtn = document.getElementById("paper-pdf-btn");
+if (paperPdfBtn) {
+    paperPdfBtn.addEventListener("click", () => {
+        if (!latexPreview) return;
+        const previewHtml = latexPreview.innerHTML;
+        const win = window.open("", "_blank", "width=900,height=700");
+        win.document.write(`<!DOCTYPE html><html><head>
+<meta charset="UTF-8">
+<title>Paper</title>
+<script>window.MathJax={tex:{inlineMath:[['$','$'],['\\\\(','\\\\)']],displayMath:[['$$','$$'],['\\\\[','\\\\]']]},svg:{fontCache:'global'},startup:{typeset:true}};<\/script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"><\/script>
+<style>
+  body { font-family: Georgia, 'Times New Roman', serif; font-size: 12pt; line-height: 1.7; max-width: 680px; margin: 40px auto; padding: 0 20px; color: #111; }
+  h1 { font-size: 1.5em; } h2 { font-size: 1.25em; } h3 { font-size: 1.1em; }
+  code { font-family: monospace; font-size: 0.88em; background: #f4f4f4; padding: 1px 4px; border-radius: 3px; }
+  .latex-abstract { border-left: 3px solid #ccc; padding: 8px 12px; margin: 1em 0; font-style: italic; color: #555; }
+  .latex-label, .latex-placeholder { display: none; }
+  ul, ol { margin-left: 1.4em; }
+  @media print { body { margin: 0; } }
+</style>
+</head><body>${previewHtml}<script>window.addEventListener('load',()=>{ if(window.MathJax&&window.MathJax.typesetPromise){ window.MathJax.typesetPromise().then(()=>window.print()); } else { window.print(); } });<\/script></body></html>`);
+        win.document.close();
+    });
+}
+
+// Live preview + auto-save on input
+let _previewTimer = null;
+if (latexSource) {
+    latexSource.addEventListener("input", () => {
+        clearTimeout(_previewTimer);
+        _previewTimer = setTimeout(renderLatexPreview, 300);
+        clearTimeout(_paperSaveTimer);
+        _paperSaveTimer = setTimeout(() => savePaper(currentNbId), 2000);
+    });
+}
+
 // File upload
 document.getElementById("nb-file-input").addEventListener("change", async (e) => {
-    if (!currentNbId || !e.target.files.length) return;
-    for (const f of e.target.files) {
+    const input = e.target;
+    if (!currentNbId || !input.files || !input.files.length) return;
+    const files = Array.from(input.files);
+    input.disabled = true;
+    let success = 0, failed = 0;
+    for (const f of files) {
         const fd = new FormData();
         fd.append("file", f);
-        await fetch(`/api/notebooks/${currentNbId}/upload`, { method: "POST", body: fd });
+        try {
+            const res = await fetch(`/api/notebooks/${currentNbId}/upload`, { method: "POST", body: fd });
+            if (!res.ok) {
+                failed += 1;
+                const body = await res.text().catch(() => "");
+                console.error("Upload failed for", f.name, res.status, body);
+            } else {
+                success += 1;
+            }
+        } catch (err) {
+            failed += 1;
+            console.error("Network error while uploading", f.name, err);
+        }
     }
-    e.target.value = "";
-    setTimeout(() => loadSources(currentNbId), 500);
+    input.value = "";
+    input.disabled = false;
+    if (success && !failed) {
+        showToast(`${success} file${success > 1 ? "s" : ""} uploaded — processing…`, "success");
+    } else if (success && failed) {
+        showToast(`${success} uploaded, ${failed} failed — check console for details`, "warn");
+    } else {
+        showToast(`Failed to upload files — check server and try again`, "error");
+    }
+    setTimeout(() => loadSources(currentNbId), 700);
 });
 
 // URL add
 document.getElementById("nb-url-btn").addEventListener("click", async () => {
-    const url = document.getElementById("nb-url-input").value.trim();
+    const urlEl = document.getElementById("nb-url-input");
+    const url = (urlEl?.value || "").trim();
     if (!url || !currentNbId) return;
-    await fetch(`/api/notebooks/${currentNbId}/add-url`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
-    });
-    document.getElementById("nb-url-input").value = "";
-    setTimeout(() => loadSources(currentNbId), 500);
+    try {
+        const res = await fetch(`/api/notebooks/${currentNbId}/add-url`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url }),
+        });
+        if (!res.ok) {
+            const body = await res.text().catch(() => "");
+            console.error("Add URL failed", res.status, body);
+            showToast(`Failed to add URL (${res.status})`, "error");
+            return;
+        }
+        urlEl.value = "";
+        showToast("URL source added — processing…", "success");
+        setTimeout(() => loadSources(currentNbId), 700);
+    } catch (err) {
+        console.error("Network error adding URL", err);
+        showToast("Cannot reach server — URL not added", "error");
+    }
 });
 
 // ── Conversations ─────────────────────────────────────────────────────
@@ -1206,6 +1564,9 @@ function renderConversations(nbId, convs) {
 async function selectConversation(nbId, convId, title) {
     currentConvId = convId;
     enterNotebookChat(nbNameDisplay.textContent, title);
+
+    // switch to Chats tab so the conversation list stays visible
+    switchNbTab("chats");
 
     if (window.innerWidth <= 1200) {
         nbColumn.classList.add("closed");
@@ -1451,20 +1812,235 @@ nbClearBtn.addEventListener("click", () => {
 const nbMenuBtn        = document.getElementById("nb-menu-btn");
 const nbSidebarOverlay = document.getElementById("nb-sidebar-overlay");
 const nbColumn         = document.getElementById("panel-notebook");
-const nbOpenBtn        = document.getElementById("nb-open-btn");
-
-if (window.innerWidth > 1200) {
-    nbColumn.classList.remove("closed");
-}
 
 function toggleNbSidebar() {
     const isClosed = nbColumn.classList.toggle("closed");
     nbSidebarOverlay.classList.toggle("open", !isClosed);
+    // When opening with no notebook selected, show Files tab with placeholder
+    if (!isClosed && !currentNbId) {
+        nbPlaceholder.style.display = "";
+        nbTabsWrap.style.display = "none";
+    }
 }
 
 nbMenuBtn.addEventListener("click", toggleNbSidebar);
 nbSidebarOverlay.addEventListener("click", toggleNbSidebar);
-nbOpenBtn.addEventListener("click", () => {
-    nbColumn.classList.remove("closed");
-    nbSidebarOverlay.classList.add("open");
+
+// ── Calendar ─────────────────────────────────────────────────────────
+
+const EVENT_TYPE_META = {
+    deadline:   { emoji: "⏰", cls: "cal-ev-deadline" },
+    conference: { emoji: "🎤", cls: "cal-ev-conference" },
+    meeting:    { emoji: "👥", cls: "cal-ev-meeting" },
+    event:      { emoji: "📌", cls: "cal-ev-event" },
+    reminder:   { emoji: "🔔", cls: "cal-ev-reminder" },
+};
+
+let _calYear  = new Date().getFullYear();
+let _calMonth = new Date().getMonth(); // 0-indexed
+let _calEvents = [];
+
+const calGrid       = document.getElementById("cal-grid");
+const calMonthLabel = document.getElementById("cal-month-label");
+const calAddForm    = document.getElementById("cal-add-form");
+const calEventTitle = document.getElementById("cal-event-title");
+const calEventDate  = document.getElementById("cal-event-date");
+const calEventType  = document.getElementById("cal-event-type");
+const calEventNote  = document.getElementById("cal-event-note");
+
+const MONTHS = ["January","February","March","April","May","June",
+                "July","August","September","October","November","December"];
+
+async function loadCalendar(nbId) {
+    if (!nbId) return;
+    try {
+        const res = await fetch(`/api/notebooks/${nbId}/events`);
+        const data = await res.json();
+        _calEvents = data.events || [];
+    } catch { _calEvents = []; }
+    renderCalendar();
+}
+
+function renderCalendar() {
+    if (!calGrid) return;
+    calMonthLabel.textContent = `${MONTHS[_calMonth]} ${_calYear}`;
+
+    // Build a map: "YYYY-MM-DD" → [events]
+    const byDay = {};
+    for (const ev of _calEvents) {
+        const d = ev.date.slice(0, 10);
+        (byDay[d] = byDay[d] || []).push(ev);
+    }
+
+    // First day of month (Mon=0 offset)
+    const firstDay = new Date(_calYear, _calMonth, 1);
+    const totalDays = new Date(_calYear, _calMonth + 1, 0).getDate();
+    let startOffset = firstDay.getDay(); // 0=Sun, need Mon=0
+    startOffset = (startOffset === 0) ? 6 : startOffset - 1;
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+
+    let html = "";
+    // Empty cells before first day
+    for (let i = 0; i < startOffset; i++) {
+        html += `<div class="cal-cell cal-cell-empty"></div>`;
+    }
+    for (let d = 1; d <= totalDays; d++) {
+        const dateStr = `${_calYear}-${String(_calMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+        const evs = byDay[dateStr] || [];
+        const isToday = dateStr === todayStr;
+        const evChips = evs.map(ev => {
+            const meta = EVENT_TYPE_META[ev.type] || EVENT_TYPE_META.event;
+            return `<div class="cal-chip ${meta.cls}" data-id="${ev.id}" title="${escapeHtml(ev.title)}${ev.note ? ' — ' + escapeHtml(ev.note) : ''}">
+                <span class="cal-chip-emoji">${meta.emoji}</span>
+                <span class="cal-chip-title">${escapeHtml(ev.title)}</span>
+                <button class="cal-chip-del" data-id="${ev.id}" title="Remove">×</button>
+            </div>`;
+        }).join("");
+        html += `<div class="cal-cell${isToday ? " cal-today" : ""}${evs.length ? " cal-has-events" : ""}" data-date="${dateStr}">
+            <span class="cal-day-num">${d}</span>
+            <div class="cal-chips">${evChips}</div>
+        </div>`;
+    }
+
+    calGrid.innerHTML = html;
+
+    // Click on day cell → pre-fill date and open form
+    calGrid.querySelectorAll(".cal-cell[data-date]").forEach(cell => {
+        cell.addEventListener("click", (e) => {
+            if (e.target.closest(".cal-chip-del")) return;
+            calEventDate.value = cell.dataset.date;
+            showCalForm();
+        });
+    });
+
+    // Delete event chips
+    calGrid.querySelectorAll(".cal-chip-del").forEach(btn => {
+        btn.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            const eid = btn.dataset.id;
+            await fetch(`/api/notebooks/${currentNbId}/events/${eid}`, { method: "DELETE" });
+            await loadCalendar(currentNbId);
+        });
+    });
+}
+
+function showCalForm() {
+    if (calAddForm) calAddForm.style.display = "";
+    if (calEventTitle) calEventTitle.focus();
+}
+function hideCalForm() {
+    if (calAddForm) calAddForm.style.display = "none";
+    if (calEventTitle) calEventTitle.value = "";
+    if (calEventNote)  calEventNote.value  = "";
+}
+
+// Nav buttons
+document.getElementById("cal-prev-btn")?.addEventListener("click", () => {
+    _calMonth--;
+    if (_calMonth < 0) { _calMonth = 11; _calYear--; }
+    renderCalendar();
 });
+document.getElementById("cal-next-btn")?.addEventListener("click", () => {
+    _calMonth++;
+    if (_calMonth > 11) { _calMonth = 0; _calYear++; }
+    renderCalendar();
+});
+document.getElementById("cal-today-btn")?.addEventListener("click", () => {
+    _calYear  = new Date().getFullYear();
+    _calMonth = new Date().getMonth();
+    renderCalendar();
+});
+document.getElementById("cal-add-btn")?.addEventListener("click", () => {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    if (calEventDate) calEventDate.value = todayStr;
+    showCalForm();
+});
+document.getElementById("cal-cancel-event-btn")?.addEventListener("click", hideCalForm);
+
+document.getElementById("cal-save-event-btn")?.addEventListener("click", async () => {
+    const title = calEventTitle?.value.trim();
+    const date  = calEventDate?.value.trim();
+    if (!title || !date || !currentNbId) return;
+    await fetch(`/api/notebooks/${currentNbId}/events`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            title,
+            date,
+            type: calEventType?.value || "event",
+            note: calEventNote?.value.trim() || null,
+        }),
+    });
+    hideCalForm();
+    showToast(`Event "${title}" added`, "success");
+    await loadCalendar(currentNbId);
+});
+
+// ── Dark mode ─────────────────────────────────────────────────────────
+
+const THEME_KEY = "hyphae_theme";
+
+function applyTheme(dark) {
+    document.body.classList.toggle("dark", dark);
+    const label = document.querySelector(".theme-label");
+    if (label) label.textContent = dark ? "Light mode" : "Dark mode";
+    try { localStorage.setItem(THEME_KEY, dark ? "dark" : "light"); } catch {}
+}
+
+// Restore saved preference or system preference
+(function initTheme() {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (saved === "dark") applyTheme(true);
+    else if (saved === "light") applyTheme(false);
+    else if (window.matchMedia("(prefers-color-scheme: dark)").matches) applyTheme(true);
+})();
+
+document.getElementById("theme-toggle")?.addEventListener("click", () => {
+    applyTheme(!document.body.classList.contains("dark"));
+});
+
+// ── Notebook search / filter ──────────────────────────────────────────
+
+document.getElementById("nb-search")?.addEventListener("input", () => {
+    const q = (document.getElementById("nb-search")?.value || "").toLowerCase().trim();
+    const filtered = q ? _allNotebooks.filter(nb => (nb.name || "").toLowerCase().includes(q)) : _allNotebooks;
+    _renderNbItems(filtered);
+});
+
+// Internal render that only renders the list items (used by search filter)
+function _renderNbItems(notebooks) {
+    if (!nbListEl) { try { console.warn('nbListEl is null - cannot render notebooks'); } catch {} ; return; }
+    try { console.debug('_renderNbItems: rendering', notebooks.length); } catch {}
+    if (!notebooks.length) {
+        const q = (document.getElementById("nb-search")?.value || "").trim();
+        if (q) {
+            nbListEl.innerHTML = '<div class="doc-empty" style="font-size:12px;padding:12px 8px">No matching notebooks.</div>';
+        } else {
+            nbListEl.innerHTML = `<div class="nb-empty-state">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-tertiary);margin-bottom:8px"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
+                <p>No notebooks yet</p>
+                <button class="nb-empty-create" onclick="document.getElementById('nb-new-btn').click()">Create your first notebook</button>
+            </div>`;
+        }
+        return;
+    }
+    nbListEl.innerHTML = notebooks.map(nb => `
+        <div class="nb-item${nb.id === currentNbId ? " active" : ""}" data-id="${nb.id}">
+            <svg class="nb-item-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
+            <span class="nb-item-name">${escapeHtml(nb.name)}</span>
+            <span class="nb-item-count">${nb.source_count || 0}</span>
+            <button class="nb-item-del" data-id="${nb.id}" title="Delete notebook">×</button>
+        </div>
+    `).join("");
+
+    nbListEl.querySelectorAll(".nb-item").forEach(el => {
+        el.addEventListener("click", (e) => {
+            if (e.target.classList.contains("nb-item-del")) return;
+            selectNotebook(el.dataset.id, notebooks.find(n => n.id === el.dataset.id)?.name || "Notebook");
+        });
+    });
+    nbListEl.querySelectorAll(".nb-item-del").forEach(btn => {
+        btn.addEventListener("click", (e) => { e.stopPropagation(); deleteNotebook(btn.dataset.id); });
+    });
+}
