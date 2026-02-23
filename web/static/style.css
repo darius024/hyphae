@@ -1804,6 +1804,34 @@ body {
     color: var(--text-secondary);
 }
 
+/* Chat welcome placeholder (shown when no conversation is open) */
+.chat-welcome {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 24px;
+}
+
+.chat-welcome-inner {
+    text-align: center;
+    max-width: 520px;
+}
+
+.chat-welcome-inner h3 {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.chat-welcome-inner .quick-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 8px;
+}
+
 .nb-chat-wrap {
     flex: 1;
     display: flex;

@@ -1,7 +1,3 @@
-const messagesEl = document.getElementById("messages");
-const queryInput = document.getElementById("query-input");
-const sendBtn = document.getElementById("send-btn");
-const voiceBtn = document.getElementById("voice-btn");
 const toolListEl = document.getElementById("tool-list");
 // Doc search input (used for Cmd/Ctrl+K). Fallback to any .doc-search field.
 const docSearchInput = document.getElementById("nb-url-input") || document.querySelector(".doc-search");
@@ -9,7 +5,6 @@ const quickButtonsEl = document.getElementById("quick-buttons");
 
 let isRecording = false;
 let mediaRecorder = null;
-let isBusy = false;
 
 // ── Toast notification system ───────────────────────────────────────
 function showToast(message, type = "info", duration = 3000) {
@@ -32,77 +27,7 @@ function showToast(message, type = "info", duration = 3000) {
     }, duration);
 }
 
-const HISTORY_KEY = "hyphae_chat_history";
-
-function saveHistory() {
-    try {
-        const msgs = [];
-        messagesEl.querySelectorAll(".message").forEach(el => {
-            if (el.id === "thinking" || el.classList.contains("tool-details")) return;
-            const role = el.classList.contains("user") ? "user" : "assistant";
-            const bubble = el.querySelector(".bubble");
-            if (!bubble) return;
-            const meta = {};
-            const routeBadge = el.querySelector(".badge.local, .badge.cloud");
-            const confBadge = el.querySelector(".badge.conf-high, .badge.conf-med, .badge.conf-low");
-            const metaSpan = el.querySelector(".meta span:last-child");
-            if (routeBadge) meta.source = routeBadge.classList.contains("local") ? "on-device" : "cloud";
-            if (metaSpan) meta.routing_ms = metaSpan.textContent.replace("ms", "");
-            if (confBadge) {
-                if (confBadge.classList.contains("conf-high")) meta.confidence = 1;
-                else if (confBadge.classList.contains("conf-med")) meta.confidence = 0.5;
-                else meta.confidence = 0.1;
-            }
-            msgs.push({ role, text: bubble.textContent, html: bubble.innerHTML, meta: Object.keys(meta).length ? meta : null });
-        });
-        localStorage.setItem(HISTORY_KEY, JSON.stringify(msgs));
-    } catch {}
-}
-
-function loadHistory() {
-    try {
-        const raw = localStorage.getItem(HISTORY_KEY);
-        if (!raw) return;
-        const msgs = JSON.parse(raw);
-        if (!msgs.length) return;
-        messagesEl.innerHTML = "";
-        for (const m of msgs) {
-            const div = document.createElement("div");
-            div.className = `message ${m.role}`;
-            let html = `<div class="bubble">${m.html || escapeHtml(m.text)}</div>`;
-            html += buildMetaHtml(m.meta);
-            div.innerHTML = html;
-            messagesEl.appendChild(div);
-        }
-        scrollToBottom();
-    } catch {}
-}
-
-function clearHistory() {
-    localStorage.removeItem(HISTORY_KEY);
-    messagesEl.innerHTML = `<div class="message assistant">
-        <div class="bubble">
-            <strong>Welcome back, researcher.</strong> Your documents are loaded and ready. Ask questions,
-            search your corpus, compare papers, or generate hypotheses.
-            <span class="privacy-note">Confidential data stays on-device — cloud is only used when you need external resources.</span>
-        </div>
-    </div>`;
-}
-
-function setBusy(busy) {
-    isBusy = busy;
-    sendBtn.disabled = busy;
-    voiceBtn.disabled = busy && !isRecording;
-    queryInput.disabled = busy;
-    if (busy) {
-        sendBtn.classList.add("disabled");
-    } else {
-        sendBtn.classList.remove("disabled");
-        queryInput.focus();
-    }
-}
-
-// ── Messages ────────────────────────────────────────────────────────
+// ── Shared rendering utilities ──────────────────────────────────────
 
 function renderMarkdown(text) {
     let html = escapeHtml(text);
@@ -139,43 +64,6 @@ function buildMetaHtml(meta) {
         privacyBadge = '<span class="badge privacy-cloud" title="Data sent to Gemini for synthesis"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg> CLOUD</span>';
     }
     return `<div class="meta">${routeBadge}${confBadge}${privacyBadge} <span>${meta.routing_ms}ms</span></div>`;
-}
-
-function addMessage(role, content, meta) {
-    const div = document.createElement("div");
-    div.className = `message ${role}`;
-
-    const rendered = role === "assistant" ? renderMarkdown(content) : escapeHtml(content);
-    let html = `<div class="bubble">${rendered}</div>`;
-    html += buildMetaHtml(meta);
-
-    div.innerHTML = html;
-    messagesEl.appendChild(div);
-    scrollToBottom();
-    saveHistory();
-    return div;
-}
-
-function addErrorMessage(text, retryFn) {
-    const div = document.createElement("div");
-    div.className = "message assistant";
-
-    let html = `<div class="bubble error-bubble">${escapeHtml(text)}`;
-    if (retryFn) {
-        html += ` <button class="retry-btn">Retry</button>`;
-    }
-    html += `</div>`;
-
-    div.innerHTML = html;
-    if (retryFn) {
-        div.querySelector(".retry-btn").addEventListener("click", () => {
-            div.remove();
-            retryFn();
-        });
-    }
-    messagesEl.appendChild(div);
-    scrollToBottom();
-    return div;
 }
 
 function formatToolResult(tool, result) {
@@ -224,7 +112,7 @@ function formatToolResult(tool, result) {
     }
 }
 
-function addToolResults(functionCalls, toolResults) {
+function nbAddToolResults(functionCalls, toolResults) {
     if (!toolResults || toolResults.length === 0) return;
 
     const div = document.createElement("div");
@@ -253,17 +141,16 @@ function addToolResults(functionCalls, toolResults) {
 
     div.appendChild(summary);
     div.appendChild(content);
-    messagesEl.appendChild(div);
-    scrollToBottom();
+    nbMessagesEl.appendChild(div);
+    nbScrollBottom();
 }
 
-function addThinking() {
+function addThinking(targetEl) {
     const div = document.createElement("div");
     div.className = "message assistant";
     div.id = "thinking";
     div.innerHTML = '<div class="thinking"><span></span><span></span><span></span></div>';
-    messagesEl.appendChild(div);
-    scrollToBottom();
+    targetEl.appendChild(div);
     return div;
 }
 
@@ -272,146 +159,10 @@ function removeThinking() {
     if (el) el.remove();
 }
 
-function scrollToBottom() {
-    messagesEl.scrollTop = messagesEl.scrollHeight;
-}
-
 function escapeHtml(text) {
     const div = document.createElement("div");
     div.textContent = text;
     return div.innerHTML;
-}
-
-// ── Query ───────────────────────────────────────────────────────────
-
-async function sendQuery(text) {
-    if (!text.trim() || isBusy) return;
-
-    addMessage("user", text);
-    queryInput.value = "";
-    queryInput.style.height = "auto";
-
-    setBusy(true);
-    addThinking();
-
-    try {
-        const res = await fetch("/api/query", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ message: text }),
-        });
-        const data = await res.json();
-        removeThinking();
-
-        if (!res.ok || data.error || data.detail) {
-            const errMsg = data.error || data.detail || `Server error (${res.status})`;
-            addErrorMessage(`Error: ${errMsg}`, () => sendQuery(text));
-            return;
-        }
-
-        const meta = {
-            source: data.source, routing_ms: data.routing_ms,
-            confidence: data.confidence, data_local: data.data_local,
-        };
-        const calls = data.function_calls || [];
-
-        if (data.answer) {
-            addMessage("assistant", data.answer, meta);
-        } else if (calls.length > 0) {
-            addMessage("assistant", `Called ${calls.map(fc => fc.name).join(", ")}`, meta);
-        } else {
-            addMessage("assistant", "I couldn't find a relevant tool for that query. Try rephrasing?", meta);
-        }
-
-        addToolResults(calls, data.tool_results);
-    } catch (err) {
-        removeThinking();
-        addErrorMessage(`Network error: ${err.message}`, () => sendQuery(text));
-    } finally {
-        setBusy(false);
-    }
-}
-
-// ── Voice ───────────────────────────────────────────────────────────
-
-async function toggleVoice() {
-    if (isRecording) {
-        stopRecording();
-        return;
-    }
-
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-            ? "audio/webm;codecs=opus"
-            : MediaRecorder.isTypeSupported("audio/mp4") ? "audio/mp4" : "";
-        mediaRecorder = mimeType
-            ? new MediaRecorder(stream, { mimeType })
-            : new MediaRecorder(stream);
-        const chunks = [];
-
-        mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
-        mediaRecorder.onstop = async () => {
-            stream.getTracks().forEach(t => t.stop());
-            const actualMime = mediaRecorder.mimeType || "audio/webm";
-            const ext = actualMime.includes("mp4") ? ".mp4" : ".webm";
-            const blob = new Blob(chunks, { type: actualMime });
-            await sendVoice(blob, ext);
-        };
-
-        mediaRecorder.start();
-        isRecording = true;
-        voiceBtn.classList.add("recording");
-    } catch (err) {
-        addErrorMessage(`Microphone access denied: ${err.message}`);
-    }
-}
-
-function stopRecording() {
-    if (mediaRecorder && mediaRecorder.state !== "inactive") {
-        mediaRecorder.stop();
-    }
-    isRecording = false;
-    voiceBtn.classList.remove("recording");
-}
-
-async function sendVoice(blob, ext = ".webm") {
-    setBusy(true);
-    addThinking();
-    const form = new FormData();
-    form.append("audio", blob, `recording${ext}`);
-
-    try {
-        const res = await fetch("/api/voice", { method: "POST", body: form });
-        const data = await res.json();
-        removeThinking();
-
-        if (!res.ok || data.error || data.detail) {
-            const errMsg = data.error || data.detail || `Server error (${res.status})`;
-            const hint = data.hint ? `\n${data.hint}` : "";
-            addErrorMessage(`Voice error: ${errMsg}${hint}`);
-            return;
-        }
-
-        addMessage("user", `🎤 "${data.transcript}"`);
-        const meta = { source: data.source, routing_ms: data.routing_ms, confidence: data.confidence };
-        const calls = data.function_calls || [];
-
-        if (data.answer) {
-            addMessage("assistant", data.answer, meta);
-        } else if (calls.length > 0) {
-            addMessage("assistant", `Called ${calls.map(fc => fc.name).join(", ")}`, meta);
-        } else {
-            addMessage("assistant", "I couldn't process that. Try again?", meta);
-        }
-
-        addToolResults(calls, data.tool_results);
-    } catch (err) {
-        removeThinking();
-        addErrorMessage(`Voice error: ${err.message}`);
-    } finally {
-        setBusy(false);
-    }
 }
 
 // ── Tools list (UI helper) ─────────────────────────────────────────
@@ -474,9 +225,10 @@ function renderTools(tools) {
             const icon   = TOOL_ICONS[t.name] || "🔧";
             const prompt = TOOL_PROMPTS[t.name] || t.name.replace(/_/g, " ");
             const badge  = toolSourceBadge(t.source);
+            // Insert prompt into notebook chat input if available, else ignore
             return `
                 <div class="tool-item" title="${escapeHtml(t.description || "")}"
-                     onclick="(()=>{const q=document.getElementById('query-input');if(q){q.value=${JSON.stringify(prompt)};q.focus();q.style.height='auto';q.style.height=Math.min(q.scrollHeight,120)+'px';}})()">
+                     onclick="(()=>{const q=document.getElementById('nb-query-input');if(q){q.value=${JSON.stringify(prompt)};q.focus();q.style.height='auto';q.style.height=Math.min(q.scrollHeight,120)+'px';}})()">
                     <span class="tool-icon">${icon}</span>
                     <div class="tool-text">
                         <div class="tool-name">${badge} ${escapeHtml(t.name.replace(/_/g, " "))}</div>
@@ -539,38 +291,36 @@ document.getElementById("doi-input")?.addEventListener("keydown", (e) => {
     if (e.key === "Enter") document.getElementById("doi-go-btn")?.click();
 });
 
-// ── Quick research prompts ─────────────────────────────────────────
+// ── Quick research prompts (shown in welcome area & used by notebook chat) ──
+
+let allDocuments = []; // populated if tools list has doc info
 
 function loadQuickPrompts() {
     if (!quickButtonsEl) return;
 
-    const names = allDocuments.map(d => d.name);
-    const doc1 = names[0] || "document_a.txt";
-    const doc2 = names.length > 1 ? names[1] : "document_b.txt";
-
     const prompts = [
         {
             title: "Summary with citations",
-            hint: "Scan corpus and cite source filenames",
-            text: "Summarize the corpus notes with inline citations [filename] and highlight gaps to investigate next.",
+            hint: "Scan sources and cite filenames",
+            text: "Summarize the notebook sources with inline citations [filename] and highlight gaps to investigate next.",
             icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>',
         },
         {
             title: "Compare documents",
-            hint: "Contrast two files on a topic",
-            text: `Compare ${doc1} vs ${doc2} — output key differences with citations.`,
+            hint: "Contrast two source files",
+            text: "Compare the main themes across my notebook sources — output key differences with citations.",
             icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
         },
         {
             title: "Design experiment",
             hint: "Propose next steps and metrics",
-            text: "Based on the corpus, propose the next experiment to pursue; include materials, protocol steps, and measurement plan with citations.",
+            text: "Based on the notebook sources, propose the next experiment to pursue; include materials, protocol steps, and measurement plan with citations.",
             icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v11"/><path d="M15 3v4"/><path d="M9 14l-4 7h14l-4-7"/><circle cx="9" cy="14" r="2"/></svg>',
         },
         {
             title: "Literature + local",
-            hint: "Blend local corpus with web search",
-            text: "Search recent literature on the topics in my corpus and combine with local findings; cite online papers as [L1], [L2] and local files by name.",
+            hint: "Blend sources with web search",
+            text: "Search recent literature on the topics in my notebook and combine with local findings; cite online papers as [L1], [L2] and local files by name.",
             icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
         }
     ];
@@ -584,23 +334,17 @@ function loadQuickPrompts() {
 
     quickButtonsEl.querySelectorAll(".quick-btn").forEach(btn => {
         btn.addEventListener("click", () => {
-            queryInput.value = btn.dataset.text;
-            queryInput.focus();
-            queryInput.dispatchEvent(new Event("input"));
+            // If no conversation is open, hint the user
+            if (!currentConvId) {
+                showToast("Open a conversation first to use quick prompts", "info");
+                return;
+            }
+            nbQueryInput.value = btn.dataset.text;
+            nbQueryInput.focus();
+            nbQueryInput.dispatchEvent(new Event("input"));
         });
     });
 }
-
-// ── Event listeners ─────────────────────────────────────────────────
-
-sendBtn.addEventListener("click", () => sendQuery(queryInput.value));
-
-queryInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        sendQuery(queryInput.value);
-    }
-});
 
 // ── Keyboard shortcuts ──────────────────────────────────────────────
 
@@ -630,67 +374,27 @@ document.addEventListener("keydown", (e) => {
             docSearchInput.value = "";
             docSearchInput.dispatchEvent(new Event("input"));
             docSearchInput.blur();
-        } else if (document.activeElement === queryInput) {
-            queryInput.blur();
+        } else if (document.activeElement === nbQueryInput) {
+            nbQueryInput.blur();
         }
         return;
     }
 
-    // Cmd/Ctrl+Enter → send query (works even with Shift held)
+    // Cmd/Ctrl+Enter → send message in notebook chat
     if (mod && e.key === "Enter") {
         e.preventDefault();
-        sendQuery(queryInput.value);
+        if (currentConvId) nbSendMessage(nbQueryInput.value);
         return;
     }
 
-    // "/" → focus query input (when not already in an input)
+    // "/" → focus notebook chat input (when not already in an input)
     if (e.key === "/" && !mod && document.activeElement.tagName !== "INPUT" && document.activeElement.tagName !== "TEXTAREA") {
-        e.preventDefault();
-        queryInput.focus();
+        if (currentConvId) {
+            e.preventDefault();
+            nbQueryInput.focus();
+        }
     }
 });
-
-queryInput.addEventListener("input", () => {
-    queryInput.style.height = "auto";
-    queryInput.style.height = Math.min(queryInput.scrollHeight, 120) + "px";
-});
-
-voiceBtn.addEventListener("click", toggleVoice);
-
-document.getElementById("clear-btn").addEventListener("click", clearHistory);
-
-// ── Route prediction indicator ──────────────────────────────────────
-
-const routeIndicator = document.getElementById("route-indicator");
-let _classifyTimer = null;
-
-function updateRouteIndicator(text) {
-    if (!text.trim()) {
-        routeIndicator.innerHTML = "";
-        routeIndicator.className = "route-indicator";
-        return;
-    }
-    clearTimeout(_classifyTimer);
-    _classifyTimer = setTimeout(async () => {
-        try {
-            const res = await fetch("/api/classify", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ message: text }),
-            });
-            const data = await res.json();
-            if (data.route === "local") {
-                routeIndicator.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Stays on-device';
-                routeIndicator.className = "route-indicator route-local";
-            } else {
-                routeIndicator.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg> Will use Gemini cloud';
-                routeIndicator.className = "route-indicator route-cloud";
-            }
-        } catch {}
-    }, 300);
-}
-
-queryInput.addEventListener("input", () => updateRouteIndicator(queryInput.value));
 
 // ── Privacy audit log ───────────────────────────────────────────────
 
@@ -845,7 +549,8 @@ const nbSendBtn       = document.getElementById("nb-send-btn");
 const nbClearBtn      = document.getElementById("nb-clear-btn");
 const nbCitationsBar  = document.getElementById("nb-citations-bar");
 const nbCitationsList = document.getElementById("nb-citations-list");
-const mainInputArea   = document.getElementById("main-input-area");
+const nbVoiceBtn      = document.getElementById("nb-voice-btn");
+const chatWelcome     = document.getElementById("chat-welcome");
 
 // Main-area tabs & panels
 const mainTabsBar      = document.getElementById("main-tabs");
@@ -894,16 +599,14 @@ mainTabWrite?.addEventListener("click", () => switchMainTab("write"));
 mainTabCal?.addEventListener("click", () => switchMainTab("cal"));
 
 function enterNotebookChat(nbName, convTitle) {
-    messagesEl.style.display = "none";
-    mainInputArea.style.display = "none";
+    if (chatWelcome) chatWelcome.style.display = "none";
     nbChatWrap.style.display = "";
     document.getElementById("nb-chat-title").textContent = nbName + " \u2014 " + convTitle;
 }
 
 function exitNotebookChat() {
     nbChatWrap.style.display = "none";
-    messagesEl.style.display = "";
-    mainInputArea.style.display = "";
+    if (chatWelcome) chatWelcome.style.display = "";
     currentConvId = null;
     nbMessagesEl.innerHTML = "";
     nbCitationsBar.style.display = "none";
@@ -1051,7 +754,6 @@ document.getElementById("nb-create-submit")?.addEventListener("click", submitNew
 document.getElementById("nb-create-name")?.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submitNewNotebook(); } });
 
 // ── Init (runs AFTER all DOM refs are captured) ─────────────────────
-loadHistory();
 loadTools();
 loadNotebooks();
 loadQuickPrompts();
@@ -1521,7 +1223,10 @@ if (latexSource) {
 // File upload
 document.getElementById("nb-file-input").addEventListener("change", async (e) => {
     const input = e.target;
-    if (!currentNbId || !input.files || !input.files.length) return;
+    if (!currentNbId || !input.files || !input.files.length) {
+        if (!currentNbId) showToast("Please select a notebook first", "warn");
+        return;
+    }
     const files = Array.from(input.files);
     input.disabled = true;
     let success = 0, failed = 0;
@@ -1551,7 +1256,10 @@ document.getElementById("nb-file-input").addEventListener("change", async (e) =>
     } else {
         showToast(`Failed to upload files — check server and try again`, "error");
     }
-    setTimeout(() => loadSources(currentNbId), 700);
+    // Reload sources immediately AND after a delay for background processing
+    await loadSources(currentNbId);
+    setTimeout(() => loadSources(currentNbId), 2000);
+    setTimeout(() => loadSources(currentNbId), 5000);
 });
 
 // URL add
@@ -1755,17 +1463,34 @@ document.getElementById("nb-conv-new-btn").addEventListener("click", async () =>
     selectConversation(currentNbId, data.id, data.title);
 });
 
-// ── Notebook chat ─────────────────────────────────────────────────────
+// ── Notebook chat (merged with all corpus chat features) ──────────────
 
-function nbAddMessage(role, content, citations = []) {
+function nbAddMessage(role, content, citations = [], meta = null) {
     const div = document.createElement("div");
     div.className = `message ${role}`;
     const rendered = role === "assistant" ? nbRenderAnswer(content) : escapeHtml(content);
-    div.innerHTML = `<div class="bubble">${rendered}</div>`;
+    let html = `<div class="bubble">${rendered}</div>`;
+    html += buildMetaHtml(meta);
+    div.innerHTML = html;
     nbMessagesEl.appendChild(div);
     nbScrollBottom();
 
     if (citations.length) renderCitationsBar(citations);
+    return div;
+}
+
+function nbAddError(text, retryFn) {
+    const div = document.createElement("div");
+    div.className = "message assistant";
+    let html = `<div class="bubble error-bubble">${escapeHtml(text)}`;
+    if (retryFn) html += ` <button class="retry-btn">Retry</button>`;
+    html += `</div>`;
+    div.innerHTML = html;
+    if (retryFn) {
+        div.querySelector(".retry-btn").addEventListener("click", () => { div.remove(); retryFn(); });
+    }
+    nbMessagesEl.appendChild(div);
+    nbScrollBottom();
     return div;
 }
 
@@ -1795,12 +1520,15 @@ function nbSetBusy(busy) {
     nbBusy = busy;
     nbSendBtn.disabled   = busy;
     nbQueryInput.disabled = busy;
+    if (nbVoiceBtn) nbVoiceBtn.disabled = busy && !isRecording;
     nbSendBtn.classList.toggle("disabled", busy);
 }
 
 function nbScrollBottom() {
     nbMessagesEl.scrollTop = nbMessagesEl.scrollHeight;
 }
+
+// ── Notebook chat — send message (RAG-grounded via streaming) ─────────
 
 async function nbSendMessage(text) {
     if (!text.trim() || nbBusy || !currentNbId || !currentConvId) return;
@@ -1880,19 +1608,205 @@ async function nbSendMessage(text) {
     }
 }
 
-nbSendBtn.addEventListener("click", () => nbSendMessage(nbQueryInput.value));
+// ── Notebook chat — tool query via /api/query (corpus tools) ──────────
+
+async function nbSendToolQuery(text) {
+    if (!text.trim() || nbBusy) return;
+
+    nbAddMessage("user", text);
+    nbQueryInput.value = "";
+    nbQueryInput.style.height = "auto";
+    nbSetBusy(true);
+    addThinking(nbMessagesEl);
+
+    try {
+        const res = await fetch("/api/query", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message: text }),
+        });
+        const data = await res.json();
+        removeThinking();
+
+        if (!res.ok || data.error || data.detail) {
+            const errMsg = data.error || data.detail || `Server error (${res.status})`;
+            nbAddError(`Error: ${errMsg}`, () => nbSendToolQuery(text));
+            return;
+        }
+
+        const meta = {
+            source: data.source, routing_ms: data.routing_ms,
+            confidence: data.confidence, data_local: data.data_local,
+        };
+        const calls = data.function_calls || [];
+
+        if (data.answer) {
+            nbAddMessage("assistant", data.answer, [], meta);
+        } else if (calls.length > 0) {
+            nbAddMessage("assistant", `Called ${calls.map(fc => fc.name).join(", ")}`, [], meta);
+        } else {
+            nbAddMessage("assistant", "I couldn't find a relevant tool for that query. Try rephrasing?", [], meta);
+        }
+
+        nbAddToolResults(calls, data.tool_results);
+    } catch (err) {
+        removeThinking();
+        nbAddError(`Network error: ${err.message}`, () => nbSendToolQuery(text));
+    } finally {
+        nbSetBusy(false);
+    }
+}
+
+// ── Smart send: RAG stream for notebook-grounded questions,
+//    /api/query for tool calls. Simple heuristic based on intent. ──────
+
+function nbSmartSend(text) {
+    if (!text.trim() || nbBusy) return;
+    if (!currentNbId || !currentConvId) {
+        showToast("Open a conversation first", "info");
+        return;
+    }
+    // If the text matches a known tool-trigger pattern, use /api/query
+    const toolPatterns = /^(list\s+(all\s+)?(my\s+)?documents|search\s+(the\s+)?literature|generate\s+(a\s+)?hypothesis|compare\s+(these|the|two|my)\s+documents|save\s+a\s+note|search\s+text|find\s+text)/i;
+    if (toolPatterns.test(text.trim())) {
+        nbSendToolQuery(text);
+    } else {
+        // Default: use notebook-grounded RAG streaming
+        nbSendMessage(text);
+    }
+}
+
+// ── Voice input for notebook chat ─────────────────────────────────────
+
+function nbToggleVoice() {
+    if (isRecording) {
+        nbStopRecording();
+        return;
+    }
+
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+        const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+            ? "audio/webm;codecs=opus"
+            : MediaRecorder.isTypeSupported("audio/mp4") ? "audio/mp4" : "";
+        mediaRecorder = mimeType
+            ? new MediaRecorder(stream, { mimeType })
+            : new MediaRecorder(stream);
+        const chunks = [];
+
+        mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
+        mediaRecorder.onstop = async () => {
+            stream.getTracks().forEach(t => t.stop());
+            const actualMime = mediaRecorder.mimeType || "audio/webm";
+            const ext = actualMime.includes("mp4") ? ".mp4" : ".webm";
+            const blob = new Blob(chunks, { type: actualMime });
+            await nbSendVoice(blob, ext);
+        };
+
+        mediaRecorder.start();
+        isRecording = true;
+        if (nbVoiceBtn) nbVoiceBtn.classList.add("recording");
+    }).catch(err => {
+        nbAddError(`Microphone access denied: ${err.message}`);
+    });
+}
+
+function nbStopRecording() {
+    if (mediaRecorder && mediaRecorder.state !== "inactive") {
+        mediaRecorder.stop();
+    }
+    isRecording = false;
+    if (nbVoiceBtn) nbVoiceBtn.classList.remove("recording");
+}
+
+async function nbSendVoice(blob, ext = ".webm") {
+    nbSetBusy(true);
+    addThinking(nbMessagesEl);
+    const form = new FormData();
+    form.append("audio", blob, `recording${ext}`);
+
+    try {
+        const res = await fetch("/api/voice", { method: "POST", body: form });
+        const data = await res.json();
+        removeThinking();
+
+        if (!res.ok || data.error || data.detail) {
+            const errMsg = data.error || data.detail || `Server error (${res.status})`;
+            const hint = data.hint ? `\n${data.hint}` : "";
+            nbAddError(`Voice error: ${errMsg}${hint}`);
+            return;
+        }
+
+        nbAddMessage("user", `🎤 "${data.transcript}"`);
+        const meta = { source: data.source, routing_ms: data.routing_ms, confidence: data.confidence };
+        const calls = data.function_calls || [];
+
+        if (data.answer) {
+            nbAddMessage("assistant", data.answer, [], meta);
+        } else if (calls.length > 0) {
+            nbAddMessage("assistant", `Called ${calls.map(fc => fc.name).join(", ")}`, [], meta);
+        } else {
+            nbAddMessage("assistant", "I couldn't process that. Try again?", [], meta);
+        }
+
+        nbAddToolResults(calls, data.tool_results);
+    } catch (err) {
+        removeThinking();
+        nbAddError(`Voice error: ${err.message}`);
+    } finally {
+        nbSetBusy(false);
+    }
+}
+
+// ── Route prediction indicator for notebook chat ────────────────────
+
+const nbRouteIndicator = document.getElementById("nb-route-indicator");
+let _nbClassifyTimer = null;
+
+function updateNbRouteIndicator(text) {
+    if (!nbRouteIndicator) return;
+    if (!text.trim()) {
+        nbRouteIndicator.innerHTML = "";
+        nbRouteIndicator.className = "route-indicator";
+        return;
+    }
+    clearTimeout(_nbClassifyTimer);
+    _nbClassifyTimer = setTimeout(async () => {
+        try {
+            const res = await fetch("/api/classify", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ message: text }),
+            });
+            const data = await res.json();
+            if (data.route === "local") {
+                nbRouteIndicator.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Stays on-device';
+                nbRouteIndicator.className = "route-indicator route-local";
+            } else {
+                nbRouteIndicator.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg> Will use Gemini cloud';
+                nbRouteIndicator.className = "route-indicator route-cloud";
+            }
+        } catch {}
+    }, 300);
+}
+
+// ── Notebook chat event listeners ─────────────────────────────────────
+
+nbSendBtn.addEventListener("click", () => nbSmartSend(nbQueryInput.value));
 
 nbQueryInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
-        nbSendMessage(nbQueryInput.value);
+        nbSmartSend(nbQueryInput.value);
     }
 });
 
 nbQueryInput.addEventListener("input", () => {
     nbQueryInput.style.height = "auto";
     nbQueryInput.style.height = Math.min(nbQueryInput.scrollHeight, 120) + "px";
+    updateNbRouteIndicator(nbQueryInput.value);
 });
+
+if (nbVoiceBtn) nbVoiceBtn.addEventListener("click", nbToggleVoice);
 
 nbClearBtn.addEventListener("click", () => {
     nbMessagesEl.innerHTML = "";
