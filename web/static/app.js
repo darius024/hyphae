@@ -957,6 +957,9 @@ async function selectNotebook(nbId, name) {
     if (currentConvId) exitNotebookChat();
     currentConvId = null;
 
+    // Reset writing copilot conversation for new notebook
+    if (typeof _copilotConvId !== 'undefined') _copilotConvId = null;
+
     nbNameDisplay.textContent = name;
     nbTabsWrap.style.display   = "";
     nbPlaceholder.style.display = "none";
@@ -1341,7 +1344,8 @@ function updateWordCount() {
 
 function renderLatexPreview() {
     if (!latexSource || !latexPreview) return;
-    latexPreview.innerHTML = latexToHtml(latexSource.value);
+    const html = latexToHtml(latexSource.value);
+    latexPreview.innerHTML = `<div class="latex-paper-page">${html}</div>`;
     updateWordCount();
     // Trigger MathJax typeset
     if (window.MathJax && window.MathJax.typesetPromise) {
@@ -1349,14 +1353,60 @@ function renderLatexPreview() {
     }
 }
 
+const DEFAULT_LATEX_TEMPLATE = `\\documentclass[12pt]{article}
+\\usepackage[utf8]{inputenc}
+\\usepackage[T1]{fontenc}
+\\usepackage{amsmath,amssymb}
+\\usepackage{graphicx}
+\\usepackage{hyperref}
+\\usepackage[margin=1in]{geometry}
+
+\\title{Your Paper Title}
+\\author{Author Name}
+\\date{\\today}
+
+\\begin{document}
+
+\\maketitle
+
+\\begin{abstract}
+Write a brief summary of your paper here. The abstract should concisely describe the problem, methodology, key results, and conclusions.
+\\end{abstract}
+
+\\section{Introduction}
+Introduce your research topic, motivation, and objectives here.
+
+\\section{Related Work}
+Discuss relevant prior work and how your contribution differs.
+
+\\section{Methodology}
+Describe your approach, methods, and experimental setup.
+
+\\section{Results}
+Present your findings with figures, tables, and analysis.
+
+\\section{Discussion}
+Interpret your results and discuss implications.
+
+\\section{Conclusion}
+Summarize your contributions and suggest future work.
+
+\\bibliographystyle{plain}
+\\bibliography{references}
+
+\\end{document}
+`;
+
 async function loadPaper(nbId) {
     if (!nbId || !latexSource) return;
     try {
         const res  = await fetch(`/api/notebooks/${nbId}/paper`);
         const data = await res.json();
-        latexSource.value = data.content || "";
+        latexSource.value = data.content || DEFAULT_LATEX_TEMPLATE;
         renderLatexPreview();
         if (paperSaveStatus) paperSaveStatus.textContent = "";
+        // If we loaded the default template, auto-save it
+        if (!data.content) savePaper(nbId);
     } catch {}
 }
 const loadPaperMain = loadPaper; // alias for main-area tab switch
@@ -1377,20 +1427,36 @@ async function savePaper(nbId) {
     }
 }
 
-// Snippet insertion helper
+// Snippet insertion helper — wraps selected text for formatting commands
 function insertSnippet(snippet) {
     if (!latexSource) return;
     latexSource.focus();
     const start = latexSource.selectionStart;
     const end   = latexSource.selectionEnd;
     const val   = latexSource.value;
+    const selected = val.slice(start, end);
     const resolved = snippet.replace(/\\n/g, '\n');
-    // If snippet has {}, place cursor inside; else after
-    const insertPos = resolved.indexOf('{}') !== -1
-        ? start + resolved.indexOf('{}') + 1
-        : start + resolved.length;
-    latexSource.value = val.slice(0, start) + resolved + val.slice(end);
-    latexSource.selectionStart = latexSource.selectionEnd = insertPos;
+
+    // If there's selected text and the snippet has {}, wrap the selection
+    if (selected && resolved.includes('{}')) {
+        const filled = resolved.replace('{}', '{' + selected + '}');
+        latexSource.value = val.slice(0, start) + filled + val.slice(end);
+        // Place cursor after the closing brace
+        const cursorPos = start + filled.length;
+        latexSource.selectionStart = latexSource.selectionEnd = cursorPos;
+    } else if (resolved.includes('{}')) {
+        // No selection: insert and place cursor inside braces
+        const insertPos = start + resolved.indexOf('{}') + 1;
+        latexSource.value = val.slice(0, start) + resolved + val.slice(end);
+        latexSource.selectionStart = latexSource.selectionEnd = insertPos;
+    } else if (resolved.includes('  ') && resolved.startsWith('$')) {
+        // Inline math: "$  $" — place cursor between the spaces
+        latexSource.value = val.slice(0, start) + resolved + val.slice(end);
+        latexSource.selectionStart = latexSource.selectionEnd = start + 2;
+    } else {
+        latexSource.value = val.slice(0, start) + resolved + val.slice(end);
+        latexSource.selectionStart = latexSource.selectionEnd = start + resolved.length;
+    }
     renderLatexPreview();
 }
 
@@ -2039,6 +2105,8 @@ const copilotMessagesEl = document.getElementById("write-copilot-messages");
 const copilotInput      = document.getElementById("write-copilot-input");
 const copilotSendBtn    = document.getElementById("write-copilot-send");
 
+let _copilotConvId = null; // Dedicated conversation for writing copilot
+
 function addCopilotMessage(text, role) {
     if (!copilotMessagesEl) return;
     // Remove hint if present
@@ -2052,26 +2120,48 @@ function addCopilotMessage(text, role) {
     return msg;
 }
 
+async function _ensureCopilotConversation() {
+    if (_copilotConvId) return _copilotConvId;
+    try {
+        const res = await fetch(`/api/notebooks/${currentNbId}/conversations`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title: "Writing Copilot" }),
+        });
+        if (res.ok) {
+            const data = await res.json();
+            _copilotConvId = data.id;
+            return _copilotConvId;
+        }
+    } catch {}
+    return null;
+}
+
 async function sendCopilotMessage(prompt) {
     if (!prompt || !currentNbId) return;
     addCopilotMessage(prompt, "user");
 
-    // Get current document content for context
+    // Ensure we have a conversation for the copilot
+    const convId = await _ensureCopilotConversation();
+    if (!convId) {
+        addCopilotMessage("Could not create a conversation. Is the server running?", "assistant");
+        return;
+    }
+
+    // Build the actual message — prepend document context so AI is aware of current paper
     const docContent = latexSource ? latexSource.value : "";
-    const systemPrompt = `You are an AI writing assistant for academic papers. The user is working on a LaTeX document. Help them write, edit, or improve their paper. If the user asks to write content, return LaTeX-formatted text that can be directly inserted. Current document content:\n\n${docContent.slice(0, 3000)}`;
+    const fullMessage = docContent.trim()
+        ? `[CONTEXT: The user is writing a LaTeX paper. Current document:\n\`\`\`latex\n${docContent.slice(0, 4000)}\n\`\`\`\n]\n\nUser request: ${prompt}`
+        : prompt;
 
     // Add a placeholder message
     const assistantMsg = addCopilotMessage("Thinking…", "assistant");
 
     try {
-        const res = await fetch(`/api/notebooks/${currentNbId}/chat`, {
+        const res = await fetch(`/api/notebooks/${currentNbId}/conversations/${convId}/chat/stream`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                message: prompt,
-                system_prompt: systemPrompt,
-                conversation_id: null,
-            }),
+            body: JSON.stringify({ message: fullMessage }),
         });
 
         if (!res.ok) {
@@ -2079,7 +2169,7 @@ async function sendCopilotMessage(prompt) {
             return;
         }
 
-        // Try to read streamed response
+        // Read streamed SSE response
         const reader = res.body?.getReader();
         if (reader) {
             const decoder = new TextDecoder();
@@ -2089,7 +2179,6 @@ async function sendCopilotMessage(prompt) {
                 const { done, value } = await reader.read();
                 if (done) break;
                 const chunk = decoder.decode(value, { stream: true });
-                // Parse SSE lines
                 for (const line of chunk.split("\n")) {
                     if (line.startsWith("data: ")) {
                         try {
@@ -2097,15 +2186,14 @@ async function sendCopilotMessage(prompt) {
                             if (data.token) {
                                 fullText += data.token;
                                 assistantMsg.textContent = fullText;
-                            } else if (data.text) {
-                                fullText = data.text;
-                                assistantMsg.textContent = fullText;
                             } else if (data.answer) {
                                 fullText = data.answer;
                                 assistantMsg.textContent = fullText;
+                            } else if (data.text) {
+                                fullText = data.text;
+                                assistantMsg.textContent = fullText;
                             }
                         } catch {
-                            // plain text fallback
                             const txt = line.slice(6).trim();
                             if (txt && txt !== "[DONE]") {
                                 fullText += txt;
@@ -2165,9 +2253,123 @@ copilotInput?.addEventListener("keydown", (e) => {
 // Suggestion buttons in copilot
 document.querySelectorAll(".write-copilot-suggest[data-prompt]").forEach(btn => {
     btn.addEventListener("click", () => {
-        sendCopilotMessage(btn.dataset.prompt);
+        // Special handling for "Add citations" — fetch sources first
+        if (btn.dataset.prompt.includes("citations") && currentNbId) {
+            _addCitationsFromSources();
+        } else {
+            sendCopilotMessage(btn.dataset.prompt);
+        }
     });
 });
+
+// ── Add citations from notebook sources ──────────────────────────────
+async function _addCitationsFromSources() {
+    if (!currentNbId || !latexSource) return;
+    addCopilotMessage("Add citations from the notebook sources", "user");
+    const assistantMsg = addCopilotMessage("Fetching notebook sources…", "assistant");
+    try {
+        const res = await fetch(`/api/notebooks/${currentNbId}/sources`);
+        const data = await res.json();
+        const sources = data.sources || [];
+        if (!sources.length) {
+            assistantMsg.textContent = "No sources found in this notebook. Upload some documents first.";
+            return;
+        }
+        // Build bibliography entries
+        let bib = "\\n% === Bibliography entries from notebook sources ===\\n";
+        const citeKeys = [];
+        sources.forEach((s, i) => {
+            const key = (s.title || s.filename || `source${i+1}`).replace(/[^a-zA-Z0-9]/g, '').slice(0, 20).toLowerCase() + (i + 1);
+            citeKeys.push(key);
+            bib += `% [${key}] ${s.title || s.filename || s.url || 'Unknown'}\\n`;
+        });
+        const citeLine = "\\n" + citeKeys.map(k => `\\\\cite{${k}}`).join(", ") + "\\n";
+        assistantMsg.textContent = `Found ${sources.length} source(s). Click below to insert citation references.`;
+
+        const insertBtn = document.createElement("button");
+        insertBtn.className = "write-copilot-suggest";
+        insertBtn.textContent = "📝 Insert \\cite{} references";
+        insertBtn.style.marginTop = "8px";
+        insertBtn.addEventListener("click", () => {
+            const pos = latexSource.selectionStart || latexSource.value.length;
+            latexSource.value = latexSource.value.slice(0, pos) + citeLine + latexSource.value.slice(pos);
+            renderLatexPreview();
+            savePaper(currentNbId);
+            showToast(`Inserted ${citeKeys.length} citation(s)`, "success");
+        });
+        assistantMsg.appendChild(document.createElement("br"));
+        assistantMsg.appendChild(insertBtn);
+    } catch (err) {
+        assistantMsg.textContent = "Failed to fetch sources: " + err.message;
+    }
+}
+
+// ── Tab autocompletion for LaTeX commands ─────────────────────────────
+const LATEX_COMPLETIONS = [
+    "\\section{}", "\\subsection{}", "\\subsubsection{}", "\\paragraph{}",
+    "\\textbf{}", "\\textit{}", "\\emph{}", "\\texttt{}", "\\underline{}",
+    "\\begin{equation}\n\n\\end{equation}", "\\begin{align}\n\n\\end{align}",
+    "\\begin{figure}[h]\n\\centering\n\\includegraphics[width=0.8\\textwidth]{}\n\\caption{}\n\\label{fig:}\n\\end{figure}",
+    "\\begin{table}[h]\n\\centering\n\\begin{tabular}{|c|c|}\n\\hline\n & \\\\\n\\hline\n\\end{tabular}\n\\caption{}\n\\label{tab:}\n\\end{table}",
+    "\\begin{itemize}\n\\item \n\\end{itemize}", "\\begin{enumerate}\n\\item \n\\end{enumerate}",
+    "\\cite{}", "\\ref{}", "\\label{}", "\\footnote{}",
+    "\\includegraphics{}", "\\caption{}", "\\url{}",
+    "\\frac{}{}", "\\sqrt{}", "\\sum_{}", "\\int_{}^{}",
+    "\\alpha", "\\beta", "\\gamma", "\\delta", "\\epsilon", "\\lambda", "\\mu", "\\sigma", "\\theta", "\\omega",
+    "\\infty", "\\partial", "\\nabla", "\\forall", "\\exists",
+    "\\begin{abstract}\n\n\\end{abstract}", "\\maketitle",
+    "\\bibliographystyle{plain}", "\\bibliography{}",
+];
+
+if (latexSource) {
+    latexSource.addEventListener("keydown", (e) => {
+        if (e.key !== "Tab") return;
+        const pos = latexSource.selectionStart;
+        const text = latexSource.value;
+        // Find the word being typed (from last space/newline to cursor)
+        let wordStart = pos - 1;
+        while (wordStart >= 0 && !/[\s\n]/.test(text[wordStart])) wordStart--;
+        wordStart++;
+        const partial = text.slice(wordStart, pos);
+
+        if (partial.startsWith("\\") && partial.length > 1) {
+            e.preventDefault();
+            // Find matching completions
+            const matches = LATEX_COMPLETIONS.filter(c => c.startsWith(partial));
+            if (matches.length === 1) {
+                // Auto-complete
+                const completion = matches[0];
+                latexSource.value = text.slice(0, wordStart) + completion + text.slice(pos);
+                const cursorOffset = completion.includes('{}') ? wordStart + completion.indexOf('{}') + 1 : wordStart + completion.length;
+                latexSource.selectionStart = latexSource.selectionEnd = cursorOffset;
+                renderLatexPreview();
+            } else if (matches.length > 1) {
+                // Find common prefix
+                let common = matches[0];
+                for (let i = 1; i < matches.length; i++) {
+                    while (!matches[i].startsWith(common)) {
+                        common = common.slice(0, -1);
+                    }
+                }
+                if (common.length > partial.length) {
+                    latexSource.value = text.slice(0, wordStart) + common + text.slice(pos);
+                    latexSource.selectionStart = latexSource.selectionEnd = wordStart + common.length;
+                    renderLatexPreview();
+                }
+                // Show a tooltip with available completions
+                showToast(matches.slice(0, 8).join("  "), "info", 3000);
+            }
+        } else if (!partial) {
+            // No prefix: insert tab as two spaces
+            e.preventDefault();
+            latexSource.value = text.slice(0, pos) + "  " + text.slice(pos);
+            latexSource.selectionStart = latexSource.selectionEnd = pos + 2;
+        }
+    });
+}
+
+// Reset copilot conversation when switching notebooks
+// (handled inside selectNotebook() above)
 
 // ── Dark mode ─────────────────────────────────────────────────────────
 
@@ -2192,6 +2394,16 @@ window._toggleTheme = function() {
     else if (saved === "light") applyTheme(false);
     else if (window.matchMedia("(prefers-color-scheme: dark)").matches) applyTheme(true);
 })();
+
+// Direct listener on the toggle button (most reliable)
+const _themeBtn = document.getElementById("theme-toggle");
+if (_themeBtn) {
+    _themeBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        applyTheme(!document.body.classList.contains("dark"));
+    });
+}
 
 // Belt-and-suspenders: also attach via delegated click
 document.addEventListener("click", (e) => {

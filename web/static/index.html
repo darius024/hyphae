@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=1771890000">
+    <link rel="stylesheet" href="/static/style.css?v=1771900000">
     <!-- MathJax for LaTeX math rendering in preview -->
     <script>window.MathJax = { tex: { inlineMath: [['$','$'],['\\(','\\)']], displayMath: [['$$','$$'],['\\[','\\]']] }, svg: { fontCache: 'global' }, startup: { typeset: false } };</script>
     <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
@@ -269,53 +269,57 @@
             <!-- CALENDAR panel (main area — shown when Calendar tab active) -->
             <div class="main-panel" id="main-panel-cal" style="display:none">
                 <div class="cal-main-container">
-                    <div class="cal-toolbar cal-toolbar-main">
-                        <button class="cal-nav-btn" id="cal-prev-btn-main" title="Previous month">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
-                        </button>
-                        <span class="cal-month-label cal-month-label-main" id="cal-month-label-main"></span>
-                        <button class="cal-nav-btn" id="cal-next-btn-main" title="Next month">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
-                        </button>
-                        <button class="cal-today-btn" id="cal-today-btn-main">Today</button>
-                        <button class="icon-btn-sm cal-add-btn" id="cal-add-btn-main" title="Add event">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                            Add event
-                        </button>
+                    <div class="cal-grid-section">
+                        <div class="cal-toolbar cal-toolbar-main">
+                            <button class="cal-nav-btn" id="cal-prev-btn-main" title="Previous month">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+                            </button>
+                            <span class="cal-month-label cal-month-label-main" id="cal-month-label-main"></span>
+                            <button class="cal-nav-btn" id="cal-next-btn-main" title="Next month">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+                            </button>
+                            <button class="cal-today-btn" id="cal-today-btn-main">Today</button>
+                            <button class="icon-btn-sm cal-add-btn" id="cal-add-btn-main" title="Add event">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                New event
+                            </button>
+                        </div>
+                        <!-- Add event form (inline below toolbar) -->
+                        <div class="cal-add-form" id="cal-add-form-main" style="display:none">
+                            <div class="cal-form-row">
+                                <input type="text" class="cal-input" id="cal-event-title-main" placeholder="Event title" maxlength="120">
+                            </div>
+                            <div class="cal-form-row">
+                                <input type="date" class="cal-input" id="cal-event-date-main">
+                                <select class="cal-input cal-type-sel" id="cal-event-type-main">
+                                    <option value="deadline">⏰ Deadline</option>
+                                    <option value="conference">🎤 Conference</option>
+                                    <option value="meeting">👥 Meeting</option>
+                                    <option value="event" selected>📌 Event</option>
+                                    <option value="reminder">🔔 Reminder</option>
+                                </select>
+                            </div>
+                            <div class="cal-form-row">
+                                <input type="text" class="cal-input" id="cal-event-note-main" placeholder="Note (optional)">
+                            </div>
+                            <div class="cal-form-actions">
+                                <button class="icon-btn-sm" id="cal-save-event-btn-main">Save event</button>
+                                <button class="icon-btn-sm cal-cancel-btn" id="cal-cancel-event-btn-main">Cancel</button>
+                            </div>
+                        </div>
+                        <div class="cal-grid-wrap cal-grid-wrap-main">
+                            <div class="cal-day-headers">
+                                <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+                            </div>
+                            <div class="cal-grid cal-grid-main" id="cal-grid-main"></div>
+                        </div>
                     </div>
-                    <div class="cal-grid-wrap cal-grid-wrap-main">
-                        <div class="cal-day-headers">
-                            <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+                    <!-- Sidebar agenda pane (Outlook-style) -->
+                    <div class="cal-sidebar-agenda">
+                        <div class="cal-upcoming" id="cal-upcoming-main">
+                            <h3 class="cal-upcoming-title">📅 Agenda</h3>
+                            <div class="cal-upcoming-list" id="cal-upcoming-list-main"></div>
                         </div>
-                        <div class="cal-grid cal-grid-main" id="cal-grid-main"></div>
-                    </div>
-                    <!-- Add event form -->
-                    <div class="cal-add-form" id="cal-add-form-main" style="display:none">
-                        <div class="cal-form-row">
-                            <input type="text" class="cal-input" id="cal-event-title-main" placeholder="Event title" maxlength="120">
-                        </div>
-                        <div class="cal-form-row">
-                            <input type="date" class="cal-input" id="cal-event-date-main">
-                            <select class="cal-input cal-type-sel" id="cal-event-type-main">
-                                <option value="deadline">⏰ Deadline</option>
-                                <option value="conference">🎤 Conference</option>
-                                <option value="meeting">👥 Meeting</option>
-                                <option value="event" selected>📌 Event</option>
-                                <option value="reminder">🔔 Reminder</option>
-                            </select>
-                        </div>
-                        <div class="cal-form-row">
-                            <input type="text" class="cal-input" id="cal-event-note-main" placeholder="Note (optional)">
-                        </div>
-                        <div class="cal-form-actions">
-                            <button class="icon-btn-sm" id="cal-save-event-btn-main">Save event</button>
-                            <button class="icon-btn-sm cal-cancel-btn" id="cal-cancel-event-btn-main">Cancel</button>
-                        </div>
-                    </div>
-                    <!-- Upcoming events list -->
-                    <div class="cal-upcoming" id="cal-upcoming-main">
-                        <h3 class="cal-upcoming-title">Upcoming Events</h3>
-                        <div class="cal-upcoming-list" id="cal-upcoming-list-main"></div>
                     </div>
                 </div>
             </div>
@@ -462,6 +466,6 @@
     </div>
 </div>
 
-<script src="/static/app.js?v=1771890000"></script>
+<script src="/static/app.js?v=1771900000"></script>
 </body>
 </html>
