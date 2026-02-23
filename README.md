@@ -122,11 +122,12 @@ The web interface provides:
 - **Document management** — sidebar with corpus listing, file-type icons, search/filter, click-to-preview (with in-browser PDF viewer for uploaded PDFs), drag-and-drop upload
 - **Document sensitivity tagging** — mark individual documents as Confidential (lock icon) or Shareable; toggle with one click
 - **Research tools panel** — collapsible panel showing all 9 available tools with LOCAL/CLOUD/HYBRID badges and parameter info
-- **Quick prompts** — 4 pre-built research prompt templates (summarise with citations, compare documents, design experiment, literature + local blend)
-- **Notebook workspaces** — create isolated research notebooks, upload sources, and chat with AI grounded in those specific documents (uses Gemini + RAG)
+- **Quick prompts** — 4 dynamic research prompt templates that adapt to your actual corpus filenames (summarise with citations, compare documents, design experiment, literature + local blend)
+- **Notebook workspaces** — create isolated research notebooks, upload sources, and chat with AI grounded in those specific documents (uses Gemini + RAG). Includes a seeded "Bioelectronics Research" demo notebook on first run
+- **Notebook conversations** — open conversations in the main window with full rename (double-click or pencil icon) and delete support, relative timestamps, and a welcome message for new conversations
 - **Voice input** — record from browser microphone, transcribed on-device via Whisper through Cactus
 - **Chat history** — persists across page reloads via localStorage
-- **Keyboard shortcuts** — `/` focus input, `Cmd+K` search docs, `Escape` dismiss, `Shift+Enter` newline
+- **Keyboard shortcuts** — `/` focus input, `Cmd+K` search docs, `Escape` closes any open modal/dialog, `Shift+Enter` newline
 
 ### CLI
 
@@ -208,7 +209,7 @@ Notebooks are isolated research workspaces for deep-dive analysis:
 3. **Chat with sources** — ask questions grounded in your notebook's specific documents; answers stream in real-time with inline citations
 4. **Multiple conversations** — each notebook can have multiple conversation threads
 
-Notebooks use FAISS vector search + sentence-transformer embeddings for retrieval, with Gemini for response generation. Data is stored locally in `web/notebook.db` (SQLite).
+Notebooks use FAISS vector search + sentence-transformer embeddings for retrieval, with Gemini for response generation. Data is stored locally in `web/notebook.db` (SQLite). A demo "Bioelectronics Research" notebook is seeded automatically on first run.
 
 ## API Endpoints
 
@@ -228,10 +229,22 @@ Notebooks use FAISS vector search + sentence-transformer embeddings for retrieva
 | `GET` | `/api/privacy-log` | Fetch privacy audit log entries |
 | `GET` | `/api/notebooks` | List notebooks |
 | `POST` | `/api/notebooks` | Create notebook |
-| `DELETE` | `/api/notebooks/{id}` | Delete notebook |
+| `GET` | `/api/notebooks/{id}` | Get notebook details |
+| `PATCH` | `/api/notebooks/{id}` | Update notebook name |
+| `DELETE` | `/api/notebooks/{id}` | Delete notebook + all data |
+| `GET` | `/api/notebooks/{id}/sources` | List notebook sources |
 | `POST` | `/api/notebooks/{id}/upload` | Upload source to notebook |
+| `POST` | `/api/notebooks/{id}/add-url` | Add URL source to notebook |
+| `DELETE` | `/api/notebooks/{id}/sources/{sid}` | Remove source |
+| `GET` | `/api/notebooks/{id}/conversations` | List conversations |
 | `POST` | `/api/notebooks/{id}/conversations` | Create conversation |
+| `PATCH` | `/api/notebooks/{id}/conversations/{cid}` | Rename conversation |
+| `DELETE` | `/api/notebooks/{id}/conversations/{cid}` | Delete conversation |
+| `GET` | `/api/notebooks/{id}/conversations/{cid}/messages` | List messages |
+| `POST` | `/api/notebooks/{id}/conversations/{cid}/chat` | Non-streaming chat |
 | `POST` | `/api/notebooks/{id}/conversations/{cid}/chat/stream` | Stream chat response (SSE) |
+| `GET` | `/api/nb-settings` | List notebook settings |
+| `PATCH` | `/api/nb-settings/{key}` | Update a setting |
 
 ## Tests
 
@@ -239,7 +252,13 @@ Notebooks use FAISS vector search + sentence-transformer embeddings for retrieva
 python -m pytest tests/ -v
 ```
 
-34 unit tests covering tool registry, tool dispatch, privacy sanitisation, and corpus ingestion.
+79 tests covering:
+
+- **Tool registry & dispatch** — schema validation, execution, error handling
+- **Privacy sanitisation** — PII patterns, cloud safety, tool filtering
+- **Corpus ingestion** — file add/remove, directory import, format filtering
+- **Database layer** — schema creation, seeding, CRUD, cascade deletes, transactions, FK enforcement
+- **Web API** — all REST endpoints via FastAPI TestClient (documents, sensitivity, classify, notebooks, conversations, settings, static routes)
 
 ## Benchmark
 
@@ -274,16 +293,18 @@ hyphae/
 │   └── ingest.py              # Corpus ingestion (PDF extraction, CLI)
 │
 ├── web/                       # FastAPI web application
-│   ├── app.py                 # API backend (query, docs, upload, voice, notebooks,
-│   │                          #   privacy log, sensitivity, classify, tools)
-│   ├── db.py                  # SQLite schema + connection utilities
+│   ├── app.py                 # Thin orchestrator — path setup, query/voice routing,
+│   │                          #   privacy classify/log, static files
+│   ├── routes/                # Modular API routers
+│   │   ├── corpus.py          # Document upload, list, preview, delete, sensitivity
+│   │   └── notebooks.py       # Notebook CRUD, sources, conversations, chat, settings
+│   ├── db.py                  # SQLite schema, connection utilities, demo seeding
 │   ├── models.py              # Pydantic API models
 │   ├── citations.py           # Citation builder for notebook RAG
 │   ├── embed.py               # Sentence-transformer embeddings
 │   ├── retrieval.py           # FAISS hybrid search for notebooks
 │   ├── ingest_nb.py           # Notebook source ingestion
 │   ├── privacy.py             # Notebook-layer sanitisation
-│   ├── notebook_bootstrap.py  # Notebook DB seeding
 │   └── static/                # Frontend (vanilla HTML/CSS/JS)
 │       ├── index.html         # SPA shell — chat, sidebar, notebooks, modals
 │       ├── style.css          # Research-grade teal theme, responsive
