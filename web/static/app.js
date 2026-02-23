@@ -2290,7 +2290,11 @@ if (latexSource) {
 const THEME_KEY = "hyphae_theme";
 
 function applyTheme(dark) {
-    document.body.classList.toggle("dark", dark);
+    if (dark) {
+        document.body.classList.add("dark");
+    } else {
+        document.body.classList.remove("dark");
+    }
     const label = document.querySelector(".theme-label");
     if (label) label.textContent = dark ? "Light mode" : "Dark mode";
     try { localStorage.setItem(THEME_KEY, dark ? "dark" : "light"); } catch {}
@@ -2307,10 +2311,11 @@ function applyTheme(dark) {
 // Direct listener on the toggle button (single handler — no duplicates)
 const _themeBtn = document.getElementById("theme-toggle");
 if (_themeBtn) {
-    _themeBtn.addEventListener("click", (e) => {
+    _themeBtn.addEventListener("click", function(e) {
         e.preventDefault();
         e.stopPropagation();
-        applyTheme(!document.body.classList.contains("dark"));
+        const isDark = document.body.classList.contains("dark");
+        applyTheme(!isDark);
     });
 }
 

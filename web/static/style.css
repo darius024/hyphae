@@ -3267,9 +3267,10 @@ body {
     transition: background 0.15s, color 0.15s;
 }
 .theme-toggle:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+.theme-toggle * { pointer-events: none; }
 .theme-icon-dark { display: none; }
 body.dark .theme-icon-light { display: none; }
-body.dark .theme-icon-dark { display: block; }
+body.dark .theme-icon-dark { display: inline; }
 body:not(.dark) .theme-icon-dark { display: none; }
 
 /* ═══════════════════════════════════════════════════════════════════════

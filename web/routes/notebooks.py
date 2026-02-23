@@ -211,6 +211,78 @@ async def delete_source(nb_id: str, src_id: str):
     return {"deleted": src_id}
 
 
+@router.put("/notebooks/{nb_id}/sources/{src_id}/sensitivity")
+async def set_source_sensitivity(nb_id: str, src_id: str, body: dict):
+    """Toggle confidential / shareable on a notebook source."""
+    _src_or_404(src_id, nb_id)
+    level = body.get("level", "shareable")
+    if level not in ("confidential", "shareable"):
+        raise HTTPException(400, "level must be 'confidential' or 'shareable'")
+    with get_conn() as conn:
+        conn.execute("UPDATE sources SET sensitivity=? WHERE id=?", (level, src_id))
+    return {"id": src_id, "sensitivity": level}
+
+
+@router.get("/notebooks/{nb_id}/sources/{src_id}/raw")
+async def raw_source(nb_id: str, src_id: str):
+    """Return the raw file (PDF or text) for download / inline display."""
+    from fastapi.responses import FileResponse as FR
+    src = _src_or_404(src_id, nb_id)
+    filename = src.get("filename")
+    if not filename:
+        raise HTTPException(404, "No file associated with this source")
+    file_path = UPLOAD_DIR / nb_id / filename
+    if not file_path.exists():
+        raise HTTPException(404, f"File not found: {filename}")
+    suffix = file_path.suffix.lower()
+    media = "application/pdf" if suffix == ".pdf" else "text/plain; charset=utf-8"
+    return FR(str(file_path), media_type=media, filename=filename)
+
+
+@router.get("/notebooks/{nb_id}/sources/{src_id}/preview")
+async def preview_source(nb_id: str, src_id: str):
+    """Return a text preview (first 3000 chars) of a notebook source file."""
+    src = _src_or_404(src_id, nb_id)
+    filename = src.get("filename")
+    if not filename:
+        raise HTTPException(404, "No file associated with this source")
+    file_path = UPLOAD_DIR / nb_id / filename
+    if not file_path.exists():
+        raise HTTPException(404, f"File not found: {filename}")
+    try:
+        text = file_path.read_text(errors="replace")[:3000]
+    except Exception as exc:
+        raise HTTPException(500, str(exc))
+    return {
+        "name": filename,
+        "preview": text,
+        "size_kb": round(file_path.stat().st_size / 1024, 1),
+        "has_pdf": file_path.suffix.lower() == ".pdf",
+    }
+
+
+# ── Paper editor ───────────────────────────────────────────────────────────
+
+@router.get("/notebooks/{nb_id}/paper")
+async def get_paper(nb_id: str):
+    """Retrieve the saved paper draft for this notebook."""
+    _nb_or_404(nb_id)
+    paper_path = UPLOAD_DIR / nb_id / "_paper.html"
+    content = paper_path.read_text(errors="replace") if paper_path.exists() else ""
+    return {"notebook_id": nb_id, "content": content}
+
+
+@router.post("/notebooks/{nb_id}/paper")
+async def save_paper(nb_id: str, body: dict):
+    """Persist the paper draft (HTML content from the editor)."""
+    _nb_or_404(nb_id)
+    content = body.get("content", "")
+    dest = UPLOAD_DIR / nb_id
+    dest.mkdir(parents=True, exist_ok=True)
+    (dest / "_paper.html").write_text(content, encoding="utf-8")
+    return {"saved": True}
+
+
 # ── Conversations ──────────────────────────────────────────────────────
 
 @router.get("/notebooks/{nb_id}/conversations")
@@ -396,3 +468,46 @@ async def update_setting(key: str, body: dict):
             (key, str(value)),
         )
     return {"key": key, "value": str(value)}
+
+
+# ── Calendar events ────────────────────────────────────────────────────
+
+@router.get("/notebooks/{nb_id}/events")
+async def list_events(nb_id: str):
+    _nb_or_404(nb_id)
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM calendar_events WHERE notebook_id=? ORDER BY date ASC",
+            (nb_id,),
+        ).fetchall()
+    return {"events": [dict(r) for r in rows]}
+
+
+@router.post("/notebooks/{nb_id}/events")
+async def create_event(nb_id: str, body: dict):
+    _nb_or_404(nb_id)
+    title = (body.get("title") or "").strip()
+    date  = (body.get("date") or "").strip()
+    if not title or not date:
+        raise HTTPException(400, "title and date are required")
+    eid = str(uuid.uuid4())
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO calendar_events (id, notebook_id, title, date, end_date, type, note) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (eid, nb_id, title, date,
+             body.get("end_date") or None,
+             body.get("type") or "event",
+             body.get("note") or None),
+        )
+    return {"id": eid, "title": title, "date": date}
+
+
+@router.delete("/notebooks/{nb_id}/events/{eid}")
+async def delete_event(nb_id: str, eid: str):
+    _nb_or_404(nb_id)
+    with get_conn() as conn:
+        conn.execute(
+            "DELETE FROM calendar_events WHERE id=? AND notebook_id=?", (eid, nb_id)
+        )
+    return {"ok": True}

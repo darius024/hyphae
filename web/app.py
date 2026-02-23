@@ -85,14 +85,25 @@ _WEB_DIR = Path(__file__).parent
 # ── App + routers ─────────────────────────────────────────────────────────
 app = FastAPI(title="Hyphae", version="2.0")
 
-from routes.corpus import router as corpus_router, configure as configure_corpus
 from routes.notebooks import router as notebooks_router, configure as configure_notebooks
 from routes.query import router as query_router, configure as configure_query
 
-configure_corpus(CORPUS_DIR, add_file)
-app.include_router(corpus_router)
 app.include_router(notebooks_router)
 app.include_router(query_router)
+
+
+# ── No-cache middleware for static assets (dev convenience) ───────────────
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as _Req
+
+class NoCacheStatic(BaseHTTPMiddleware):
+    async def dispatch(self, request: _Req, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/static/"):
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
+app.add_middleware(NoCacheStatic)
 
 
 @app.on_event("startup")
@@ -142,17 +153,20 @@ app.mount("/static", StaticFiles(directory=str(_WEB_DIR / "static")), name="stat
 
 @app.get("/", include_in_schema=False)
 async def index():
-    return FileResponse(str(_WEB_DIR / "static" / "index.html"))
+    return FileResponse(str(_WEB_DIR / "static" / "index.html"),
+                        headers={"Cache-Control": "no-store"})
 
 
 @app.get("/style.css", include_in_schema=False)
 async def css_alias():
-    return FileResponse(str(_WEB_DIR / "static" / "style.css"))
+    return FileResponse(str(_WEB_DIR / "static" / "style.css"),
+                        headers={"Cache-Control": "no-store"})
 
 
 @app.get("/app.js", include_in_schema=False)
 async def js_alias():
-    return FileResponse(str(_WEB_DIR / "static" / "app.js"))
+    return FileResponse(str(_WEB_DIR / "static" / "app.js"),
+                        headers={"Cache-Control": "no-store"})
 
 
 @app.get("/favicon.ico", include_in_schema=False)

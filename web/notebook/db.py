@@ -130,6 +130,26 @@ def init_db() -> None:
     try:
         conn.executescript(_DDL)
         conn.executescript(_FTS_TRIGGERS)
+        # ── Migrations (safe to re-run) ──────────────────────────────────
+        try:
+            conn.execute("ALTER TABLE sources ADD COLUMN sensitivity TEXT NOT NULL DEFAULT 'shareable'")
+            conn.commit()
+        except Exception:
+            pass  # column already exists
+        # Calendar events table
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS calendar_events (
+                id          TEXT PRIMARY KEY,
+                notebook_id TEXT NOT NULL REFERENCES notebooks(id) ON DELETE CASCADE,
+                title       TEXT NOT NULL,
+                date        TEXT NOT NULL,
+                end_date    TEXT,
+                type        TEXT NOT NULL DEFAULT 'event',
+                note        TEXT,
+                created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_cal_nb ON calendar_events(notebook_id, date)")
         conn.commit()
         _seed_defaults(conn)
         conn.commit()
