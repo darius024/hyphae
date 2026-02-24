@@ -1,10 +1,8 @@
-
-import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
+import os
 os.environ["CACTUS_NO_CLOUD_TELE"] = "1"
 
 import json
-from main import generate_hybrid
+from main import generate_hybrid  # also bootstraps sys.path
 
 
 ############## Tool definitions ##############

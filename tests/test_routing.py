@@ -11,12 +11,14 @@ Usage:
     python test_routing.py --cloud-only # force cloud path
 """
 
-import sys, os
-
-_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(_project_root, "src"))
-sys.path.insert(0, _project_root)
+import os
 os.environ["CACTUS_NO_CLOUD_TELE"] = "1"
+
+import sys
+_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+for _p in (os.path.join(_project_root, "src"), _project_root):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 import json
 from core.engine import generate_hybrid

@@ -10,8 +10,13 @@ from typing import List
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/api", tags=["corpus"])
+
+
+class _SensitivityBody(BaseModel):
+    level: str = Field(..., pattern=r"^(confidential|shareable)$")
 
 # These are injected by app.py at startup
 CORPUS_DIR: str = ""
@@ -163,11 +168,8 @@ async def get_sensitivity():
 
 
 @router.put("/sensitivity/{name}")
-async def set_sensitivity(name: str, body: dict):
-    level = body.get("level", "shareable")
-    if level not in ("confidential", "shareable"):
-        raise HTTPException(400, "level must be 'confidential' or 'shareable'")
+async def set_sensitivity(name: str, body: _SensitivityBody):
     data = _load_sensitivity()
-    data[name] = level
+    data[name] = body.level
     _save_sensitivity(data)
-    return {"name": name, "level": level}
+    return {"name": name, "level": body.level}

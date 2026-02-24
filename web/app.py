@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 # ── Centralised path bootstrap (MUST come before any Hyphae imports) ─────
@@ -82,8 +83,16 @@ logging.basicConfig(
 
 _WEB_DIR = Path(__file__).parent
 
+# ── Lifespan ──────────────────────────────────────────────────────────────
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    init_db()
+    log.info("Hyphae started — DB initialised")
+    yield
+
 # ── App + routers ─────────────────────────────────────────────────────────
-app = FastAPI(title="Hyphae", version="2.0")
+app = FastAPI(title="Hyphae", version="2.0", lifespan=_lifespan)
 
 from routes.notebooks import router as notebooks_router, configure as configure_notebooks
 from routes.query import router as query_router, configure as configure_query
@@ -108,12 +117,6 @@ class NoCacheStatic(BaseHTTPMiddleware):
         return response
 
 app.add_middleware(NoCacheStatic)
-
-
-@app.on_event("startup")
-def _startup():
-    init_db()
-    log.info("Hyphae started — DB initialised")
 
 
 # ── Gemini client factory ─────────────────────────────────────────────────

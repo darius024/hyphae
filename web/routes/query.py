@@ -14,8 +14,20 @@ from typing import Optional
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
+from typing import List
 
 router = APIRouter(prefix="/api", tags=["query"])
+
+
+# ── Request models ────────────────────────────────────────────────────
+
+class _MessageBody(BaseModel):
+    message: str = Field(..., min_length=1)
+
+class _QueryBody(BaseModel):
+    message: str = Field(..., min_length=1)
+    tools: Optional[List[dict]] = None
 log = logging.getLogger(__name__)
 
 # Injected at startup from app.py
@@ -150,11 +162,8 @@ _privacy_log: list = []
 
 
 @router.post("/classify")
-async def api_classify(body: dict):
-    text = (body.get("message") or "").strip().lower()
-    if not text:
-        return {"route": "unknown"}
-    words = set(text.split())
+async def api_classify(body: _MessageBody):
+    words = set(body.message.strip().lower().split())
     needs_cloud = bool(words & _CLOUD_KEYWORDS)
     return {"route": "cloud" if needs_cloud else "local"}
 
@@ -206,10 +215,8 @@ async def api_tools():
 # ── Query endpoint ───────────────────────────────────────────────────────
 
 @router.post("/query")
-async def api_query(body: dict):
-    user_message = (body.get("message") or "").strip()
-    if not user_message:
-        raise HTTPException(400, "message is required")
+async def api_query(body: _QueryBody):
+    user_message = body.message.strip()
     if generate_hybrid is None or execute_tool is None:
         return JSONResponse(
             status_code=503,
@@ -217,7 +224,7 @@ async def api_query(body: dict):
         )
 
     messages = [{"role": "user", "content": user_message}]
-    tools = body.get("tools") or list(ALL_TOOLS)
+    tools = body.tools or list(ALL_TOOLS)
 
     t0 = time.time()
     result = generate_hybrid(messages, tools)

@@ -7,12 +7,14 @@ Usage:
     python scripts/tune_threshold.py
 """
 
-import sys, os
-
-_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, _project_root)
-sys.path.insert(0, os.path.join(_project_root, "src"))
+import os
 os.environ["CACTUS_NO_CLOUD_TELE"] = "1"
+
+import sys
+_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+for _p in (_project_root, os.path.join(_project_root, "src")):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 import main
 from benchmark import BENCHMARKS, compute_f1, compute_total_score

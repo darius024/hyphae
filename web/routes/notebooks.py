@@ -12,8 +12,42 @@ from typing import AsyncIterator
 
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
+from typing import Optional
 
 router = APIRouter(prefix="/api", tags=["notebooks"])
+
+
+# ── Request models ────────────────────────────────────────────────────
+
+class _NotebookBody(BaseModel):
+    name: str = Field("Untitled Notebook", min_length=1, max_length=200)
+
+class _UrlBody(BaseModel):
+    url: str = Field(..., min_length=1)
+    title: Optional[str] = None
+
+class _SensitivityBody(BaseModel):
+    level: str = Field(..., pattern=r"^(confidential|shareable)$")
+
+class _PaperBody(BaseModel):
+    content: str = ""
+
+class _TitleBody(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+
+class _ChatBody(BaseModel):
+    message: str = Field(..., min_length=1)
+
+class _SettingBody(BaseModel):
+    value: str
+
+class _EventBody(BaseModel):
+    title: str = Field(..., min_length=1)
+    date: str = Field(..., min_length=1)
+    end_date: Optional[str] = None
+    type: str = "event"
+    note: Optional[str] = None
 log = logging.getLogger(__name__)
 
 # Injected at startup from app.py
@@ -111,12 +145,11 @@ async def list_notebooks():
 
 
 @router.post("/notebooks", status_code=201)
-async def create_notebook(body: dict):
-    name = (body.get("name") or "Untitled Notebook").strip()
+async def create_notebook(body: _NotebookBody):
     nb_id = str(uuid.uuid4())
     with get_conn() as conn:
-        conn.execute("INSERT INTO notebooks (id, name) VALUES (?,?)", (nb_id, name))
-    return {"id": nb_id, "name": name}
+        conn.execute("INSERT INTO notebooks (id, name) VALUES (?,?)", (nb_id, body.name.strip()))
+    return {"id": nb_id, "name": body.name.strip()}
 
 
 @router.get("/notebooks/{nb_id}")
@@ -125,15 +158,13 @@ async def get_notebook(nb_id: str):
 
 
 @router.patch("/notebooks/{nb_id}")
-async def update_notebook(nb_id: str, body: dict):
+async def update_notebook(nb_id: str, body: _NotebookBody):
     _nb_or_404(nb_id)
-    name = (body.get("name") or "").strip()
-    if name:
-        with get_conn() as conn:
-            conn.execute(
-                "UPDATE notebooks SET name=?, updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id=?",
-                (name, nb_id),
-            )
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE notebooks SET name=?, updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id=?",
+            (body.name.strip(), nb_id),
+        )
     return _nb_or_404(nb_id)
 
 
@@ -188,14 +219,11 @@ async def upload_source(nb_id: str, background_tasks: BackgroundTasks, file: Upl
 
 
 @router.post("/notebooks/{nb_id}/add-url", status_code=202)
-async def add_url_source(nb_id: str, background_tasks: BackgroundTasks, body: dict):
+async def add_url_source(nb_id: str, background_tasks: BackgroundTasks, body: _UrlBody):
     _nb_or_404(nb_id)
-    url = (body.get("url") or "").strip()
-    if not url:
-        raise HTTPException(400, "url is required")
-
+    url = body.url.strip()
     src_id = str(uuid.uuid4())
-    title = body.get("title") or url[:80]
+    title = body.title or url[:80]
     with get_conn() as conn:
         conn.execute(
             "INSERT INTO sources (id, notebook_id, type, url, title, status) VALUES (?,?,?,?,?,?)",
@@ -220,15 +248,12 @@ async def delete_source(nb_id: str, src_id: str):
 
 
 @router.put("/notebooks/{nb_id}/sources/{src_id}/sensitivity")
-async def set_source_sensitivity(nb_id: str, src_id: str, body: dict):
+async def set_source_sensitivity(nb_id: str, src_id: str, body: _SensitivityBody):
     """Toggle confidential / shareable on a notebook source."""
     _src_or_404(src_id, nb_id)
-    level = body.get("level", "shareable")
-    if level not in ("confidential", "shareable"):
-        raise HTTPException(400, "level must be 'confidential' or 'shareable'")
     with get_conn() as conn:
-        conn.execute("UPDATE sources SET sensitivity=? WHERE id=?", (level, src_id))
-    return {"id": src_id, "sensitivity": level}
+        conn.execute("UPDATE sources SET sensitivity=? WHERE id=?", (body.level, src_id))
+    return {"id": src_id, "sensitivity": body.level}
 
 
 @router.get("/notebooks/{nb_id}/sources/{src_id}/raw")
@@ -287,13 +312,12 @@ async def get_paper(nb_id: str):
 
 
 @router.post("/notebooks/{nb_id}/paper")
-async def save_paper(nb_id: str, body: dict):
+async def save_paper(nb_id: str, body: _PaperBody):
     """Persist the paper draft (HTML content from the editor)."""
     _nb_or_404(nb_id)
-    content = body.get("content", "")
     dest = UPLOAD_DIR / nb_id
     dest.mkdir(parents=True, exist_ok=True)
-    (dest / "_paper.html").write_text(content, encoding="utf-8")
+    (dest / "_paper.html").write_text(body.content, encoding="utf-8")
     return {"saved": True}
 
 
@@ -310,29 +334,25 @@ async def list_conversations(nb_id: str):
 
 
 @router.post("/notebooks/{nb_id}/conversations", status_code=201)
-async def create_conversation(nb_id: str, body: dict):
+async def create_conversation(nb_id: str, body: _TitleBody):
     _nb_or_404(nb_id)
-    title = (body.get("title") or "New Conversation").strip()
     cid = str(uuid.uuid4())
     with get_conn() as conn:
         conn.execute(
-            "INSERT INTO conversations (id, notebook_id, title) VALUES (?,?,?)", (cid, nb_id, title)
+            "INSERT INTO conversations (id, notebook_id, title) VALUES (?,?,?)", (cid, nb_id, body.title.strip())
         )
-    return {"id": cid, "notebook_id": nb_id, "title": title}
+    return {"id": cid, "notebook_id": nb_id, "title": body.title.strip()}
 
 
 @router.patch("/notebooks/{nb_id}/conversations/{cid}")
-async def rename_conversation(nb_id: str, cid: str, body: dict):
+async def rename_conversation(nb_id: str, cid: str, body: _TitleBody):
     _conv_or_404(cid, nb_id)
-    title = (body.get("title") or "").strip()
-    if not title:
-        raise HTTPException(400, "title is required")
     with get_conn() as conn:
         conn.execute(
             "UPDATE conversations SET title=?, updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id=?",
-            (title, cid),
+            (body.title.strip(), cid),
         )
-    return {"id": cid, "title": title}
+    return {"id": cid, "title": body.title.strip()}
 
 
 @router.delete("/notebooks/{nb_id}/conversations/{cid}")
@@ -393,12 +413,9 @@ async def _nb_chat_core(nb_id: str, cid: str, question: str) -> dict:
 
 
 @router.post("/notebooks/{nb_id}/conversations/{cid}/chat")
-async def nb_chat(nb_id: str, cid: str, body: dict):
+async def nb_chat(nb_id: str, cid: str, body: _ChatBody):
     _conv_or_404(cid, nb_id)
-    question = (body.get("message") or "").strip()
-    if not question:
-        raise HTTPException(400, "message is required")
-    return await _nb_chat_core(nb_id, cid, question)
+    return await _nb_chat_core(nb_id, cid, body.message.strip())
 
 
 async def _stream_nb_chat(nb_id: str, cid: str, question: str) -> AsyncIterator[str]:
@@ -448,13 +465,10 @@ async def _stream_nb_chat(nb_id: str, cid: str, question: str) -> AsyncIterator[
 
 
 @router.post("/notebooks/{nb_id}/conversations/{cid}/chat/stream")
-async def nb_chat_stream(nb_id: str, cid: str, body: dict):
+async def nb_chat_stream(nb_id: str, cid: str, body: _ChatBody):
     _conv_or_404(cid, nb_id)
-    question = (body.get("message") or "").strip()
-    if not question:
-        raise HTTPException(400, "message is required")
     return StreamingResponse(
-        _stream_nb_chat(nb_id, cid, question),
+        _stream_nb_chat(nb_id, cid, body.message.strip()),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
@@ -470,18 +484,15 @@ async def get_settings():
 
 
 @router.patch("/nb-settings/{key}")
-async def update_setting(key: str, body: dict):
-    value = body.get("value")
-    if value is None:
-        raise HTTPException(400, "value is required")
+async def update_setting(key: str, body: _SettingBody):
     with get_conn() as conn:
         conn.execute(
             "INSERT INTO nb_settings (key, value) VALUES (?,?) "
             "ON CONFLICT(key) DO UPDATE SET value=excluded.value, "
             "updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')",
-            (key, str(value)),
+            (key, body.value),
         )
-    return {"key": key, "value": str(value)}
+    return {"key": key, "value": body.value}
 
 
 # ── Calendar events ────────────────────────────────────────────────────
@@ -498,23 +509,17 @@ async def list_events(nb_id: str):
 
 
 @router.post("/notebooks/{nb_id}/events")
-async def create_event(nb_id: str, body: dict):
+async def create_event(nb_id: str, body: _EventBody):
     _nb_or_404(nb_id)
-    title = (body.get("title") or "").strip()
-    date  = (body.get("date") or "").strip()
-    if not title or not date:
-        raise HTTPException(400, "title and date are required")
     eid = str(uuid.uuid4())
     with get_conn() as conn:
         conn.execute(
             "INSERT INTO calendar_events (id, notebook_id, title, date, end_date, type, note) "
             "VALUES (?,?,?,?,?,?,?)",
-            (eid, nb_id, title, date,
-             body.get("end_date") or None,
-             body.get("type") or "event",
-             body.get("note") or None),
+            (eid, nb_id, body.title.strip(), body.date.strip(),
+             body.end_date, body.type, body.note),
         )
-    return {"id": eid, "title": title, "date": date}
+    return {"id": eid, "title": body.title.strip(), "date": body.date.strip()}
 
 
 @router.delete("/notebooks/{nb_id}/events/{eid}")

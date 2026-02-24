@@ -13,7 +13,7 @@ import hashlib
 import logging
 import secrets
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Header, Depends
@@ -127,7 +127,7 @@ async def signup(req: SignupRequest):
         # Create session
         token = create_session_token()
         session_id = secrets.token_hex(16)
-        expires_at = (datetime.utcnow() + timedelta(days=30)).isoformat() + "Z"
+        expires_at = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
         
         conn.execute("""
             INSERT INTO sessions (id, user_id, token, expires_at)
@@ -135,7 +135,6 @@ async def signup(req: SignupRequest):
         """, (session_id, user_id, token, expires_at))
         conn.commit()
         
-        # Get user
         cursor = conn.execute("""
             SELECT id, email, name, avatar_url, created_at
             FROM users WHERE id = ?
@@ -174,7 +173,7 @@ async def login(req: LoginRequest):
         # Create session
         token = create_session_token()
         session_id = secrets.token_hex(16)
-        expires_at = (datetime.utcnow() + timedelta(days=30)).isoformat() + "Z"
+        expires_at = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
         
         conn.execute("""
             INSERT INTO sessions (id, user_id, token, expires_at)

@@ -1,11 +1,16 @@
 """Shared pytest fixtures for Hyphae tests."""
 
-import sys, os
+import sys
+import os
 
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(_project_root, "src"))
-sys.path.insert(0, os.path.join(_project_root, "web"))
-sys.path.insert(0, _project_root)
+for _p in (
+    os.path.join(_project_root, "src"),
+    os.path.join(_project_root, "web"),
+    _project_root,
+):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 import pytest
 import tempfile

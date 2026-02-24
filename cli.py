@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
 """Hyphae CLI — Scientific Research Copilot that respects confidential data."""
 
-import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
-
 import argparse
 import json
 import time
 
-from main import generate_hybrid
-from tools import ALL_TOOLS, execute_tool, LOCAL_ONLY_TOOLS
-from privacy import sanitise_for_cloud
+from main import generate_hybrid  # also bootstraps sys.path
+from core.tools import ALL_TOOLS, execute_tool, LOCAL_ONLY_TOOLS
+from core.privacy import sanitise_for_cloud
 
 
 def _format_source(source):
