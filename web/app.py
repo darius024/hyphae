@@ -88,10 +88,12 @@ app = FastAPI(title="Hyphae", version="2.0")
 from routes.notebooks import router as notebooks_router, configure as configure_notebooks
 from routes.query import router as query_router, configure as configure_query
 from routes.code import router as code_router
+from routes.auth import router as auth_router
 
 app.include_router(notebooks_router)
 app.include_router(query_router)
 app.include_router(code_router)
+app.include_router(auth_router)
 
 
 # ── No-cache middleware for static assets (dev convenience) ───────────────
