@@ -193,6 +193,11 @@
                         <div id="nb-citations-list"></div>
                     </div>
                     <div class="input-area" id="nb-input-area">
+                        <div class="context-popup" id="context-popup" style="display:none">
+                            <div class="context-popup-header">Add context <kbd>/</kbd></div>
+                            <div class="context-popup-list" id="context-popup-list"></div>
+                            <div class="context-popup-empty" id="context-popup-empty" style="display:none">No sources in this notebook</div>
+                        </div>
                         <div class="input-row">
                             <textarea id="nb-query-input" placeholder="Ask about your sources..." rows="1"></textarea>
                             <button class="icon-btn voice-btn" id="nb-voice-btn" title="Voice input" aria-label="Voice input">
@@ -208,6 +213,7 @@
                         </div>
                         <div class="input-hints">
                             <div class="route-indicator" id="nb-route-indicator"></div>
+                            <span><kbd>/</kbd> add context</span>
                             <span><kbd>Enter</kbd> send</span>
                             <span><kbd>Shift+Enter</kbd> newline</span>
                             <button class="privacy-log-btn" id="privacy-log-btn" title="Privacy audit log" aria-label="Privacy audit log">

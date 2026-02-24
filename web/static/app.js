@@ -804,10 +804,13 @@ async function deleteNotebook(nbId) {
 
 let _srcPollTimers = {};
 
+let _currentSources = [];
+
 async function loadSources(nbId) {
     const res  = await fetch(`/api/notebooks/${nbId}/sources`);
     const data = await res.json();
-    renderSources(nbId, data.sources || []);
+    _currentSources = data.sources || [];
+    renderSources(nbId, _currentSources);
 }
 
 function srcTypeIcon(s) {
@@ -1955,9 +1958,12 @@ function updateNbRouteIndicator(text) {
 
 // ── Notebook chat event listeners ─────────────────────────────────────
 
+let _ctxActive = false;
+
 nbSendBtn.addEventListener("click", () => nbSmartSend(nbQueryInput.value));
 
 nbQueryInput.addEventListener("keydown", (e) => {
+    if (_ctxActive) return;
     if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         nbSmartSend(nbQueryInput.value);
@@ -1975,6 +1981,140 @@ if (nbVoiceBtn) nbVoiceBtn.addEventListener("click", nbToggleVoice);
 nbClearBtn.addEventListener("click", () => {
     nbMessagesEl.innerHTML = "";
     nbCitationsBar.style.display = "none";
+});
+
+// ── "/" context popup for adding source references ────────────────────
+
+const ctxPopup     = document.getElementById("context-popup");
+const ctxList      = document.getElementById("context-popup-list");
+const ctxEmpty     = document.getElementById("context-popup-empty");
+let _ctxIdx        = 0;
+let _ctxFiltered   = [];
+let _ctxSlashStart = -1;
+
+function ctxShow() {
+    if (!ctxPopup) return;
+    _ctxActive = true;
+    _ctxIdx = 0;
+    ctxPopup.style.display = "";
+    ctxRender("");
+}
+
+function ctxHide() {
+    if (!ctxPopup) return;
+    _ctxActive = false;
+    _ctxIdx = 0;
+    _ctxSlashStart = -1;
+    ctxPopup.style.display = "none";
+}
+
+function ctxRender(filter) {
+    const q = filter.toLowerCase();
+    _ctxFiltered = _currentSources.filter(s => {
+        const name = (s.title || s.filename || s.url || "").toLowerCase();
+        return name.includes(q);
+    });
+
+    if (!_ctxFiltered.length) {
+        ctxList.innerHTML = "";
+        ctxEmpty.style.display = "";
+        ctxEmpty.textContent = q ? "No matching sources" : "No sources in this notebook";
+        return;
+    }
+    ctxEmpty.style.display = "none";
+    ctxList.innerHTML = _ctxFiltered.map((s, i) => {
+        const label = escapeHtml(s.title || s.filename || s.url || "Source");
+        const ext = (s.filename || "").split(".").pop().toUpperCase() || "URL";
+        return `<div class="context-popup-item${i === _ctxIdx ? " active" : ""}" data-idx="${i}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <span class="context-popup-item-name">${label}</span>
+            <span class="context-popup-item-type">${ext}</span>
+        </div>`;
+    }).join("");
+
+    ctxList.querySelectorAll(".context-popup-item").forEach(el => {
+        el.addEventListener("mousedown", (e) => {
+            e.preventDefault();
+            ctxSelect(parseInt(el.dataset.idx));
+        });
+        el.addEventListener("mouseenter", () => {
+            _ctxIdx = parseInt(el.dataset.idx);
+            ctxHighlight();
+        });
+    });
+}
+
+function ctxHighlight() {
+    ctxList.querySelectorAll(".context-popup-item").forEach((el, i) => {
+        el.classList.toggle("active", i === _ctxIdx);
+    });
+    const activeEl = ctxList.querySelector(".context-popup-item.active");
+    if (activeEl) activeEl.scrollIntoView({ block: "nearest" });
+}
+
+function ctxSelect(idx) {
+    const src = _ctxFiltered[idx];
+    if (!src) { ctxHide(); return; }
+    const label = src.title || src.filename || src.url || "Source";
+    const val = nbQueryInput.value;
+    const before = val.substring(0, _ctxSlashStart);
+    const after = val.substring(nbQueryInput.selectionStart);
+    nbQueryInput.value = before + "@" + label + " " + after;
+    nbQueryInput.focus();
+    const cursorPos = before.length + label.length + 2;
+    nbQueryInput.setSelectionRange(cursorPos, cursorPos);
+    ctxHide();
+}
+
+nbQueryInput.addEventListener("keydown", (e) => {
+    if (!_ctxActive) return;
+    if (e.key === "ArrowDown") {
+        e.preventDefault();
+        _ctxIdx = (_ctxIdx + 1) % Math.max(_ctxFiltered.length, 1);
+        ctxHighlight();
+    } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        _ctxIdx = (_ctxIdx - 1 + _ctxFiltered.length) % Math.max(_ctxFiltered.length, 1);
+        ctxHighlight();
+    } else if (e.key === "Enter" || e.key === "Tab") {
+        if (_ctxFiltered.length) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            ctxSelect(_ctxIdx);
+        }
+    } else if (e.key === "Escape") {
+        e.preventDefault();
+        ctxHide();
+    }
+});
+
+nbQueryInput.addEventListener("input", () => {
+    const val = nbQueryInput.value;
+    const pos = nbQueryInput.selectionStart;
+
+    if (_ctxActive) {
+        const query = val.substring(_ctxSlashStart + 1, pos);
+        if (_ctxSlashStart < 0 || pos <= _ctxSlashStart || query.includes("\n")) {
+            ctxHide();
+        } else {
+            ctxRender(query);
+        }
+        return;
+    }
+
+    if (pos > 0 && val[pos - 1] === "/") {
+        const charBefore = pos > 1 ? val[pos - 2] : " ";
+        if (charBefore === " " || charBefore === "\n" || pos === 1) {
+            _ctxSlashStart = pos - 1;
+            ctxShow();
+        }
+    }
+});
+
+document.addEventListener("click", (e) => {
+    if (_ctxActive && !ctxPopup.contains(e.target) && e.target !== nbQueryInput) {
+        ctxHide();
+    }
 });
 
 // ── Mobile notebook sidebar ───────────────────────────────────────────
