@@ -207,6 +207,13 @@ marimo/_lsp/
 __marimo__/
 
 .DS_Store
+nohup.out
+*.sqlite3
+*.sqlite3-journal
+
+# Uploads / runtime data
+uploads/
+corpus/
 
 # Eval server (contains held-out evals, scoring, and uploads)
 server/

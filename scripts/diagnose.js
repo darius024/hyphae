@@ -2,7 +2,8 @@
 // by checking for patterns that would throw at top-level
 
 const fs = require('fs');
-const code = fs.readFileSync('/Users/stefi/Desktop/Projects/Hyphae/hyphae/web/static/app.js', 'utf8');
+const path = require('path');
+const code = fs.readFileSync(path.join(__dirname, '..', 'web/static/app.js'), 'utf8');
 const lines = code.split('\n');
 
 // Find all top-level statements (not indented) that call methods on variables

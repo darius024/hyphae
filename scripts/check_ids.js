@@ -1,6 +1,8 @@
 const fs = require('fs');
-const code = fs.readFileSync('/Users/stefi/Desktop/Projects/Hyphae/hyphae/web/static/app.js','utf8');
-const html = fs.readFileSync('/Users/stefi/Desktop/Projects/Hyphae/hyphae/web/static/index.html','utf8');
+const path = require('path');
+const root = path.resolve(__dirname, '..');
+const code = fs.readFileSync(path.join(root, 'web/static/app.js'), 'utf8');
+const html = fs.readFileSync(path.join(root, 'web/static/index.html'), 'utf8');
 const idMatches = [...html.matchAll(/id="([^"]+)"/g)].map(m=>m[1]);
 const htmlIds = new Set(idMatches);
 
