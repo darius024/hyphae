@@ -225,6 +225,7 @@ def _exec_summarise_notes(topic):
 
 def _exec_read_document(name, max_chars=4000):
     """Return the text content of a corpus file (truncated)."""
+    name = Path(name).name
     path = Path(CORPUS_DIR) / name
     if not path.exists() or not path.is_file():
         raise FileNotFoundError(f"Document not found: {name}")
@@ -353,6 +354,7 @@ def _exec_search_literature(query):
 def _exec_compare_documents(doc_a, doc_b, topic):
     """Compare two documents on a topic using local RAG. No data leaves the device."""
     def _paragraph_hits(doc_name):
+        doc_name = Path(doc_name).name
         path = Path(CORPUS_DIR) / doc_name
         if not path.exists():
             return []

@@ -3036,14 +3036,6 @@ body.nb-closed .nb-open-btn {
 .message .bubble {
     box-shadow: 0 1px 4px rgba(0,0,0,0.04);
 }
-.message.user .bubble {
-    background: var(--accent-light);
-    border: 1px solid var(--accent-border);
-}
-.message.assistant .bubble {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-}
 
 /* ── Privacy note in welcome ────────────────────────────────────────── */
 .privacy-note {

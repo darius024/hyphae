@@ -2,6 +2,7 @@ const toolListEl = document.getElementById("tool-list");
 // Doc search input (used for Cmd/Ctrl+K). Fallback to any .doc-search field.
 const docSearchInput = document.getElementById("nb-url-input") || document.querySelector(".doc-search");
 const quickButtonsEl = document.getElementById("quick-buttons");
+const welcomeQuickButtonsEl = document.getElementById("welcome-quick-buttons");
 
 let isRecording = false;
 let mediaRecorder = null;
@@ -356,25 +357,31 @@ function loadQuickPrompts() {
         }
     ];
 
-    quickButtonsEl.innerHTML = prompts.map(p => `
+    const html = prompts.map(p => `
         <button class="quick-btn" data-text="${escapeHtml(p.text)}">
             <strong><span class="quick-icon">${p.icon}</span> ${escapeHtml(p.title)}</strong>
             <span>${escapeHtml(p.hint)}</span>
         </button>
     `).join("");
 
-    quickButtonsEl.querySelectorAll(".quick-btn").forEach(btn => {
-        btn.addEventListener("click", () => {
-            // If no conversation is open, hint the user
-            if (!currentConvId) {
-                showToast("Open a conversation first to use quick prompts", "info");
-                return;
-            }
-            nbQueryInput.value = btn.dataset.text;
-            nbQueryInput.focus();
-            nbQueryInput.dispatchEvent(new Event("input"));
+    function bindQuickButtons(container) {
+        if (!container) return;
+        container.innerHTML = html;
+        container.querySelectorAll(".quick-btn").forEach(btn => {
+            btn.addEventListener("click", () => {
+                if (!currentConvId) {
+                    showToast("Open a conversation first to use quick prompts", "info");
+                    return;
+                }
+                nbQueryInput.value = btn.dataset.text;
+                nbQueryInput.focus();
+                nbQueryInput.dispatchEvent(new Event("input"));
+            });
         });
-    });
+    }
+
+    bindQuickButtons(quickButtonsEl);
+    bindQuickButtons(welcomeQuickButtonsEl);
 }
 
 // ── Keyboard shortcuts ──────────────────────────────────────────────

@@ -15,6 +15,14 @@ router = APIRouter(prefix="/api", tags=["corpus"])
 
 # These are injected by app.py at startup
 CORPUS_DIR: str = ""
+
+
+def _safe_name(name: str) -> str:
+    """Reject path traversal attempts and return a clean basename."""
+    clean = Path(name).name
+    if not clean or clean != name or ".." in name:
+        raise HTTPException(400, "Invalid filename")
+    return clean
 add_file = None
 _HIDDEN_SUFFIXES = {".bin", ".idx", ".faiss", ".npy", ".pkl"}
 
@@ -95,6 +103,7 @@ async def upload_documents(file: List[UploadFile] = File(...)):
 
 @router.get("/documents/{name}")
 async def preview_document(name: str):
+    name = _safe_name(name)
     path = Path(CORPUS_DIR) / name
     if not path.exists():
         raise HTTPException(404, f"Not found: {name}")
@@ -115,6 +124,7 @@ async def preview_document(name: str):
 
 @router.get("/documents/{name}/raw")
 async def raw_document(name: str):
+    name = _safe_name(name)
     originals_dir = Path(CORPUS_DIR) / ".originals"
     pdf_path = originals_dir / name
     if pdf_path.exists() and pdf_path.suffix.lower() == ".pdf":
@@ -135,6 +145,7 @@ async def raw_document(name: str):
 
 @router.delete("/documents/{name}")
 async def remove_document(name: str):
+    name = _safe_name(name)
     path = Path(CORPUS_DIR) / name
     if not path.exists():
         raise HTTPException(404, f"Not found: {name}")

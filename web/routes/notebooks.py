@@ -48,6 +48,14 @@ def configure(*, conn_fn, ingest_fn, upload_dir, search_fn, delete_idx_fn,
 
 # ── Helpers ────────────────────────────────────────────────────────────
 
+def _safe_filename(name: str) -> str:
+    """Reject path traversal in filenames."""
+    clean = Path(name).name
+    if not clean or clean != name or ".." in name:
+        raise HTTPException(400, "Invalid filename")
+    return clean
+
+
 def _nb_or_404(nb_id: str) -> dict:
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM notebooks WHERE id=?", (nb_id,)).fetchone()
@@ -231,6 +239,7 @@ async def raw_source(nb_id: str, src_id: str):
     filename = src.get("filename")
     if not filename:
         raise HTTPException(404, "No file associated with this source")
+    filename = _safe_filename(filename)
     file_path = UPLOAD_DIR / nb_id / filename
     if not file_path.exists():
         raise HTTPException(404, f"File not found: {filename}")
@@ -250,6 +259,7 @@ async def preview_source(nb_id: str, src_id: str):
     filename = src.get("filename")
     if not filename:
         raise HTTPException(404, "No file associated with this source")
+    filename = _safe_filename(filename)
     file_path = UPLOAD_DIR / nb_id / filename
     if not file_path.exists():
         raise HTTPException(404, f"File not found: {filename}")
