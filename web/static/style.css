@@ -5598,8 +5598,9 @@ body.resizing textarea {
 .user-dropdown {
   position: absolute;
   top: calc(100% + 6px);
-  left: 16px;
-  right: 16px;
+  left: 0;
+  right: 0;
+  min-width: 220px;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -5623,6 +5624,12 @@ body.resizing textarea {
   align-items: center;
   gap: 12px;
   padding: 10px 12px;
+  min-width: 0;
+}
+
+.user-dropdown-header > div {
+  min-width: 0;
+  overflow: hidden;
 }
 
 .user-dropdown-avatar {
@@ -5643,12 +5650,18 @@ body.resizing textarea {
   font-weight: 600;
   font-size: 14px;
   color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .user-dropdown-email {
   font-size: 12px;
   color: var(--text-secondary);
   margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .user-dropdown-divider {
@@ -5681,5 +5694,13 @@ body.resizing textarea {
 .user-dropdown-item svg {
   flex-shrink: 0;
   opacity: 0.7;
+}
+
+#user-dropdown-logout {
+  color: var(--red, #e74c3c);
+}
+
+#user-dropdown-logout:hover {
+  background: color-mix(in srgb, var(--red, #e74c3c) 10%, transparent);
 }
 
