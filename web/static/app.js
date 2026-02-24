@@ -3394,7 +3394,7 @@ const authModule = (() => {
             // Show user info
             const initials = getInitials(user.name);
             if (userName) userName.textContent = user.name;
-            if (userAvatar) userAvatar.textContent = initials;
+            if (userAvatar) { userAvatar.textContent = initials; userAvatar.style.display = ''; }
             if (userDropdownName) userDropdownName.textContent = user.name;
             if (userDropdownEmail) userDropdownEmail.textContent = user.email;
             if (userDropdownAvatar) userDropdownAvatar.textContent = initials;
@@ -3402,7 +3402,8 @@ const authModule = (() => {
             if (userInfo) userInfo.style.display = '';
             if (userSigninBtn) userSigninBtn.style.display = 'none';
         } else {
-            // Show sign in button
+            // Hide avatar and user info, show sign in button
+            if (userAvatar) userAvatar.style.display = 'none';
             if (userInfo) userInfo.style.display = 'none';
             if (userSigninBtn) userSigninBtn.style.display = '';
         }

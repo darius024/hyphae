@@ -5574,8 +5574,9 @@ body.resizing textarea {
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
   padding: 10px 18px;
-  margin: 12px 16px;
+  margin: 0;
   background: var(--accent);
   color: white;
   border: none;
@@ -5585,6 +5586,7 @@ body.resizing textarea {
   font-family: inherit;
   cursor: pointer;
   transition: all 0.2s;
+  justify-content: center;
 }
 
 .user-signin-btn:hover {
