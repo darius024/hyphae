@@ -10,7 +10,7 @@
 
 ### Foundation
 - [x] Project structure: modular FastAPI backend with routers
-- [x] `start_server.sh` — portable one-command startup
+- [x] `scripts/start_server.sh` — portable one-command startup
 - [x] `.env.example` — documented environment variables
 - [x] `.gitignore` — runtime data, secrets, OS files excluded
 - [x] `bootstrap.py` — centralised `sys.path` management
@@ -77,7 +77,7 @@ source cactus/venv/bin/activate
 export GEMINI_API_KEY="your-key"
 
 python benchmark.py                    # run full benchmark
-python submit.py --team "Hyphae" --location "London"  # submit (1x/hr max)
-./start_server.sh                      # start web UI
+python scripts/submit.py --team "Hyphae" --location "London"  # submit
+./scripts/start_server.sh              # start web UI
 pytest tests/ -v                       # run tests
 ```

@@ -208,15 +208,19 @@ __marimo__/
 
 .DS_Store
 nohup.out
+
+# Runtime databases
 *.sqlite3
 *.sqlite3-journal
+*.db
 
-# Uploads / runtime data
+# Runtime data (uploads, indexes, corpus, workspace)
 uploads/
+web/uploads/
+web/indexes/
 corpus/
+code_workspace/
+assets/
 
 # Eval server (contains held-out evals, scoring, and uploads)
 server/
-
-# Leaderboard data (upstream docs/ excluded, ours tracked)
-# docs/

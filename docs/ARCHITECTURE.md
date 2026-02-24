@@ -78,16 +78,21 @@ hyphae/
 │   │   ├── test_auth_api.py
 │   │   └── test_validation.py
 │   └── conftest.py         # Shared fixtures
-├── scripts/                # Dev utilities
-│   ├── tune_threshold.py
-│   ├── check_ids.js
-│   └── diagnose.js
+├── scripts/                # All scripts and dev utilities
+│   ├── setup.sh            # First-time project setup
+│   ├── start_server.sh     # Start the web server
+│   ├── test_server.sh      # Start server + smoke tests
+│   ├── submit.py           # Submit to Cactus Evals leaderboard
+│   ├── tune_threshold.py   # Routing threshold tuning
+│   ├── check_ids.js        # HTML ID audit
+│   └── diagnose.js         # JS undeclared-var finder
 ├── examples/               # Standalone demos
 ├── docs/                   # Documentation
 ├── cli.py                  # CLI interface
 ├── benchmark.py            # Routing benchmark suite
 ├── main.py                 # Backward-compatible engine wrapper
-└── requirements.txt
+├── pyproject.toml          # Canonical dependency & project metadata
+└── requirements.txt        # Flat pip requirements (mirrors pyproject.toml)
 ```
 
 ## Key Design Decisions
@@ -127,7 +132,7 @@ Single-page app with no framework — vanilla HTML/CSS/JS:
 ```bash
 cd hyphae
 cp .env.example ../.env   # fill in GEMINI_API_KEY
-./start_server.sh          # starts on http://localhost:5000
+./scripts/start_server.sh  # starts on http://localhost:5000
 ```
 
 ## Testing

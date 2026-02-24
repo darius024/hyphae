@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-cd "$SCRIPT_DIR"
+cd "$REPO_ROOT"
 
 # Source .env from repo root (optional)
 if [ -f "$REPO_ROOT/.env" ]; then
@@ -13,7 +13,7 @@ if [ -f "$REPO_ROOT/.env" ]; then
   set +a
 fi
 
-export PYTHONPATH="$SCRIPT_DIR:$SCRIPT_DIR/web${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPATH="$REPO_ROOT:$REPO_ROOT/web${PYTHONPATH:+:$PYTHONPATH}"
 
 PYTHON="${PYTHON:-$REPO_ROOT/cactus/venv/bin/python}"
 HOST="${HOST:-127.0.0.1}"

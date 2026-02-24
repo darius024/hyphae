@@ -73,7 +73,7 @@ pip install huggingface_hub
 huggingface-cli login
 
 # 3. Run setup (builds Cactus, downloads model weights, installs deps)
-bash setup.sh
+bash scripts/setup.sh
 
 # 4. Activate the virtual environment
 source cactus/venv/bin/activate
@@ -93,7 +93,7 @@ Then open [http://localhost:5000](http://localhost:5000) in your browser.
 
 ### Manual Dependency Install
 
-If `setup.sh` doesn't cover your platform, install manually:
+If `scripts/setup.sh` doesn't cover your platform, install manually:
 
 ```bash
 cd hyphae
@@ -271,49 +271,62 @@ Scoring: F1 accuracy (60%) + speed (15%) + on-device ratio (25%), weighted by di
 ## Submit
 
 ```bash
-python submit.py --team "Darphie" --location "London"
+python scripts/submit.py --team "Darphie" --location "London"
 ```
 
 ## Project Structure
 
 ```
 hyphae/
-├── main.py                    # Hybrid routing engine (rule-based → local → cloud)
-├── benchmark.py               # Hackathon benchmark
-├── submit.py                  # Leaderboard submission
+├── main.py                    # Hybrid routing engine entry point
+├── benchmark.py               # Routing benchmark suite
 ├── cli.py                     # CLI entrypoint (text, voice, one-shot)
-├── setup.sh                   # One-command setup
-├── requirements.txt           # Python dependencies
+├── pyproject.toml             # Canonical dependency & project metadata
+├── requirements.txt           # Flat pip requirements
 │
-├── src/                       # Core library modules
-│   ├── config.py              # Paths, Cactus FFI preloading
-│   ├── tools.py               # 9 research tools + LOCAL/CLOUD classification
-│   ├── privacy.py             # Cloud message sanitiser (9 pattern types)
-│   ├── voice.py               # On-device voice via Whisper + Cactus
-│   └── ingest.py              # Corpus ingestion (PDF extraction, CLI)
+├── scripts/                   # All scripts and dev utilities
+│   ├── setup.sh               # First-time project setup
+│   ├── start_server.sh        # Start the web server
+│   ├── test_server.sh         # Start server + smoke tests
+│   ├── submit.py              # Cactus Evals leaderboard submission
+│   ├── tune_threshold.py      # Routing threshold tuning
+│   ├── check_ids.js           # HTML ID audit
+│   └── diagnose.js            # JS undeclared-var finder
+│
+├── src/core/                  # Core AI engine
+│   ├── engine.py              # Hybrid routing: on-device vs cloud
+│   ├── tools.py               # Tool definitions and execution
+│   ├── privacy.py             # Privacy helpers (delegates to sanitiser)
+│   ├── config.py              # Paths, env defaults
+│   └── voice.py               # Whisper transcription
 │
 ├── web/                       # FastAPI web application
-│   ├── app.py                 # Thin orchestrator — path setup, query/voice routing,
-│   │                          #   privacy classify/log, static files
+│   ├── app.py                 # Application entry point, middleware, lifespan
+│   ├── bootstrap.py           # Centralised sys.path setup
 │   ├── routes/                # Modular API routers
-│   │   ├── corpus.py          # Document upload, list, preview, delete, sensitivity
-│   │   └── notebooks.py       # Notebook CRUD, sources, conversations, chat, settings
-│   ├── db.py                  # SQLite schema, connection utilities, demo seeding
-│   ├── models.py              # Pydantic API models
-│   ├── citations.py           # Citation builder for notebook RAG
-│   ├── embed.py               # Sentence-transformer embeddings
-│   ├── retrieval.py           # FAISS hybrid search for notebooks
-│   ├── ingest_nb.py           # Notebook source ingestion
-│   ├── privacy.py             # Notebook-layer sanitisation
+│   │   ├── notebooks.py       # Notebook CRUD, sources, conversations, chat
+│   │   ├── query.py           # Hybrid query, classify, tools, voice
+│   │   ├── auth.py            # Authentication (bcrypt, sessions)
+│   │   ├── corpus.py          # Corpus document endpoints
+│   │   └── code.py            # Git clone, file browse, edit, commit
+│   ├── notebook/              # Notebook domain layer
+│   │   ├── db.py              # SQLite schema, connection manager
+│   │   ├── models.py          # Pydantic v2 schemas
+│   │   ├── ingest.py          # PDF/text/URL source ingestion
+│   │   ├── retrieval.py       # FAISS + BM25 hybrid search
+│   │   ├── citations.py       # Citation builder from search results
+│   │   ├── embed.py           # Sentence-transformer embeddings
+│   │   └── sanitiser.py       # PII sanitisation
 │   └── static/                # Frontend (vanilla HTML/CSS/JS)
-│       ├── index.html         # SPA shell — chat, sidebar, notebooks, modals
-│       ├── style.css          # Research-grade teal theme, responsive
-│       └── app.js             # Chat logic, tools panel, audit log, doc preview
+│       ├── index.html         # SPA shell
+│       ├── app.js             # All frontend logic
+│       └── style.css          # Styles (light + dark themes)
 │
-├── tests/                     # Unit tests (pytest)
-├── corpus/                    # Local research documents (never sent to cloud)
-│   ├── .sensitivity.json      # Per-document confidential/shareable tags
-│   └── .originals/            # Preserved original PDFs from uploads
+├── tests/                     # Test suite (pytest)
+│   ├── unit/                  # Fast, isolated unit tests
+│   └── integration/           # Tests requiring FastAPI TestClient
+├── examples/                  # Standalone demos
+├── docs/                      # Documentation
 └── cactus/                    # Cactus SDK (git submodule)
 ```
 

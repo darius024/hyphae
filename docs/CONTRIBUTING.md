@@ -12,7 +12,7 @@ cp .env.example ../.env   # fill in GEMINI_API_KEY
 ## Development
 
 ```bash
-./start_server.sh          # http://localhost:5000 with --reload
+./scripts/start_server.sh  # http://localhost:5000 with --reload
 pytest tests/ -v           # run all tests
 python benchmark.py        # run routing benchmark
 ```

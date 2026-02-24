@@ -11,11 +11,12 @@ Run from the project root:
 
 import sys, os
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+_root = os.path.join(os.path.dirname(__file__), "..")
+sys.path.insert(0, _root)
+sys.path.insert(0, os.path.join(_root, "src"))
 
-from ingest import add_file, add_directory, list_documents, remove_document
-from tools import execute_tool
+from ingestion.corpus import add_file, add_directory, list_documents, remove_document
+from core.tools import execute_tool
 
 
 def main():

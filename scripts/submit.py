@@ -6,11 +6,14 @@ Usage:
 """
 
 import argparse
+import os
 import time
 import requests
 
 SERVER_URL = "https://cactusevals.ngrok.app"
 HEADERS = {"ngrok-skip-browser-warning": "true"}
+
+_REPO_ROOT = os.path.join(os.path.dirname(__file__), "..")
 
 
 def submit(team, location):
@@ -18,8 +21,9 @@ def submit(team, location):
     print(f"  Submitting main.py for team '{team}' ({location})")
     print("=" * 60)
 
+    main_path = os.path.join(_REPO_ROOT, "main.py")
     try:
-        with open("main.py", "rb") as f:
+        with open(main_path, "rb") as f:
             resp = requests.post(
                 f"{SERVER_URL}/eval/submit",
                 data={"team": team, "location": location},

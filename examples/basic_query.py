@@ -12,11 +12,12 @@ Run from the project root:
 
 import sys, os
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+_root = os.path.join(os.path.dirname(__file__), "..")
+sys.path.insert(0, _root)
+sys.path.insert(0, os.path.join(_root, "src"))
 
 from main import generate_hybrid, print_result
-from tools import ALL_TOOLS, execute_tool
+from core.tools import ALL_TOOLS, execute_tool
 
 
 def main():
