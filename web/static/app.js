@@ -2708,7 +2708,7 @@ function _renderNbItems(notebooks) {
             nbListEl.innerHTML = `<div class="nb-empty-state">
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-tertiary);margin-bottom:8px"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
                 <p>No notebooks yet</p>
-                <button class="nb-empty-create" onclick="document.getElementById('nb-new-btn').click()">Create your first notebook</button>
+                <button class="nb-empty-create" data-action="new-notebook">Create your first notebook</button>
             </div>`;
         }
         return;
@@ -2731,6 +2731,8 @@ function _renderNbItems(notebooks) {
     nbListEl.querySelectorAll(".nb-item-del").forEach(btn => {
         btn.addEventListener("click", (e) => { e.stopPropagation(); deleteNotebook(btn.dataset.id); });
     });
+    const emptyBtn = nbListEl.querySelector('[data-action="new-notebook"]');
+    if (emptyBtn) emptyBtn.addEventListener("click", openNbCreateModal);
 }
 
 // ══════════════════════════════════════════════════════════════════════════

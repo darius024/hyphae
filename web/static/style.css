@@ -49,6 +49,8 @@ body {
     -moz-osx-font-smoothing: grayscale;
 }
 
+.hidden { display: none !important; }
+
 .app-shell {
     display: flex;
     width: 100%;

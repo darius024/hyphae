@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=1771900003">
+    <link rel="stylesheet" href="/static/style.css">
     <!-- MathJax for LaTeX math rendering in preview -->
     <script>window.MathJax = { tex: { inlineMath: [['$','$'],['\\(','\\)']], displayMath: [['$$','$$'],['\\[','\\]']] }, svg: { fontCache: 'global' }, startup: { typeset: false } };</script>
     <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
@@ -548,7 +548,7 @@
                     <button class="header-toggle-btn nb-collapse-btn" id="nb-menu-btn" title="Toggle notebooks panel" aria-label="Toggle notebooks panel">▸</button>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.5"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
                     <h2 id="nb-name-display">Notebooks</h2>
-                    <button class="nb-new-btn-pill" id="nb-new-btn" title="New notebook" onclick="openNbCreateModal()">
+                    <button class="nb-new-btn-pill" id="nb-new-btn" title="New notebook">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                         New
                     </button>
@@ -621,7 +621,7 @@
         </section>
 
         <div class="sidebar-overlay" id="nb-sidebar-overlay"></div>
-        <button class="menu-btn nb-open-btn" id="nb-open-btn" title="Arată Notebooks" aria-label="Arată Notebooks">
+        <button class="menu-btn nb-open-btn" id="nb-open-btn" title="Show notebooks" aria-label="Show notebooks">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
         </button>
     </div>
@@ -777,6 +777,6 @@
     </div>
 </div>
 
-<script src="/static/app.js?v=1771900003"></script>
+<script src="/static/app.js"></script>
 </body>
 </html>
