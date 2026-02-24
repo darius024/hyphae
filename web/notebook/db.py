@@ -126,6 +126,136 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
 CREATE INDEX IF NOT EXISTS idx_sessions_user  ON sessions(user_id);
+
+-- ── Tags & Categories ───────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS tags (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL UNIQUE,
+    color       TEXT DEFAULT '#6366f1',
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+
+CREATE TABLE IF NOT EXISTS source_tags (
+    source_id   TEXT NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+    tag_id      TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+    PRIMARY KEY (source_id, tag_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_source_tags_src ON source_tags(source_id);
+CREATE INDEX IF NOT EXISTS idx_source_tags_tag ON source_tags(tag_id);
+
+-- ── Document Links (Knowledge Graph) ────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS document_links (
+    id          TEXT PRIMARY KEY,
+    source_id   TEXT NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+    target_id   TEXT NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+    link_type   TEXT DEFAULT 'related',
+    note        TEXT,
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    UNIQUE(source_id, target_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_doclinks_src ON document_links(source_id);
+CREATE INDEX IF NOT EXISTS idx_doclinks_tgt ON document_links(target_id);
+
+-- ── Usage Analytics ─────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS usage_events (
+    id          TEXT PRIMARY KEY,
+    user_id     TEXT REFERENCES users(id) ON DELETE SET NULL,
+    event_type  TEXT NOT NULL,
+    event_data  TEXT,
+    route       TEXT,
+    tools_used  TEXT,
+    latency_ms  REAL,
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_usage_type ON usage_events(event_type);
+CREATE INDEX IF NOT EXISTS idx_usage_date ON usage_events(created_at);
+CREATE INDEX IF NOT EXISTS idx_usage_user ON usage_events(user_id);
+
+-- ── Paper Deadlines & Reminders ─────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS deadlines (
+    id          TEXT PRIMARY KEY,
+    notebook_id TEXT REFERENCES notebooks(id) ON DELETE CASCADE,
+    source_id   TEXT REFERENCES sources(id) ON DELETE CASCADE,
+    title       TEXT NOT NULL,
+    due_date    TEXT NOT NULL,
+    priority    TEXT DEFAULT 'medium',
+    status      TEXT DEFAULT 'pending',
+    note        TEXT,
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_deadlines_due ON deadlines(due_date);
+CREATE INDEX IF NOT EXISTS idx_deadlines_nb ON deadlines(notebook_id);
+
+CREATE TABLE IF NOT EXISTS reminders (
+    id          TEXT PRIMARY KEY,
+    user_id     TEXT REFERENCES users(id) ON DELETE CASCADE,
+    deadline_id TEXT REFERENCES deadlines(id) ON DELETE CASCADE,
+    remind_at   TEXT NOT NULL,
+    sent        INTEGER DEFAULT 0,
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_reminders_at ON reminders(remind_at, sent);
+
+-- ── Calendar Sync Tokens ────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS calendar_connections (
+    id           TEXT PRIMARY KEY,
+    user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider     TEXT NOT NULL,
+    access_token TEXT,
+    refresh_token TEXT,
+    token_expiry TEXT,
+    calendar_id  TEXT,
+    sync_token   TEXT,
+    last_sync    TEXT,
+    created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_calcn_user ON calendar_connections(user_id);
+
+-- ── Note Versions (Version History) ─────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS notes (
+    id          TEXT PRIMARY KEY,
+    notebook_id TEXT NOT NULL REFERENCES notebooks(id) ON DELETE CASCADE,
+    title       TEXT NOT NULL,
+    content     TEXT NOT NULL DEFAULT '',
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_notes_nb ON notes(notebook_id);
+
+CREATE TABLE IF NOT EXISTS note_versions (
+    id          TEXT PRIMARY KEY,
+    note_id     TEXT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+    content     TEXT NOT NULL,
+    version_num INTEGER NOT NULL,
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_notever_note ON note_versions(note_id);
+
+-- ── AI Writing Sessions ─────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS writing_sessions (
+    id          TEXT PRIMARY KEY,
+    notebook_id TEXT REFERENCES notebooks(id) ON DELETE CASCADE,
+    note_id     TEXT REFERENCES notes(id) ON DELETE CASCADE,
+    content     TEXT,
+    ai_suggestions TEXT,
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
 """
 
 _FTS_TRIGGERS = """

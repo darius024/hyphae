@@ -15,7 +15,14 @@ fi
 
 export PYTHONPATH="$REPO_ROOT:$REPO_ROOT/web${PYTHONPATH:+:$PYTHONPATH}"
 
-PYTHON="${PYTHON:-$REPO_ROOT/cactus/venv/bin/python}"
+# Default PYTHON: prefer workspace-level cactus venv at ../cactus/venv
+if [ -z "${PYTHON:-}" ]; then
+  if [ -x "$REPO_ROOT/../cactus/venv/bin/python" ]; then
+    PYTHON="$REPO_ROOT/../cactus/venv/bin/python"
+  else
+    PYTHON="$REPO_ROOT/cactus/venv/bin/python"
+  fi
+fi
 HOST="${HOST:-127.0.0.1}"
 PORT="${PORT:-5000}"
 LOG_LEVEL="${LOG_LEVEL:-info}"

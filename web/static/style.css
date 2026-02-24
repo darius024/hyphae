@@ -5414,3 +5414,772 @@ body.resizing textarea {
   background: color-mix(in srgb, var(--red, #e74c3c) 10%, transparent);
 }
 
+
+/* ══════════════════════════════════════════════════════════════════════
+   NEW FEATURES: Tags, Links, Analytics, Deadlines, Versions
+══════════════════════════════════════════════════════════════════════ */
+
+/* ── Tags Manager ──────────────────────────────────────────────────── */
+.tags-modal-body {
+  padding: 16px 20px 20px;
+}
+
+.tags-create-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.tags-input {
+  flex: 1;
+  padding: 10px 14px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text-primary);
+}
+
+.tags-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.tags-color-input {
+  width: 44px;
+  height: 40px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  cursor: pointer;
+}
+
+.tags-list-wrap h4,
+.tags-source-section h4 {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  margin: 0 0 12px;
+}
+
+.tags-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.tag-chip:hover {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border-color: var(--accent);
+}
+
+.tag-chip .tag-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.tag-chip .tag-delete {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-left: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.tag-chip:hover .tag-delete {
+  opacity: 1;
+}
+
+.tag-chip .tag-delete:hover {
+  color: var(--red, #e74c3c);
+}
+
+.tags-source-section {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.tags-source-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tag-chip.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+/* Tag chips in source list */
+.source-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.source-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 10px;
+  border-radius: 10px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.source-tag .tag-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+/* ── Knowledge Graph / Document Links ──────────────────────────────── */
+.links-modal-body {
+  display: flex;
+  flex-direction: column;
+  height: calc(100% - 50px);
+  padding: 0;
+}
+
+.links-toolbar {
+  display: flex;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.links-filter {
+  padding: 6px 12px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text-primary);
+}
+
+.links-content {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.links-graph-container {
+  flex: 2;
+  position: relative;
+  background: var(--bg-primary);
+  border-right: 1px solid var(--border);
+}
+
+#links-graph-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.links-sidebar {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.links-sidebar h4 {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  margin: 0 0 12px;
+}
+
+.links-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.link-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.link-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.link-item-type {
+  padding: 2px 8px;
+  background: var(--accent);
+  color: white;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.link-item-delete {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 2px;
+}
+
+.link-item-delete:hover {
+  color: var(--red, #e74c3c);
+}
+
+.link-item-docs {
+  color: var(--text-secondary);
+}
+
+.link-item-docs strong {
+  color: var(--text-primary);
+}
+
+.link-create-form {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+}
+
+.link-create-form h4 {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.link-form-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.link-form-row label {
+  width: 80px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.link-select,
+.link-input {
+  flex: 1;
+  padding: 8px 12px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text-primary);
+}
+
+.link-form-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.link-cancel-btn {
+  background: var(--bg-tertiary) !important;
+  border: 1px solid var(--border) !important;
+}
+
+/* ── Analytics Dashboard ───────────────────────────────────────────── */
+.analytics-modal-body {
+  padding: 16px 20px 20px;
+  overflow-y: auto;
+  height: calc(100% - 50px);
+}
+
+.analytics-period-selector {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.analytics-period-btn {
+  padding: 8px 16px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.analytics-period-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.analytics-period-btn.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.analytics-card {
+  padding: 16px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.analytics-card-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.analytics-card-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.analytics-card-list {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.8;
+}
+
+.analytics-chart-section {
+  margin-bottom: 24px;
+}
+
+.analytics-chart-section h4 {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  margin: 0 0 12px;
+}
+
+.analytics-chart {
+  height: 200px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  display: flex;
+  align-items: flex-end;
+  padding: 16px;
+  gap: 4px;
+}
+
+.analytics-chart-bar {
+  flex: 1;
+  background: var(--accent);
+  border-radius: 4px 4px 0 0;
+  min-height: 4px;
+  transition: height 0.3s;
+}
+
+.analytics-recent h4 {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  margin: 0 0 12px;
+}
+
+.analytics-recent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.analytics-recent-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.analytics-recent-action {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.analytics-recent-time {
+  color: var(--text-secondary);
+}
+
+/* ── Calendar Sync ─────────────────────────────────────────────────── */
+.calendar-sync-body {
+  padding: 20px;
+}
+
+.calendar-sync-status {
+  margin-bottom: 20px;
+}
+
+.calendar-sync-status p {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.calendar-sync-providers {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.calendar-provider-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 18px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.calendar-provider-btn:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.calendar-sync-connected {
+  padding: 16px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.calendar-sync-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.calendar-sync-provider-name {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.calendar-sync-last {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.calendar-sync-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.calendar-disconnect-btn {
+  background: transparent !important;
+  border: 1px solid var(--red, #e74c3c) !important;
+  color: var(--red, #e74c3c) !important;
+}
+
+/* ── Deadline Modal ────────────────────────────────────────────────── */
+.deadline-modal-body {
+  padding: 20px;
+}
+
+.deadline-form-row {
+  margin-bottom: 16px;
+}
+
+.deadline-form-row label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.deadline-input {
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text-primary);
+}
+
+.deadline-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.deadline-form-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.deadline-save-btn {
+  background: var(--accent) !important;
+  color: white !important;
+}
+
+.deadline-cancel-btn {
+  background: var(--bg-tertiary) !important;
+  border: 1px solid var(--border) !important;
+}
+
+/* Deadline items in calendar */
+.deadline-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 8px 8px 0;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.deadline-item.priority-high {
+  border-left-color: var(--orange, #f59e0b);
+}
+
+.deadline-item.priority-critical {
+  border-left-color: var(--red, #e74c3c);
+}
+
+.deadline-item-title {
+  flex: 1;
+  font-weight: 500;
+}
+
+.deadline-item-due {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* ── Version History ───────────────────────────────────────────────── */
+.versions-modal-body {
+  display: flex;
+  height: calc(100% - 50px);
+}
+
+.versions-list-panel {
+  width: 280px;
+  padding: 16px;
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+
+.versions-list-panel h4 {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  margin: 0 0 12px;
+}
+
+.versions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.version-item {
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.version-item:hover,
+.version-item.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.version-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.version-item-num {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.version-item-date {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.version-item-summary {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.versions-preview-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.versions-preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.versions-preview-header span {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.versions-preview-content {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+  font-family: 'SF Mono', Menlo, Monaco, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  background: var(--bg-primary);
+}
+
+.versions-empty {
+  color: var(--text-secondary);
+  font-family: inherit;
+}
+
+/* ── Section header with multiple actions ──────────────────────────── */
+.nb-section-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.nb-tags-btn,
+.nb-links-btn {
+  padding: 4px 8px !important;
+}
+
+/* ── Sidebar footer additional button ──────────────────────────────── */
+.sidebar-footer-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-bottom: 8px;
+}
+
+.sidebar-footer-btn:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+}
+
+/* ── Calendar toolbar extra buttons ────────────────────────────────── */
+.cal-deadline-btn,
+.cal-sync-btn {
+  margin-left: auto;
+}
+
+.cal-deadline-btn {
+  margin-left: 8px;
+}
+
+/* ── Deadlines section in agenda ───────────────────────────────────── */
+.deadlines-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.deadlines-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  margin: 0 0 12px;
+}
