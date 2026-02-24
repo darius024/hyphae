@@ -30,6 +30,7 @@
                 <p class="brand-tagline">Research Copilot</p>
             </div>
         </div>
+        <button class="header-toggle-btn sidebar-collapse-btn" id="sidebar-collapse-btn" aria-label="Ascunde meniul" title="Ascunde/afiseaza meniul">◂</button>
         <div class="user-bar">
             <div class="user-avatar" id="user-avatar">DA</div>
             <div class="user-info">
@@ -134,6 +135,10 @@
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                     Calendar
                 </button>
+                <button class="main-tab" id="main-tab-code" data-tab="code">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                    Code
+                </button>
                 <span class="main-tab-nb-name" id="main-tab-nb-name"></span>
             </div>
 
@@ -215,16 +220,29 @@
                                 <button class="icon-btn-sm" id="paper-save-btn-main" title="Save draft">💾 Save</button>
                             </div>
                         </div>
-                        <div class="write-split">
-                            <textarea class="latex-source write-source-main" id="latex-source-main" spellcheck="false" placeholder="Start writing your paper here…&#10;&#10;Use LaTeX commands or plain text.&#10;The preview updates live as you type."></textarea>
-                            <div class="latex-preview write-preview-main" id="latex-preview-main">
-                                <div class="write-preview-placeholder">
-                                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" style="opacity:0.3"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                                    <p>Live preview appears here</p>
+                        <div class="write-split" id="write-split">
+                            <!-- Editor pane with line numbers -->
+                            <div class="write-editor-pane" id="write-editor-pane">
+                                <div class="write-editor-inner">
+                                    <div class="write-line-numbers" id="write-line-numbers" aria-hidden="true"></div>
+                                    <textarea class="latex-source write-source-main" id="latex-source-main" spellcheck="false" placeholder="Start writing your paper here…&#10;&#10;Use LaTeX commands or plain text.&#10;The preview updates live as you type."></textarea>
+                                </div>
+                            </div>
+                            <!-- Resize handle: editor ↔ preview -->
+                            <div class="write-resize-handle" id="write-resize-h1" title="Drag to resize"></div>
+                            <!-- Preview pane -->
+                            <div class="write-preview-pane" id="write-preview-pane">
+                                <div class="latex-preview write-preview-main" id="latex-preview-main">
+                                    <div class="write-preview-placeholder">
+                                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" style="opacity:0.3"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                                        <p>Live preview appears here</p>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
+                    <!-- Resize handle: editor area ↔ copilot -->
+                    <div class="write-resize-handle write-resize-handle-v" id="write-resize-h2" title="Drag to resize"></div>
                     <!-- AI Writing copilot sidebar -->
                     <div class="write-copilot" id="write-copilot">
                         <div class="write-copilot-header">
@@ -310,12 +328,193 @@
                     </div>
                 </div>
             </div>
+
+            <!-- CODE panel (VS Code–like IDE — shown when Code tab active) -->
+            <div class="main-panel" id="main-panel-code" style="display:none">
+                <!-- Connect screen (shown when no repo is connected) -->
+                <div class="code-connect" id="code-connect">
+                    <div class="code-connect-inner">
+                        <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.35"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M6 9v12"/></svg>
+                        <h2>Connect a Repository</h2>
+                        <p>Paste a Git HTTPS URL to clone and start editing. You'll be able to browse files, edit code, commit, and push.</p>
+                        <div class="code-connect-form">
+                            <input type="text" id="code-repo-url" class="code-connect-input" placeholder="https://github.com/user/repo.git" spellcheck="false">
+                            <button class="code-connect-btn" id="code-clone-btn">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/></svg>
+                                Clone &amp; Open
+                            </button>
+                        </div>
+                        <div class="code-connect-status" id="code-connect-status"></div>
+                        <div class="code-connect-recents" id="code-connect-recents"></div>
+                    </div>
+                </div>
+
+                <!-- IDE (hidden until repo connected) -->
+                <div class="code-ide" id="code-ide" style="display:none">
+                    <!-- Repo header bar -->
+                    <div class="code-repo-bar" id="code-repo-bar">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M6 9v12"/></svg>
+                        <span class="code-repo-name" id="code-repo-name"></span>
+                        <button class="code-repo-disconnect" id="code-disconnect-btn" title="Disconnect repository">✕</button>
+                    </div>
+                    <!-- Activity bar (VS Code left icon strip) -->
+                    <div class="code-activity-bar">
+                        <button class="code-activity-btn active" data-panel="explorer" title="Explorer">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                        </button>
+                        <button class="code-activity-btn" data-panel="git" title="Source Control">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M6 9v12"/></svg>
+                        </button>
+                        <button class="code-activity-btn" data-panel="search" title="Search">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        </button>
+                    </div>
+
+                    <!-- Sidebar (file explorer / git / search) -->
+                    <div class="code-sidebar">
+                        <!-- EXPLORER panel -->
+                        <div class="code-sidebar-panel" id="code-panel-explorer">
+                            <div class="code-sidebar-title">EXPLORER</div>
+                            <div class="code-file-actions">
+                                <button class="code-action-btn" id="code-new-file-btn" title="New File">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+                                </button>
+                                <button class="code-action-btn" id="code-new-folder-btn" title="New Folder">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+                                </button>
+                                <button class="code-action-btn" id="code-refresh-btn" title="Refresh">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                                </button>
+                            </div>
+                            <div class="code-file-tree" id="code-file-tree"></div>
+                        </div>
+
+                        <!-- SOURCE CONTROL panel -->
+                        <div class="code-sidebar-panel" id="code-panel-git" style="display:none">
+                            <div class="code-sidebar-title">SOURCE CONTROL</div>
+                            <div class="code-git-actions">
+                                <div class="code-git-branch-row">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M6 9v12"/></svg>
+                                    <select id="code-branch-select" class="code-branch-select"></select>
+                                    <button class="code-action-btn" id="code-new-branch-btn" title="Create Branch">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                    </button>
+                                </div>
+                                <div class="code-git-btn-row">
+                                    <button class="code-git-btn" id="code-git-pull-btn" title="Pull">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/></svg>
+                                        Pull
+                                    </button>
+                                    <button class="code-git-btn" id="code-git-push-btn" title="Push">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 7 12 3 8 7"/><line x1="12" y1="3" x2="12" y2="15"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/></svg>
+                                        Push
+                                    </button>
+                                </div>
+                                <div class="code-git-commit-row">
+                                    <input type="text" id="code-commit-msg" class="code-commit-input" placeholder="Commit message…">
+                                    <button class="code-git-btn code-git-commit-btn" id="code-git-commit-btn" title="Commit">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                                        Commit
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="code-git-section">
+                                <div class="code-git-section-header" id="code-staged-header">
+                                    <span class="code-git-caret">▸</span> Staged Changes <span class="code-git-count" id="code-staged-count">0</span>
+                                </div>
+                                <div class="code-git-file-list" id="code-staged-list"></div>
+                            </div>
+                            <div class="code-git-section">
+                                <div class="code-git-section-header" id="code-changes-header">
+                                    <span class="code-git-caret">▾</span> Changes <span class="code-git-count" id="code-changes-count">0</span>
+                                </div>
+                                <div class="code-git-file-list" id="code-changes-list"></div>
+                            </div>
+                            <div class="code-git-section">
+                                <div class="code-git-section-header" id="code-log-header">
+                                    <span class="code-git-caret">▸</span> Recent Commits
+                                </div>
+                                <div class="code-git-log" id="code-git-log" style="display:none"></div>
+                            </div>
+                        </div>
+
+                        <!-- SEARCH panel -->
+                        <div class="code-sidebar-panel" id="code-panel-search" style="display:none">
+                            <div class="code-sidebar-title">SEARCH</div>
+                            <div class="code-search-box">
+                                <input type="text" id="code-search-input" class="code-search-field" placeholder="Search files…">
+                                <button class="code-action-btn" id="code-search-btn" title="Search">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                                </button>
+                            </div>
+                            <div class="code-search-results" id="code-search-results"></div>
+                        </div>
+                    </div>
+
+                    <!-- Main editor area -->
+                    <div class="code-editor-main">
+                        <!-- Open file tabs -->
+                        <div class="code-tab-bar" id="code-tab-bar">
+                            <div class="code-tab-welcome active" data-file="__welcome">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                                Welcome
+                            </div>
+                        </div>
+                        <!-- Breadcrumb -->
+                        <div class="code-breadcrumb" id="code-breadcrumb">
+                            <span class="code-breadcrumb-seg">hyphae</span>
+                        </div>
+                        <!-- Editor content -->
+                        <div class="code-editor-wrap" id="code-editor-wrap">
+                            <!-- Welcome screen (shown when no file open) -->
+                            <div class="code-welcome" id="code-welcome">
+                                <div class="code-welcome-inner">
+                                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.3"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                                    <h2>Hyphae Code</h2>
+                                    <p>Select a file from the explorer to start editing.</p>
+                                    <div class="code-welcome-shortcuts">
+                                        <div class="code-welcome-shortcut"><kbd>⌘</kbd>+<kbd>S</kbd> Save file</div>
+                                        <div class="code-welcome-shortcut"><kbd>⌘</kbd>+<kbd>P</kbd> Quick open</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Active file editor (hidden until file opened) -->
+                            <div class="code-editor-content" id="code-editor-content" style="display:none">
+                                <div class="code-line-numbers" id="code-line-numbers"></div>
+                                <textarea class="code-textarea" id="code-textarea" spellcheck="false" wrap="off"></textarea>
+                            </div>
+                            <!-- Diff view (hidden until diff requested) -->
+                            <div class="code-diff-view" id="code-diff-view" style="display:none"></div>
+                            <!-- File preview (PDF, images, audio, video) -->
+                            <div class="code-file-preview" id="code-file-preview" style="display:none"></div>
+                        </div>
+                        <!-- Status bar -->
+                        <div class="code-status-bar">
+                            <div class="code-status-left">
+                                <span class="code-status-item code-status-branch" id="code-status-branch">
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M6 9v12"/></svg>
+                                    main
+                                </span>
+                                <span class="code-status-item code-status-sync" id="code-status-sync" title="Sync changes">
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                                </span>
+                            </div>
+                            <div class="code-status-right">
+                                <span class="code-status-item" id="code-status-pos">Ln 1, Col 1</span>
+                                <span class="code-status-item" id="code-status-lang">Plain Text</span>
+                                <span class="code-status-item" id="code-status-encoding">UTF-8</span>
+                            </div>
+                        </div>
+                    </div>
+                </div><!-- /code-ide -->
+            </div><!-- /main-panel-code -->
         </main>
 
         <!-- Notebook column -->
         <section id="panel-notebook" class="notebook-column">
             <div class="nb-bar">
                 <div class="nb-header-row">
+                    <button class="header-toggle-btn nb-collapse-btn" id="nb-menu-btn" title="Ascunde panoul Notebooks" aria-label="Ascunde panoul Notebooks">▸</button>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.5"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
                     <h2 id="nb-name-display">Notebooks</h2>
                     <button class="nb-new-btn-pill" id="nb-new-btn" title="New notebook" onclick="openNbCreateModal()">
@@ -323,9 +522,6 @@
                         New
                     </button>
                 </div>
-                <button class="menu-btn nb-menu" id="nb-menu-btn" title="Close notebook panel" aria-label="Close notebook panel">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                </button>
             </div>
 
             <aside class="sidebar nb-sidebar nb-sidebar-full">
@@ -394,6 +590,9 @@
         </section>
 
         <div class="sidebar-overlay" id="nb-sidebar-overlay"></div>
+        <button class="menu-btn nb-open-btn" id="nb-open-btn" title="Arată Notebooks" aria-label="Arată Notebooks">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
     </div>
 </div>
 
