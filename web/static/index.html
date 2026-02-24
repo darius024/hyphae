@@ -682,6 +682,27 @@
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════════════
+     Delete Conversation Confirm Modal
+════════════════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="conv-delete-overlay">
+    <div class="modal" style="max-width:420px;height:auto">
+        <div class="modal-header">
+            <span class="modal-title">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>Delete Conversation
+            </span>
+            <button class="modal-close" id="conv-delete-close" aria-label="Close">&times;</button>
+        </div>
+        <div class="nb-create-body">
+            <p class="confirm-text">Are you sure you want to delete this conversation? This action cannot be undone.</p>
+            <div class="confirm-actions">
+                <button class="confirm-btn confirm-btn-cancel" id="conv-delete-cancel">Cancel</button>
+                <button class="confirm-btn confirm-btn-danger" id="conv-delete-confirm">Delete</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════
      Auth Modal (Sign In / Sign Up)
 ════════════════════════════════════════════════════════════════════════ -->
 <div class="auth-modal-overlay" id="auth-modal-overlay">

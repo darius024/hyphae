@@ -5696,6 +5696,54 @@ body.resizing textarea {
   opacity: 0.7;
 }
 
+/* ── Confirm dialog ─────────────────────────────────────────────────── */
+
+.confirm-text {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  margin: 0 0 8px;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.confirm-btn {
+  padding: 9px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  transition: all 0.15s;
+}
+
+.confirm-btn-cancel {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+}
+
+.confirm-btn-cancel:hover {
+  background: var(--border-light, var(--bg-tertiary));
+}
+
+.confirm-btn-danger {
+  background: var(--red, #e74c3c);
+  color: #fff;
+}
+
+.confirm-btn-danger:hover {
+  background: color-mix(in srgb, var(--red, #e74c3c) 85%, black);
+}
+
+/* ── User dropdown sign-out ────────────────────────────────────────── */
+
 #user-dropdown-logout {
   color: var(--red, #e74c3c);
 }

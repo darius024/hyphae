@@ -1559,15 +1559,36 @@ function startConvRename(nbId, convId) {
     input.addEventListener("blur", commitRename);
 }
 
-async function deleteConversation(nbId, convId) {
-    if (!confirm("Delete this conversation?")) return;
-    try {
-        await fetch(`/api/notebooks/${nbId}/conversations/${convId}`, { method: "DELETE" });
-    } catch {}
-    if (currentConvId === convId) {
-        exitNotebookChat();
+function deleteConversation(nbId, convId) {
+    const overlay = document.getElementById("conv-delete-overlay");
+    const confirmBtn = document.getElementById("conv-delete-confirm");
+    const cancelBtn = document.getElementById("conv-delete-cancel");
+    const closeBtn = document.getElementById("conv-delete-close");
+    if (!overlay) return;
+
+    overlay.classList.add("open");
+
+    function cleanup() {
+        overlay.classList.remove("open");
+        confirmBtn.removeEventListener("click", onConfirm);
+        cancelBtn.removeEventListener("click", cleanup);
+        closeBtn.removeEventListener("click", cleanup);
+        overlay.removeEventListener("click", onOverlay);
     }
-    loadConversations(nbId);
+    function onOverlay(e) { if (e.target === overlay) cleanup(); }
+    async function onConfirm() {
+        cleanup();
+        try {
+            await fetch(`/api/notebooks/${nbId}/conversations/${convId}`, { method: "DELETE" });
+        } catch {}
+        if (currentConvId === convId) exitNotebookChat();
+        loadConversations(nbId);
+    }
+
+    confirmBtn.addEventListener("click", onConfirm);
+    cancelBtn.addEventListener("click", cleanup);
+    closeBtn.addEventListener("click", cleanup);
+    overlay.addEventListener("click", onOverlay);
 }
 
 document.getElementById("nb-conv-new-btn").addEventListener("click", async () => {
