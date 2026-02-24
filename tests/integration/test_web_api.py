@@ -84,7 +84,7 @@ class TestSensitivityApi:
 
     def test_set_invalid_level(self, client):
         r = client.put("/api/sensitivity/sample_doc.txt", json={"level": "secret"})
-        assert r.status_code == 400
+        assert r.status_code == 422
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -102,9 +102,9 @@ class TestClassifyApi:
         assert r.status_code == 200
         assert r.json()["route"] == "cloud"
 
-    def test_empty_query(self, client):
+    def test_empty_query_rejected(self, client):
         r = client.post("/api/classify", json={"message": ""})
-        assert r.json()["route"] == "unknown"
+        assert r.status_code == 422
 
 
 class TestPrivacyLogApi:
@@ -218,7 +218,7 @@ class TestConversationApi:
             f"/api/notebooks/{nb_id}/conversations/{cid}",
             json={"title": ""},
         )
-        assert r2.status_code == 400
+        assert r2.status_code == 422
 
     def test_delete_conversation(self, client, nb_id):
         r = client.post(
@@ -261,7 +261,7 @@ class TestSettingsApi:
 
     def test_update_missing_value(self, client):
         r = client.patch("/api/nb-settings/chunk_size", json={})
-        assert r.status_code == 400
+        assert r.status_code == 422
 
 
 # ═══════════════════════════════════════════════════════════════════════════

@@ -15,7 +15,7 @@ import os
 os.environ["CACTUS_NO_CLOUD_TELE"] = "1"
 
 import sys
-_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 for _p in (os.path.join(_project_root, "src"), _project_root):
     if _p not in sys.path:
         sys.path.insert(0, _p)
