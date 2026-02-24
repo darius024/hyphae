@@ -525,9 +525,6 @@ function showPreviewTab(tab) {
     }
 }
 
-async function previewDoc(name) {
-    // Legacy shim — no longer used (corpus removed). No-op.
-}
 
 
 function closePreview() {
@@ -645,11 +642,11 @@ function switchMainTab(tab) {
     } else if (tab === "write") {
         mainTabWrite?.classList.add("active");
         if (mainPanelWrite) mainPanelWrite.style.display = "";
-        loadPaperMain(currentNbId);
+        loadPaper(currentNbId);
     } else if (tab === "cal") {
         mainTabCal?.classList.add("active");
         if (mainPanelCal) mainPanelCal.style.display = "";
-        loadCalendarMain(currentNbId);
+        loadCalendar(currentNbId);
     } else if (tab === "code") {
         mainTabCode?.classList.add("active");
         if (mainPanelCode) mainPanelCode.style.display = "";
@@ -688,7 +685,6 @@ async function loadNotebooks() {
     try {
         const res = await fetch("/api/notebooks");
         const data = await res.json();
-        try { console.debug('loadNotebooks: fetched', Array.isArray(data?.notebooks) ? data.notebooks.length : data); } catch {}
         renderNotebookList(data.notebooks || []);
     } catch (err) {
         if (nbListEl) nbListEl.innerHTML = '<div class="doc-empty" style="font-size:12px;padding:12px 8px;color:var(--red)">Failed to load notebooks.</div>';
@@ -698,24 +694,7 @@ async function loadNotebooks() {
 
 function renderNotebookList(notebooks) {
     _allNotebooks = notebooks || [];
-    try { console.debug('renderNotebookList: notebooks count', _allNotebooks.length); } catch {}
     _renderNbItems(_allNotebooks);
-    // Small visual debug: show a non-intrusive count badge in the notebook list header
-    try {
-        const wrap = document.getElementById('nb-list-wrap');
-        if (wrap) {
-            let badge = wrap.querySelector('.nb-count-badge');
-            if (!badge) {
-                badge = document.createElement('span');
-                badge.className = 'nb-count-badge';
-                badge.style.cssText = 'display:inline-block;margin-left:8px;font-size:11px;color:var(--text-secondary);';
-                const search = wrap.querySelector('#nb-search');
-                if (search && search.parentNode) search.parentNode.insertBefore(badge, search.nextSibling);
-                else wrap.insertBefore(badge, wrap.firstChild);
-            }
-            badge.textContent = `${_allNotebooks.length} notebooks`;
-        }
-    } catch (e) { console.debug('nb count badge error', e); }
 }
 
 async function selectNotebook(nbId, name) {
@@ -845,10 +824,15 @@ let _srcPollTimers = {};
 let _currentSources = [];
 
 async function loadSources(nbId) {
-    const res  = await fetch(`/api/notebooks/${nbId}/sources`);
-    const data = await res.json();
-    _currentSources = data.sources || [];
-    renderSources(nbId, _currentSources);
+    try {
+        const res  = await fetch(`/api/notebooks/${nbId}/sources`);
+        const data = await res.json();
+        _currentSources = data.sources || [];
+        renderSources(nbId, _currentSources);
+    } catch {
+        _currentSources = [];
+        showToast("Failed to load sources", "error");
+    }
 }
 
 function srcTypeIcon(s) {
@@ -1270,10 +1254,10 @@ async function loadPaper(nbId) {
         if (paperSaveStatus) paperSaveStatus.textContent = "";
         // If we loaded the default template, auto-save it
         if (!data.content) savePaper(nbId);
-    } catch {}
+    } catch {
+        showToast("Failed to load paper", "error");
+    }
 }
-const loadPaperMain = loadPaper; // alias for main-area tab switch
-
 async function savePaper(nbId) {
     if (!nbId || !latexSource) return;
     paperSaveStatus.textContent = "Saving…";
@@ -1467,9 +1451,13 @@ function relativeTime(dateStr) {
 }
 
 async function loadConversations(nbId) {
-    const res  = await fetch(`/api/notebooks/${nbId}/conversations`);
-    const data = await res.json();
-    renderConversations(nbId, data.conversations || []);
+    try {
+        const res  = await fetch(`/api/notebooks/${nbId}/conversations`);
+        const data = await res.json();
+        renderConversations(nbId, data.conversations || []);
+    } catch {
+        showToast("Failed to load conversations", "error");
+    }
 }
 
 function renderConversations(nbId, convs) {
@@ -1526,7 +1514,6 @@ async function selectConversation(nbId, convId, title) {
     currentConvId = convId;
     enterNotebookChat(nbNameDisplay.textContent, title);
 
-    // switch to Chats tab so the conversation list stays visible
     switchNbTab("chats");
 
     if (window.innerWidth <= 1200) {
@@ -1538,22 +1525,26 @@ async function selectConversation(nbId, convId, title) {
         el.classList.toggle("active", el.dataset.id === convId);
     });
 
-    const res  = await fetch(`/api/notebooks/${nbId}/conversations/${convId}/messages`);
-    const data = await res.json();
-    nbMessagesEl.innerHTML = "";
-    const msgs = data.messages || [];
-    if (msgs.length === 0) {
-        nbAddMessage("assistant", "Ask a question about your sources. I'll ground my answers in the documents you've uploaded to this notebook.");
-    } else {
-        for (const m of msgs) {
-            if (m.role === "user") {
-                nbAddMessage("user", m.content);
-            } else {
-                nbAddMessage("assistant", m.content, m.citations || []);
+    try {
+        const res  = await fetch(`/api/notebooks/${nbId}/conversations/${convId}/messages`);
+        const data = await res.json();
+        nbMessagesEl.innerHTML = "";
+        const msgs = data.messages || [];
+        if (msgs.length === 0) {
+            nbAddMessage("assistant", "Ask a question about your sources. I'll ground my answers in the documents you've uploaded to this notebook.");
+        } else {
+            for (const m of msgs) {
+                if (m.role === "user") {
+                    nbAddMessage("user", m.content);
+                } else {
+                    nbAddMessage("assistant", m.content, m.citations || []);
+                }
             }
         }
+        nbScrollBottom();
+    } catch {
+        showToast("Failed to load messages", "error");
     }
-    nbScrollBottom();
 }
 
 function startConvRename(nbId, convId) {
@@ -1589,7 +1580,9 @@ function startConvRename(nbId, convId) {
                 document.getElementById("nb-chat-title").textContent =
                     nbNameDisplay.textContent + " \u2014 " + newTitle;
             }
-        } catch {}
+        } catch {
+            showToast("Failed to rename conversation", "error");
+        }
         loadConversations(nbId);
     }
 
@@ -1621,7 +1614,10 @@ function deleteConversation(nbId, convId) {
         cleanup();
         try {
             await fetch(`/api/notebooks/${nbId}/conversations/${convId}`, { method: "DELETE" });
-        } catch {}
+        } catch {
+            showToast("Failed to delete conversation", "error");
+            return;
+        }
         if (currentConvId === convId) exitNotebookChat();
         loadConversations(nbId);
     }
@@ -2242,8 +2238,6 @@ async function loadCalendar(nbId) {
     renderCalendar();
     renderUpcomingEvents();
 }
-const loadCalendarMain = loadCalendar; // alias for main-area tab switch
-
 function renderCalendar() {
     if (!calGrid) return;
     if (calMonthLabel) calMonthLabel.textContent = `${MONTHS[_calMonth]} ${_calYear}`;
@@ -2705,8 +2699,7 @@ document.getElementById("nb-search")?.addEventListener("input", () => {
 
 // Internal render that only renders the list items (used by search filter)
 function _renderNbItems(notebooks) {
-    if (!nbListEl) { try { console.warn('nbListEl is null - cannot render notebooks'); } catch {} ; return; }
-    try { console.debug('_renderNbItems: rendering', notebooks.length); } catch {}
+    if (!nbListEl) return;
     if (!notebooks.length) {
         const q = (document.getElementById("nb-search")?.value || "").trim();
         if (q) {
