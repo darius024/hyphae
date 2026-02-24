@@ -592,6 +592,66 @@ body {
 .bubble li { margin-bottom: 3px; }
 .bubble strong { font-weight: 600; }
 .bubble em { font-style: italic; color: var(--text-secondary); }
+.bubble h2, .bubble h3, .bubble h4 {
+    margin: 12px 0 6px;
+    line-height: 1.3;
+    color: var(--text-primary);
+}
+.bubble h2 { font-size: 17px; font-weight: 700; }
+.bubble h3 { font-size: 15px; font-weight: 650; }
+.bubble h4 { font-size: 14px; font-weight: 600; }
+.bubble h2:first-child, .bubble h3:first-child, .bubble h4:first-child { margin-top: 0; }
+.bubble a {
+    color: var(--accent);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+.bubble a:hover { opacity: 0.8; }
+.bubble pre {
+    margin: 10px 0;
+    padding: 14px 16px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    overflow-x: auto;
+    position: relative;
+}
+.bubble pre code {
+    background: none;
+    padding: 0;
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--text-primary);
+}
+.bubble code {
+    background: var(--bg-tertiary);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12.5px;
+    font-family: var(--mono);
+}
+.code-lang {
+    position: absolute;
+    top: 6px;
+    right: 10px;
+    font-size: 10px;
+    color: var(--text-tertiary);
+    font-family: var(--sans);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.ctx-ref {
+    display: inline;
+    background: rgba(255, 255, 255, 0.18);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 0.92em;
+}
+body.dark .ctx-ref {
+    background: rgba(63, 184, 175, 0.18);
+}
 
 .privacy-note {
     display: block;
@@ -3520,6 +3580,17 @@ body.dark .input-row {
 body.dark .input-row:focus-within {
     border-color: var(--accent);
     box-shadow: 0 0 0 3px rgba(63,184,175,0.15);
+}
+
+/* Dark mode — context popup */
+body.dark .context-popup {
+    background: var(--bg-secondary);
+    border-color: var(--border);
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4);
+}
+body.dark .context-popup-item:hover,
+body.dark .context-popup-item.active {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 /* Dark mode — buttons */

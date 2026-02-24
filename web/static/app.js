@@ -30,14 +30,45 @@ function showToast(message, type = "info", duration = 3000) {
 // ── Shared rendering utilities ──────────────────────────────────────
 
 function renderMarkdown(text) {
-    let html = escapeHtml(text);
+    const codeBlocks = [];
+    let processed = text.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
+        const idx = codeBlocks.length;
+        codeBlocks.push({ lang, code });
+        return `\x00CODEBLOCK_${idx}\x00`;
+    });
+
+    const inlineCodes = [];
+    processed = processed.replace(/`([^`\n]+)`/g, (_, code) => {
+        const idx = inlineCodes.length;
+        inlineCodes.push(code);
+        return `\x00INLINE_${idx}\x00`;
+    });
+
+    let html = escapeHtml(processed);
+
     html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
     html = html.replace(/\*(.+?)\*/g, "<em>$1</em>");
+    html = html.replace(/^###\s+(.+)$/gm, '<h4>$1</h4>');
+    html = html.replace(/^##\s+(.+)$/gm, '<h3>$1</h3>');
+    html = html.replace(/^#\s+(.+)$/gm, '<h2>$1</h2>');
+    html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
     html = html.replace(/^[-•]\s+(.+)$/gm, "<li>$1</li>");
-    html = html.replace(/(<li>.*<\/li>)/gs, "<ul>$1</ul>");
-    html = html.replace(/<\/ul>\s*<ul>/g, "");
+    html = html.replace(/(<li>[\s\S]*?<\/li>)(?=\s*(?:<br>)?\s*(?:<li>|$))/g, "$1");
+    html = html.replace(/((?:<li>[\s\S]*?<\/li>\s*(?:<br>\s*)*)+)/g, "<ul>$1</ul>");
+    html = html.replace(/<ul>([\s\S]*?)<\/ul>/g, (_, inner) => "<ul>" + inner.replace(/<br>\s*/g, "") + "</ul>");
     html = html.replace(/^\d+\.\s+(.+)$/gm, "<li>$1</li>");
     html = html.replace(/\n/g, "<br>");
+    html = html.replace(/<br>\s*(<h[234]>)/g, "$1");
+    html = html.replace(/(<\/h[234]>)\s*<br>/g, "$1");
+
+    inlineCodes.forEach((code, i) => {
+        html = html.replace(`\x00INLINE_${i}\x00`, `<code>${escapeHtml(code)}</code>`);
+    });
+    codeBlocks.forEach(({ lang, code }, i) => {
+        const langLabel = lang ? `<span class="code-lang">${escapeHtml(lang)}</span>` : "";
+        html = html.replace(`\x00CODEBLOCK_${i}\x00`, `<pre>${langLabel}<code>${escapeHtml(code.trim())}</code></pre>`);
+    });
+
     return html;
 }
 
@@ -1631,7 +1662,12 @@ async function _ensureNbConversation() {
 function nbAddMessage(role, content, citations = [], meta = null) {
     const div = document.createElement("div");
     div.className = `message ${role}`;
-    const rendered = role === "assistant" ? nbRenderAnswer(content) : escapeHtml(content);
+    let rendered;
+    if (role === "assistant") {
+        rendered = nbRenderAnswer(content);
+    } else {
+        rendered = escapeHtml(content).replace(/@([\w\s\-_.]+(?:\.\w+)?)/g, '<span class="ctx-ref">@$1</span>');
+    }
     let html = `<div class="bubble">${rendered}</div>`;
     html += buildMetaHtml(meta);
     div.innerHTML = html;
@@ -1726,6 +1762,15 @@ async function nbSendMessage(text) {
                 signal: nbSseCtrl.signal,
             }
         );
+
+        if (!res.ok) {
+            bubbleEl.classList.remove("stream-cursor");
+            const errText = await res.text().catch(() => "");
+            bubbleEl.innerHTML = `<span style="color:var(--red)">Server error (${res.status}): ${escapeHtml(errText || "Please try again.")}</span>`;
+            nbSetBusy(false);
+            nbSseCtrl = null;
+            return;
+        }
 
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
@@ -1825,6 +1870,7 @@ async function nbSendToolQuery(text) {
 
 function nbSmartSend(text) {
     if (!text.trim() || nbBusy) return;
+    if (_ctxActive) ctxHide();
     if (!currentNbId) { showToast("Select a notebook first", "info"); return; }
     if (!currentConvId) {
         _ensureNbConversation().then(id => {
@@ -1993,7 +2039,7 @@ let _ctxFiltered   = [];
 let _ctxSlashStart = -1;
 
 function ctxShow() {
-    if (!ctxPopup) return;
+    if (!ctxPopup || !currentNbId) return;
     _ctxActive = true;
     _ctxIdx = 0;
     ctxPopup.style.display = "";
@@ -2018,17 +2064,26 @@ function ctxRender(filter) {
     if (!_ctxFiltered.length) {
         ctxList.innerHTML = "";
         ctxEmpty.style.display = "";
-        ctxEmpty.textContent = q ? "No matching sources" : "No sources in this notebook";
+        ctxEmpty.textContent = _currentSources.length === 0
+            ? "No sources in this notebook — upload files first"
+            : "No matching sources";
         return;
     }
     ctxEmpty.style.display = "none";
+    if (_ctxIdx >= _ctxFiltered.length) _ctxIdx = 0;
     ctxList.innerHTML = _ctxFiltered.map((s, i) => {
         const label = escapeHtml(s.title || s.filename || s.url || "Source");
-        const ext = (s.filename || "").split(".").pop().toUpperCase() || "URL";
+        const fname = s.filename || "";
+        const ext = fname.includes(".") ? fname.split(".").pop().toUpperCase() : (s.url ? "URL" : "");
+        const icon = fname.toLowerCase().endsWith(".pdf")
+            ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>'
+            : s.url
+            ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>'
+            : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>';
         return `<div class="context-popup-item${i === _ctxIdx ? " active" : ""}" data-idx="${i}">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            ${icon}
             <span class="context-popup-item-name">${label}</span>
-            <span class="context-popup-item-type">${ext}</span>
+            ${ext ? `<span class="context-popup-item-type">${ext}</span>` : ""}
         </div>`;
     }).join("");
 
@@ -2059,10 +2114,11 @@ function ctxSelect(idx) {
     const val = nbQueryInput.value;
     const before = val.substring(0, _ctxSlashStart);
     const after = val.substring(nbQueryInput.selectionStart);
-    nbQueryInput.value = before + "@" + label + " " + after;
+    nbQueryInput.value = before + "@" + label + " " + after.trimStart();
     nbQueryInput.focus();
     const cursorPos = before.length + label.length + 2;
     nbQueryInput.setSelectionRange(cursorPos, cursorPos);
+    nbQueryInput.dispatchEvent(new Event("input"));
     ctxHide();
 }
 
@@ -2070,17 +2126,19 @@ nbQueryInput.addEventListener("keydown", (e) => {
     if (!_ctxActive) return;
     if (e.key === "ArrowDown") {
         e.preventDefault();
-        _ctxIdx = (_ctxIdx + 1) % Math.max(_ctxFiltered.length, 1);
+        if (_ctxFiltered.length) _ctxIdx = (_ctxIdx + 1) % _ctxFiltered.length;
         ctxHighlight();
     } else if (e.key === "ArrowUp") {
         e.preventDefault();
-        _ctxIdx = (_ctxIdx - 1 + _ctxFiltered.length) % Math.max(_ctxFiltered.length, 1);
+        if (_ctxFiltered.length) _ctxIdx = (_ctxIdx - 1 + _ctxFiltered.length) % _ctxFiltered.length;
         ctxHighlight();
     } else if (e.key === "Enter" || e.key === "Tab") {
         if (_ctxFiltered.length) {
             e.preventDefault();
             e.stopImmediatePropagation();
             ctxSelect(_ctxIdx);
+        } else {
+            ctxHide();
         }
     } else if (e.key === "Escape") {
         e.preventDefault();
@@ -2094,15 +2152,12 @@ nbQueryInput.addEventListener("input", () => {
 
     if (_ctxActive) {
         const query = val.substring(_ctxSlashStart + 1, pos);
-        if (_ctxSlashStart < 0 || pos <= _ctxSlashStart || query.includes("\n")) {
+        if (_ctxSlashStart < 0 || pos <= _ctxSlashStart || query.includes("\n") || query.includes(" ") && query.length > 30) {
             ctxHide();
         } else {
             ctxRender(query);
         }
-        return;
-    }
-
-    if (pos > 0 && val[pos - 1] === "/") {
+    } else if (pos > 0 && val[pos - 1] === "/") {
         const charBefore = pos > 1 ? val[pos - 2] : " ";
         if (charBefore === " " || charBefore === "\n" || pos === 1) {
             _ctxSlashStart = pos - 1;
