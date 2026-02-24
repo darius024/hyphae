@@ -9,15 +9,15 @@ Endpoints:
 """
 from __future__ import annotations
 
-import hashlib
 import logging
 import secrets
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+import bcrypt
 from fastapi import APIRouter, HTTPException, Header, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from notebook.db import get_conn
 
@@ -28,14 +28,14 @@ router = APIRouter()
 # ── Models ────────────────────────────────────────────────────────────────
 
 class SignupRequest(BaseModel):
-    email: str
-    password: str
-    name: str
+    email: str = Field(..., min_length=3)
+    password: str = Field(..., min_length=8)
+    name: str = Field(..., min_length=1, max_length=200)
 
 
 class LoginRequest(BaseModel):
-    email: str
-    password: str
+    email: str = Field(..., min_length=3)
+    password: str = Field(..., min_length=1)
 
 
 class UserResponse(BaseModel):
@@ -54,18 +54,14 @@ class LoginResponse(BaseModel):
 # ── Helpers ───────────────────────────────────────────────────────────────
 
 def hash_password(password: str) -> str:
-    """Hash password using SHA256 with salt."""
-    salt = secrets.token_hex(16)
-    pwdhash = hashlib.sha256((salt + password).encode()).hexdigest()
-    return f"{salt}${pwdhash}"
+    """Hash password using bcrypt (adaptive cost, timing-safe)."""
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
 def verify_password(stored_hash: str, password: str) -> bool:
-    """Verify password against stored hash."""
+    """Verify password against stored bcrypt hash."""
     try:
-        salt, pwdhash = stored_hash.split('$')
-        check_hash = hashlib.sha256((salt + password).encode()).hexdigest()
-        return check_hash == pwdhash
+        return bcrypt.checkpw(password.encode(), stored_hash.encode())
     except Exception:
         return False
 
@@ -108,9 +104,6 @@ def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
 @router.post("/api/auth/signup")
 async def signup(req: SignupRequest):
     """Create a new user account."""
-    if len(req.password) < 8:
-        raise HTTPException(400, "Password must be at least 8 characters")
-    
     user_id = secrets.token_hex(16)
     password_hash = hash_password(req.password)
     

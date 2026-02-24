@@ -105,6 +105,21 @@ app.include_router(code_router)
 app.include_router(auth_router)
 
 
+# ── CORS ──────────────────────────────────────────────────────────────────
+from fastapi.middleware.cors import CORSMiddleware
+
+_CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "").split(",")
+_CORS_ORIGINS = [o.strip() for o in _CORS_ORIGINS if o.strip()]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_CORS_ORIGINS or ["http://localhost:5000", "http://127.0.0.1:5000",
+                                     "http://localhost:5001", "http://127.0.0.1:5001"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # ── No-cache middleware for static assets (dev convenience) ───────────────
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as _Req
