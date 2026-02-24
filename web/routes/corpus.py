@@ -118,10 +118,18 @@ async def raw_document(name: str):
     originals_dir = Path(CORPUS_DIR) / ".originals"
     pdf_path = originals_dir / name
     if pdf_path.exists() and pdf_path.suffix.lower() == ".pdf":
-        return FileResponse(str(pdf_path), media_type="application/pdf", filename=name)
+        return FileResponse(
+            str(pdf_path),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'inline; filename="{name}"'},
+        )
     text_path = Path(CORPUS_DIR) / name
     if text_path.exists():
-        return FileResponse(str(text_path), media_type="text/plain; charset=utf-8", filename=name)
+        return FileResponse(
+            str(text_path),
+            media_type="text/plain; charset=utf-8",
+            headers={"Content-Disposition": f'inline; filename="{name}"'},
+        )
     raise HTTPException(404, f"Not found: {name}")
 
 

@@ -236,7 +236,11 @@ async def raw_source(nb_id: str, src_id: str):
         raise HTTPException(404, f"File not found: {filename}")
     suffix = file_path.suffix.lower()
     media = "application/pdf" if suffix == ".pdf" else "text/plain; charset=utf-8"
-    return FR(str(file_path), media_type=media, filename=filename)
+    return FR(
+        str(file_path),
+        media_type=media,
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
 
 
 @router.get("/notebooks/{nb_id}/sources/{src_id}/preview")
