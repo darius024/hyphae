@@ -1,15 +1,50 @@
-#!/bin/bash
-cd /Users/stefi/Desktop/Projects/Hyphae/hyphae
+#!/usr/bin/env bash
+set -euo pipefail
 
-# Source .env from repo root
-if [ -f ../.env ]; then
-    set -a && source ../.env && set +a
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+cd "$SCRIPT_DIR"
+
+# Source .env from repo root (optional)
+if [ -f "$REPO_ROOT/.env" ]; then
+  set -a
+  source "$REPO_ROOT/.env"
+  set +a
 fi
 
-export PYTHONPATH="/Users/stefi/Desktop/Projects/Hyphae/hyphae:/Users/stefi/Desktop/Projects/Hyphae/hyphae/web"
+export PYTHONPATH="$SCRIPT_DIR:$SCRIPT_DIR/web${PYTHONPATH:+:$PYTHONPATH}"
 
-# Use the fast venv (fresh, responsive)
-PYTHON=/Users/stefi/Desktop/Projects/Hyphae/.venv-fast/bin/python
+PYTHON="${PYTHON:-$REPO_ROOT/cactus/venv/bin/python}"
+HOST="${HOST:-127.0.0.1}"
+PORT="${PORT:-5000}"
+LOG_LEVEL="${LOG_LEVEL:-info}"
+RELOAD="${RELOAD:-1}"
+
+if [ ! -x "$PYTHON" ]; then
+  echo "Python not found/executable at: $PYTHON" >&2
+  echo "Tip: set PYTHON=/path/to/python and re-run." >&2
+  exit 1
+fi
+
+if lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
+  if [ "$PORT" = "5000" ] && ! lsof -nP -iTCP:5001 -sTCP:LISTEN >/dev/null 2>&1; then
+    PORT=5001
+  elif [ "$PORT" = "5000" ] && ! lsof -nP -iTCP:8000 -sTCP:LISTEN >/dev/null 2>&1; then
+    PORT=8000
+  else
+    echo "Port already in use: $PORT" >&2
+    echo "Tip: set PORT=#### and re-run." >&2
+    exit 1
+  fi
+fi
 
 echo "Using Python: $PYTHON"
-exec "$PYTHON" -m uvicorn web.app:app --host 127.0.0.1 --port 5001 --log-level info
+echo "Starting server at http://$HOST:$PORT"
+
+ARGS=( -m uvicorn web.app:app --host "$HOST" --port "$PORT" --log-level "$LOG_LEVEL" )
+if [ "$RELOAD" != "0" ]; then
+  ARGS+=( --reload )
+fi
+
+exec "$PYTHON" "${ARGS[@]}"
