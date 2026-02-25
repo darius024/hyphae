@@ -256,6 +256,99 @@ CREATE TABLE IF NOT EXISTS writing_sessions (
     created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
     updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
+
+-- ══════════════════════════════════════════════════════════════════════════
+-- ORGANIZATIONS & COLLABORATION
+-- ══════════════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS organizations (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    slug        TEXT NOT NULL UNIQUE,
+    description TEXT,
+    avatar_url  TEXT,
+    owner_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_org_slug ON organizations(slug);
+CREATE INDEX IF NOT EXISTS idx_org_owner ON organizations(owner_id);
+
+CREATE TABLE IF NOT EXISTS org_members (
+    id           TEXT PRIMARY KEY,
+    org_id       TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role         TEXT NOT NULL DEFAULT 'member',  -- owner, admin, member, viewer
+    joined_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    UNIQUE(org_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_orgmem_org ON org_members(org_id);
+CREATE INDEX IF NOT EXISTS idx_orgmem_user ON org_members(user_id);
+
+CREATE TABLE IF NOT EXISTS org_invites (
+    id          TEXT PRIMARY KEY,
+    org_id      TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    email       TEXT NOT NULL,
+    role        TEXT NOT NULL DEFAULT 'member',
+    token       TEXT NOT NULL UNIQUE,
+    invited_by  TEXT REFERENCES users(id) ON DELETE SET NULL,
+    accepted    INTEGER DEFAULT 0,
+    expires_at  TEXT NOT NULL,
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_orginv_token ON org_invites(token);
+CREATE INDEX IF NOT EXISTS idx_orginv_email ON org_invites(email);
+
+-- Link notebooks to organizations (optional - null means personal)
+-- Add org_id column to notebooks via migration below
+
+-- ══════════════════════════════════════════════════════════════════════════
+-- COMMENTS & ANNOTATIONS
+-- ══════════════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS comments (
+    id           TEXT PRIMARY KEY,
+    user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    notebook_id  TEXT REFERENCES notebooks(id) ON DELETE CASCADE,
+    source_id    TEXT REFERENCES sources(id) ON DELETE CASCADE,
+    note_id      TEXT REFERENCES notes(id) ON DELETE CASCADE,
+    conversation_id TEXT REFERENCES conversations(id) ON DELETE CASCADE,
+    parent_id    TEXT REFERENCES comments(id) ON DELETE CASCADE,
+    content      TEXT NOT NULL,
+    resolved     INTEGER DEFAULT 0,
+    created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_comments_nb ON comments(notebook_id);
+CREATE INDEX IF NOT EXISTS idx_comments_src ON comments(source_id);
+CREATE INDEX IF NOT EXISTS idx_comments_note ON comments(note_id);
+CREATE INDEX IF NOT EXISTS idx_comments_parent ON comments(parent_id);
+CREATE INDEX IF NOT EXISTS idx_comments_user ON comments(user_id);
+
+-- ══════════════════════════════════════════════════════════════════════════
+-- ACTIVITY FEED
+-- ══════════════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS activity_feed (
+    id           TEXT PRIMARY KEY,
+    org_id       TEXT REFERENCES organizations(id) ON DELETE CASCADE,
+    user_id      TEXT REFERENCES users(id) ON DELETE SET NULL,
+    notebook_id  TEXT REFERENCES notebooks(id) ON DELETE CASCADE,
+    action       TEXT NOT NULL,  -- created, updated, commented, shared, uploaded
+    target_type  TEXT NOT NULL,  -- notebook, source, note, comment, deadline
+    target_id    TEXT,
+    target_title TEXT,
+    metadata     TEXT,  -- JSON extra data
+    created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_activity_org ON activity_feed(org_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_activity_nb ON activity_feed(notebook_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_activity_user ON activity_feed(user_id, created_at);
 """
 
 _FTS_TRIGGERS = """
@@ -293,6 +386,23 @@ def init_db() -> None:
             conn.commit()
         except Exception:
             pass  # column already exists
+        
+        # Add org_id to notebooks (nullable - null means personal)
+        try:
+            conn.execute("ALTER TABLE notebooks ADD COLUMN org_id TEXT REFERENCES organizations(id) ON DELETE SET NULL")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_nb_org ON notebooks(org_id)")
+            conn.commit()
+        except Exception:
+            pass
+        
+        # Add user_id to notebooks (for personal notebooks)
+        try:
+            conn.execute("ALTER TABLE notebooks ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE CASCADE")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_nb_user ON notebooks(user_id)")
+            conn.commit()
+        except Exception:
+            pass
+        
         # Calendar events table
         conn.execute("""
             CREATE TABLE IF NOT EXISTS calendar_events (

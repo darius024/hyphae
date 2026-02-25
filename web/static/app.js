@@ -4560,6 +4560,349 @@ const Features = (() => {
             }
         }, 5 * 60 * 1000); // Every 5 minutes
     }
+
+    // ══════════════════════════════════════════════════════════════════════
+    //   ORGANIZATIONS
+    // ══════════════════════════════════════════════════════════════════════
+    
+    const orgsModalOverlay = document.getElementById('orgs-modal-overlay');
+    const orgsModalClose = document.getElementById('orgs-modal-close');
+    const orgsList = document.getElementById('orgs-list');
+    const orgsDetailPanel = document.getElementById('orgs-detail-panel');
+    const orgCreateForm = document.getElementById('org-create-form');
+    const orgInviteForm = document.getElementById('org-invite-form');
+    const organizationsBtn = document.getElementById('organizations-btn');
+    
+    let currentOrgId = null;
+    let allOrgs = [];
+    
+    async function loadOrganizations() {
+        try {
+            const resp = await fetch(`${API}/organizations`, {
+                headers: window.currentUser ? { 'X-User-Id': window.currentUser.id } : {}
+            });
+            if (resp.ok) {
+                const data = await resp.json();
+                allOrgs = data.organizations || [];
+                renderOrgsList();
+            }
+        } catch (e) {
+            console.warn('Failed to load organizations:', e);
+        }
+    }
+    
+    function renderOrgsList() {
+        if (!orgsList) return;
+        
+        if (allOrgs.length === 0) {
+            orgsList.innerHTML = `
+                <div class="orgs-empty">
+                    <p>You're not part of any organizations yet.</p>
+                    <p>Create one to start collaborating!</p>
+                </div>
+            `;
+            return;
+        }
+        
+        orgsList.innerHTML = allOrgs.map(org => `
+            <div class="org-item" data-org-id="${org.id}">
+                <div class="org-item-avatar">
+                    ${org.avatar_url ? `<img src="${org.avatar_url}" alt="">` : '👥'}
+                </div>
+                <div class="org-item-info">
+                    <div class="org-item-name">${escapeHtml(org.name)}</div>
+                    <div class="org-item-meta">
+                        <span>${org.member_count || 0} members</span>
+                        <span>•</span>
+                        <span>${org.notebook_count || 0} notebooks</span>
+                    </div>
+                </div>
+                <span class="org-item-role">${org.user_role || 'member'}</span>
+            </div>
+        `).join('');
+        
+        orgsList.querySelectorAll('.org-item').forEach(item => {
+            item.addEventListener('click', () => loadOrgDetails(item.dataset.orgId));
+        });
+    }
+    
+    async function loadOrgDetails(orgId) {
+        currentOrgId = orgId;
+        try {
+            const resp = await fetch(`${API}/organizations/${orgId}`, {
+                headers: window.currentUser ? { 'X-User-Id': window.currentUser.id } : {}
+            });
+            if (resp.ok) {
+                const org = await resp.json();
+                renderOrgDetails(org);
+            }
+        } catch (e) {
+            showToast('Failed to load organization', 'error');
+        }
+    }
+    
+    function renderOrgDetails(org) {
+        const nameEl = document.getElementById('org-detail-name');
+        const descEl = document.getElementById('org-detail-desc');
+        const membersCount = document.getElementById('org-members-count');
+        const membersList = document.getElementById('org-members-list');
+        const notebooksCount = document.getElementById('org-notebooks-count');
+        const notebooksList = document.getElementById('org-notebooks-list');
+        
+        if (nameEl) nameEl.textContent = org.name;
+        if (descEl) descEl.textContent = org.description || 'No description';
+        if (membersCount) membersCount.textContent = `${org.members?.length || 0} members`;
+        if (notebooksCount) notebooksCount.textContent = `${org.notebooks?.length || 0} notebooks`;
+        
+        // Render members
+        if (membersList && org.members) {
+            membersList.innerHTML = org.members.map(m => `
+                <div class="org-member-item">
+                    <div class="org-member-avatar">
+                        ${m.avatar_url ? `<img src="${m.avatar_url}" alt="">` : '👤'}
+                    </div>
+                    <div class="org-member-info">
+                        <div class="org-member-name">${escapeHtml(m.name || m.email)}</div>
+                        <div class="org-member-email">${escapeHtml(m.email)}</div>
+                    </div>
+                    <span class="org-member-role ${m.role}">${m.role}</span>
+                </div>
+            `).join('');
+        }
+        
+        // Render notebooks
+        if (notebooksList && org.notebooks) {
+            notebooksList.innerHTML = org.notebooks.length ? org.notebooks.map(nb => `
+                <div class="org-notebook-item" data-nb-id="${nb.id}">
+                    <span class="org-notebook-name">📒 ${escapeHtml(nb.name)}</span>
+                    <span class="org-notebook-date">${new Date(nb.created_at).toLocaleDateString()}</span>
+                </div>
+            `).join('') : '<p class="org-empty-msg">No shared notebooks yet</p>';
+        }
+        
+        // Show detail panel
+        if (orgsDetailPanel) orgsDetailPanel.style.display = 'flex';
+        if (orgCreateForm) orgCreateForm.style.display = 'none';
+        if (orgInviteForm) orgInviteForm.style.display = 'none';
+    }
+    
+    async function createOrganization() {
+        const nameInput = document.getElementById('org-name-input');
+        const slugInput = document.getElementById('org-slug-input');
+        const descInput = document.getElementById('org-desc-input');
+        
+        if (!nameInput?.value?.trim()) {
+            showToast('Please enter a team name', 'error');
+            return;
+        }
+        
+        try {
+            const resp = await fetch(`${API}/organizations`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(window.currentUser ? { 'X-User-Id': window.currentUser.id } : {})
+                },
+                body: JSON.stringify({
+                    name: nameInput.value.trim(),
+                    slug: slugInput?.value?.trim() || nameInput.value.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+                    description: descInput?.value?.trim() || null
+                })
+            });
+            
+            if (resp.ok) {
+                const data = await resp.json();
+                showToast('Organization created!', 'success');
+                await loadOrganizations();
+                loadOrgDetails(data.id);
+                hideOrgCreateForm();
+            } else {
+                const err = await resp.json();
+                showToast(err.detail || 'Failed to create organization', 'error');
+            }
+        } catch (e) {
+            showToast('Failed to create organization', 'error');
+        }
+    }
+    
+    async function sendInvite() {
+        const emailInput = document.getElementById('invite-email-input');
+        const roleSelect = document.getElementById('invite-role-select');
+        
+        if (!emailInput?.value?.trim() || !currentOrgId) {
+            showToast('Please enter an email', 'error');
+            return;
+        }
+        
+        try {
+            const resp = await fetch(`${API}/organizations/${currentOrgId}/invite`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(window.currentUser ? { 'X-User-Id': window.currentUser.id } : {})
+                },
+                body: JSON.stringify({
+                    email: emailInput.value.trim(),
+                    role: roleSelect?.value || 'member'
+                })
+            });
+            
+            if (resp.ok) {
+                showToast('Invite sent!', 'success');
+                hideOrgInviteForm();
+                emailInput.value = '';
+            } else {
+                const err = await resp.json();
+                showToast(err.detail || 'Failed to send invite', 'error');
+            }
+        } catch (e) {
+            showToast('Failed to send invite', 'error');
+        }
+    }
+    
+    function showOrgsModal() {
+        loadOrganizations();
+        orgsModalOverlay?.classList.add('show');
+    }
+    
+    function hideOrgsModal() {
+        orgsModalOverlay?.classList.remove('show');
+        currentOrgId = null;
+    }
+    
+    function showOrgCreateForm() {
+        if (orgCreateForm) orgCreateForm.style.display = 'block';
+        if (orgsDetailPanel) orgsDetailPanel.style.display = 'none';
+        if (orgInviteForm) orgInviteForm.style.display = 'none';
+    }
+    
+    function hideOrgCreateForm() {
+        if (orgCreateForm) orgCreateForm.style.display = 'none';
+        document.getElementById('org-name-input')?.value && (document.getElementById('org-name-input').value = '');
+        document.getElementById('org-slug-input')?.value && (document.getElementById('org-slug-input').value = '');
+        document.getElementById('org-desc-input')?.value && (document.getElementById('org-desc-input').value = '');
+    }
+    
+    function showOrgInviteForm() {
+        if (orgInviteForm) orgInviteForm.style.display = 'block';
+        if (orgCreateForm) orgCreateForm.style.display = 'none';
+    }
+    
+    function hideOrgInviteForm() {
+        if (orgInviteForm) orgInviteForm.style.display = 'none';
+    }
+    
+    // Organization tab switching
+    function setupOrgTabs() {
+        document.querySelectorAll('.org-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.org-tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                
+                const tabName = tab.dataset.tab;
+                document.querySelectorAll('.org-tab-panel').forEach(p => p.style.display = 'none');
+                document.getElementById(`org-${tabName}-panel`)?.style && (document.getElementById(`org-${tabName}-panel`).style.display = 'block');
+                
+                // Load activity if switching to that tab
+                if (tabName === 'activity' && currentOrgId) {
+                    loadOrgActivity(currentOrgId);
+                }
+            });
+        });
+    }
+    
+    async function loadOrgActivity(orgId) {
+        const activityList = document.getElementById('org-activity-list');
+        if (!activityList) return;
+        
+        try {
+            const resp = await fetch(`${API}/activity?org_id=${orgId}`);
+            if (resp.ok) {
+                const data = await resp.json();
+                if (data.activities?.length) {
+                    activityList.innerHTML = data.activities.map(a => `
+                        <div class="activity-item">
+                            <span class="activity-user">${escapeHtml(a.user_name || 'Someone')}</span>
+                            <span class="activity-action">${a.action}</span>
+                            ${a.target_title ? `<span class="activity-target">${escapeHtml(a.target_title)}</span>` : ''}
+                            <span class="activity-time">${formatTimeAgo(a.created_at)}</span>
+                        </div>
+                    `).join('');
+                } else {
+                    activityList.innerHTML = '<p class="activity-empty">No recent activity</p>';
+                }
+            }
+        } catch (e) {
+            console.warn('Failed to load activity:', e);
+        }
+    }
+    
+    function formatTimeAgo(dateStr) {
+        const date = new Date(dateStr);
+        const now = new Date();
+        const diff = Math.floor((now - date) / 1000);
+        
+        if (diff < 60) return 'just now';
+        if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+        if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+        if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
+        return date.toLocaleDateString();
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    //   COMMENTS (inline with sources/notes)
+    // ══════════════════════════════════════════════════════════════════════
+    
+    async function loadComments(notebookId, sourceId = null, noteId = null) {
+        let url = `${API}/comments?`;
+        if (notebookId) url += `notebook_id=${notebookId}`;
+        if (sourceId) url += `&source_id=${sourceId}`;
+        if (noteId) url += `&note_id=${noteId}`;
+        
+        try {
+            const resp = await fetch(url);
+            if (resp.ok) {
+                const data = await resp.json();
+                return data.comments || [];
+            }
+        } catch (e) {
+            console.warn('Failed to load comments:', e);
+        }
+        return [];
+    }
+    
+    async function addComment(content, notebookId, sourceId = null, noteId = null, parentId = null) {
+        if (!window.currentUser) {
+            showToast('Please sign in to comment', 'error');
+            return null;
+        }
+        
+        try {
+            const resp = await fetch(`${API}/comments`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-User-Id': window.currentUser.id
+                },
+                body: JSON.stringify({
+                    content,
+                    notebook_id: notebookId,
+                    source_id: sourceId,
+                    note_id: noteId,
+                    parent_id: parentId
+                })
+            });
+            
+            if (resp.ok) {
+                const data = await resp.json();
+                showToast('Comment added', 'success');
+                return data;
+            }
+        } catch (e) {
+            showToast('Failed to add comment', 'error');
+        }
+        return null;
+    }
     
     // ══════════════════════════════════════════════════════════════════════
     //   EVENT LISTENERS
@@ -4619,6 +4962,18 @@ const Features = (() => {
         versionsRestoreBtn?.addEventListener('click', restoreVersion);
         versionsModalOverlay?.addEventListener('click', e => { if (e.target === versionsModalOverlay) hideVersionsModal(); });
         
+        // Organizations modal
+        organizationsBtn?.addEventListener('click', showOrgsModal);
+        orgsModalClose?.addEventListener('click', hideOrgsModal);
+        orgsModalOverlay?.addEventListener('click', e => { if (e.target === orgsModalOverlay) hideOrgsModal(); });
+        document.getElementById('org-create-btn')?.addEventListener('click', showOrgCreateForm);
+        document.getElementById('org-cancel-btn')?.addEventListener('click', hideOrgCreateForm);
+        document.getElementById('org-save-btn')?.addEventListener('click', createOrganization);
+        document.getElementById('org-invite-btn')?.addEventListener('click', showOrgInviteForm);
+        document.getElementById('invite-cancel-btn')?.addEventListener('click', hideOrgInviteForm);
+        document.getElementById('invite-send-btn')?.addEventListener('click', sendInvite);
+        setupOrgTabs();
+        
         // Auto version save
         setupAutoVersionSave();
     }
@@ -4636,9 +4991,13 @@ const Features = (() => {
         showAnalyticsModal,
         showDeadlineModal,
         showVersionsModal,
+        showOrgsModal,
         loadTags,
         loadLinks,
         loadDeadlines,
-        saveVersion
+        loadOrganizations,
+        saveVersion,
+        loadComments,
+        addComment
     };
 })();
