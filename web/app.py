@@ -86,11 +86,43 @@ _WEB_DIR = Path(__file__).parent
 
 # ── Lifespan ──────────────────────────────────────────────────────────────
 
+_SESSION_PURGE_INTERVAL = int(os.environ.get("SESSION_PURGE_INTERVAL", "3600"))
+
+
+async def _session_purge_loop():
+    """Background coroutine that purges expired sessions periodically."""
+    from notebook.db import purge_expired_sessions
+    while True:
+        await asyncio.sleep(_SESSION_PURGE_INTERVAL)
+        try:
+            purge_expired_sessions()
+        except Exception as exc:
+            log.warning("Session purge failed: %s", exc)
+
+
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     init_db()
-    log.info("Hyphae started — DB initialised")
-    yield
+
+    # Purge stale sessions left over from previous runs
+    try:
+        from notebook.db import purge_expired_sessions
+        purge_expired_sessions()
+    except Exception as exc:
+        log.warning("Startup session purge failed: %s", exc)
+
+    # Launch periodic purge as a background task
+    purge_task = asyncio.create_task(_session_purge_loop())
+
+    log.info("Hyphae started — DB initialised, session purge scheduled")
+    try:
+        yield
+    finally:
+        purge_task.cancel()
+        try:
+            await purge_task
+        except asyncio.CancelledError:
+            pass
 
 # ── App + routers ─────────────────────────────────────────────────────────
 app = FastAPI(title="Hyphae", version="2.0", lifespan=_lifespan)
