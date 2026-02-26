@@ -11,7 +11,7 @@ import uuid
 from pathlib import Path
 from typing import AsyncIterator
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -153,13 +153,16 @@ def _persist_message(conv_id: str, nb_id: str, role: str, content: str, citation
 # ── Notebook CRUD ──────────────────────────────────────────────────────
 
 @router.get("/notebooks")
-async def list_notebooks():
+async def list_notebooks(limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0)):
     with get_conn() as conn:
+        total = conn.execute("SELECT COUNT(*) FROM notebooks").fetchone()[0]
         rows = conn.execute(
             "SELECT n.*, COUNT(s.id) AS source_count FROM notebooks n "
-            "LEFT JOIN sources s ON s.notebook_id=n.id GROUP BY n.id ORDER BY n.updated_at DESC"
+            "LEFT JOIN sources s ON s.notebook_id=n.id GROUP BY n.id "
+            "ORDER BY n.updated_at DESC LIMIT ? OFFSET ?",
+            (limit, offset),
         ).fetchall()
-    return {"notebooks": [dict(r) for r in rows]}
+    return {"notebooks": [dict(r) for r in rows], "total": total}
 
 
 @router.post("/notebooks", status_code=201)
@@ -204,13 +207,15 @@ async def delete_notebook_endpoint(nb_id: str, _user: dict = Depends(get_current
 # ── Sources ────────────────────────────────────────────────────────────
 
 @router.get("/notebooks/{nb_id}/sources")
-async def list_sources(nb_id: str):
+async def list_sources(nb_id: str, limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0)):
     _nb_or_404(nb_id)
     with get_conn() as conn:
+        total = conn.execute("SELECT COUNT(*) FROM sources WHERE notebook_id=?", (nb_id,)).fetchone()[0]
         rows = conn.execute(
-            "SELECT * FROM sources WHERE notebook_id=? ORDER BY created_at DESC", (nb_id,)
+            "SELECT * FROM sources WHERE notebook_id=? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            (nb_id, limit, offset),
         ).fetchall()
-    return {"sources": [dict(r) for r in rows]}
+    return {"sources": [dict(r) for r in rows], "total": total}
 
 
 @router.post("/notebooks/{nb_id}/upload", status_code=202)
@@ -346,13 +351,17 @@ async def save_paper(nb_id: str, body: _PaperBody, _user: dict = Depends(get_cur
 # ── Conversations ──────────────────────────────────────────────────────
 
 @router.get("/notebooks/{nb_id}/conversations")
-async def list_conversations(nb_id: str):
+async def list_conversations(nb_id: str, limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0)):
     _nb_or_404(nb_id)
     with get_conn() as conn:
+        total = conn.execute(
+            "SELECT COUNT(*) FROM conversations WHERE notebook_id=?", (nb_id,)
+        ).fetchone()[0]
         rows = conn.execute(
-            "SELECT * FROM conversations WHERE notebook_id=? ORDER BY updated_at DESC", (nb_id,)
+            "SELECT * FROM conversations WHERE notebook_id=? ORDER BY updated_at DESC LIMIT ? OFFSET ?",
+            (nb_id, limit, offset),
         ).fetchall()
-    return {"conversations": [dict(r) for r in rows]}
+    return {"conversations": [dict(r) for r in rows], "total": total}
 
 
 @router.post("/notebooks/{nb_id}/conversations", status_code=201)
@@ -388,18 +397,22 @@ async def delete_conversation(nb_id: str, cid: str, _user: dict = Depends(get_cu
 # ── Messages ───────────────────────────────────────────────────────────
 
 @router.get("/notebooks/{nb_id}/conversations/{cid}/messages")
-async def list_messages(nb_id: str, cid: str):
+async def list_messages(nb_id: str, cid: str, limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0)):
     _conv_or_404(cid, nb_id)
     with get_conn() as conn:
+        total = conn.execute(
+            "SELECT COUNT(*) FROM messages WHERE conversation_id=?", (cid,)
+        ).fetchone()[0]
         rows = conn.execute(
-            "SELECT * FROM messages WHERE conversation_id=? ORDER BY created_at ASC", (cid,)
+            "SELECT * FROM messages WHERE conversation_id=? ORDER BY created_at ASC LIMIT ? OFFSET ?",
+            (cid, limit, offset),
         ).fetchall()
     msgs = []
     for r in rows:
         d = dict(r)
         d["citations"] = json.loads(d.get("citations") or "[]")
         msgs.append(d)
-    return {"messages": msgs}
+    return {"messages": msgs, "total": total}
 
 
 # ── Chat ───────────────────────────────────────────────────────────────
@@ -520,14 +533,17 @@ async def update_setting(key: str, body: _SettingBody, _user: dict = Depends(get
 # ── Calendar events ────────────────────────────────────────────────────
 
 @router.get("/notebooks/{nb_id}/events")
-async def list_events(nb_id: str):
+async def list_events(nb_id: str, limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0)):
     _nb_or_404(nb_id)
     with get_conn() as conn:
+        total = conn.execute(
+            "SELECT COUNT(*) FROM calendar_events WHERE notebook_id=?", (nb_id,)
+        ).fetchone()[0]
         rows = conn.execute(
-            "SELECT * FROM calendar_events WHERE notebook_id=? ORDER BY date ASC",
-            (nb_id,),
+            "SELECT * FROM calendar_events WHERE notebook_id=? ORDER BY date ASC LIMIT ? OFFSET ?",
+            (nb_id, limit, offset),
         ).fetchall()
-    return {"events": [dict(r) for r in rows]}
+    return {"events": [dict(r) for r in rows], "total": total}
 
 
 @router.post("/notebooks/{nb_id}/events")

@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 from typing import List
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -77,25 +77,26 @@ def _save_sensitivity(data: dict):
 
 
 @router.get("/documents")
-async def list_documents():
+async def list_documents(limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0)):
     corpus = Path(CORPUS_DIR)
     if not corpus.is_dir():
-        return {"documents": [], "count": 0}
+        return {"documents": [], "count": 0, "total": 0}
     originals_dir = corpus / ".originals"
     sens = _load_sensitivity()
-    docs = []
+    all_docs = []
     for f in sorted(corpus.iterdir()):
         if not f.is_file() or f.name.startswith(".") or f.suffix.lower() in _HIDDEN_SUFFIXES:
             continue
         has_pdf = (originals_dir / (f.stem + ".pdf")).exists()
-        docs.append({
+        all_docs.append({
             "name": f.name,
             "size_kb": round(f.stat().st_size / 1024, 1),
             "has_pdf": has_pdf,
             "type": "pdf" if has_pdf else f.suffix.lstrip(".").lower() or "txt",
             "sensitivity": sens.get(f.name, "shareable"),
         })
-    return {"documents": docs, "count": len(docs)}
+    page = all_docs[offset:offset + limit]
+    return {"documents": page, "count": len(page), "total": len(all_docs)}
 
 
 @router.post("/upload")
