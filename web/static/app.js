@@ -1,3 +1,22 @@
+// ── Global fetch interceptor — auto-attach auth token ────────────────
+{
+    const _originalFetch = window.fetch;
+    window.fetch = function (input, init) {
+        const token = localStorage.getItem("hyphae_auth_token");
+        if (token) {
+            init = init || {};
+            const headers = init.headers instanceof Headers
+                ? init.headers
+                : new Headers(init.headers || {});
+            if (!headers.has("Authorization")) {
+                headers.set("Authorization", `Bearer ${token}`);
+            }
+            init.headers = headers;
+        }
+        return _originalFetch.call(this, input, init);
+    };
+}
+
 const toolListEl = document.getElementById("tool-list");
 // Doc search input (used for Cmd/Ctrl+K). Fallback to any .doc-search field.
 const docSearchInput = document.getElementById("nb-url-input") || document.querySelector(".doc-search");
