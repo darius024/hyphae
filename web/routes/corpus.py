@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tempfile
 from pathlib import Path
 from typing import List
@@ -22,10 +23,22 @@ class _SensitivityBody(BaseModel):
 CORPUS_DIR: str = ""
 
 
+_BAD_FILENAME_CHARS = re.compile(r'[\x00-\x1f\x7f/\\:]')
+_RESERVED_NAMES = frozenset(
+    [f"{p}{n}" for p in ("CON", "PRN", "AUX", "NUL", "COM", "LPT") for n in ("", *"123456789")]
+)
+
+
 def _safe_name(name: str) -> str:
-    """Reject path traversal attempts and return a clean basename."""
+    """Validate a user-supplied filename against traversal, null bytes, and OS-reserved names."""
+    if not name or ".." in name:
+        raise HTTPException(400, "Invalid filename")
     clean = Path(name).name
-    if not clean or clean != name or ".." in name:
+    if not clean or clean != name:
+        raise HTTPException(400, "Invalid filename")
+    if _BAD_FILENAME_CHARS.search(clean):
+        raise HTTPException(400, "Invalid filename")
+    if clean.split(".")[0].upper() in _RESERVED_NAMES:
         raise HTTPException(400, "Invalid filename")
     return clean
 add_file = None

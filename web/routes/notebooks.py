@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import shutil
 import uuid
 from pathlib import Path
@@ -82,10 +83,22 @@ def configure(*, conn_fn, ingest_fn, upload_dir, search_fn, delete_idx_fn,
 
 # ── Helpers ────────────────────────────────────────────────────────────
 
+_BAD_FILENAME_CHARS = re.compile(r'[\x00-\x1f\x7f/\\:]')
+_RESERVED_NAMES = frozenset(
+    [f"{p}{n}" for p in ("CON", "PRN", "AUX", "NUL", "COM", "LPT") for n in ("", *"123456789")]
+)
+
+
 def _safe_filename(name: str) -> str:
-    """Reject path traversal in filenames."""
+    """Validate a user-supplied filename against traversal, null bytes, and OS-reserved names."""
+    if not name or ".." in name:
+        raise HTTPException(400, "Invalid filename")
     clean = Path(name).name
-    if not clean or clean != name or ".." in name:
+    if not clean or clean != name:
+        raise HTTPException(400, "Invalid filename")
+    if _BAD_FILENAME_CHARS.search(clean):
+        raise HTTPException(400, "Invalid filename")
+    if clean.split(".")[0].upper() in _RESERVED_NAMES:
         raise HTTPException(400, "Invalid filename")
     return clean
 
