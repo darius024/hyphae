@@ -27,9 +27,8 @@ CHUNK_OVERLAP = 80
 def extract_pdf(file_path: str) -> Tuple[str, int]:
     try:
         import fitz  # type: ignore
-        doc = fitz.open(file_path)
-        pages = [page.get_text() for page in doc]
-        doc.close()
+        with fitz.open(file_path) as doc:
+            pages = [page.get_text() for page in doc]
         return "\n\n".join(pages), len(pages)
     except ImportError:
         raise RuntimeError("PyMuPDF required. pip install pymupdf")
@@ -109,7 +108,7 @@ def _set_source_status(source_id: str, status: str, error: str = None):
         )
 
 
-async def ingest_source(source_id: str) -> None:
+def ingest_source(source_id: str) -> None:
     from .db import get_conn
     from .embed import embed
     from .retrieval import add_chunks
@@ -138,7 +137,17 @@ async def ingest_source(source_id: str) -> None:
             full_path = str(UPLOAD_DIR / nb_id / filename)
             pages = [extract_text_file(full_path)]
         elif src_type == "url":
-            pages = [await extract_url(url)]
+            import asyncio
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+            if loop and loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    pages = [pool.submit(asyncio.run, extract_url(url)).result()]
+            else:
+                pages = [asyncio.run(extract_url(url))]
         else:
             raise ValueError(f"Unknown source type: {src_type}")
 
