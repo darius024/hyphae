@@ -70,32 +70,39 @@ def create_session_token() -> str:
     return secrets.token_urlsafe(32)
 
 
-def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
-    """Dependency to get current user from Authorization header."""
+def _resolve_token(authorization: Optional[str]) -> Optional[dict]:
+    """Look up a Bearer token and return the user dict, or None."""
     if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(401, "Not authenticated")
-    
-    token = authorization.replace("Bearer ", "")
-    
+        return None
+    token = authorization[7:]  # strip "Bearer "
     with get_conn() as conn:
-        cursor = conn.execute("""
+        row = conn.execute("""
             SELECT u.id, u.email, u.name, u.avatar_url, u.created_at
             FROM sessions s
             JOIN users u ON s.user_id = u.id
             WHERE s.token = ? AND s.expires_at > datetime('now')
-        """, (token,))
-        row = cursor.fetchone()
-        
-        if not row:
-            raise HTTPException(401, "Invalid or expired token")
-        
-        return {
-            "id": row[0],
-            "email": row[1],
-            "name": row[2],
-            "avatar_url": row[3],
-            "created_at": row[4]
-        }
+        """, (token,)).fetchone()
+    if not row:
+        return None
+    return {"id": row[0], "email": row[1], "name": row[2],
+            "avatar_url": row[3], "created_at": row[4]}
+
+
+def get_optional_user(authorization: Optional[str] = Header(None)) -> Optional[dict]:
+    """Return the authenticated user or None (never raises)."""
+    return _resolve_token(authorization)
+
+
+def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
+    """Return the authenticated user or raise 401."""
+    user = _resolve_token(authorization)
+    if user is None:
+        raise HTTPException(401, "Not authenticated")
+    return user
+
+
+require_user = Depends(get_current_user)
+"""FastAPI dependency — use as a default parameter: `user: dict = require_user`."""
 
 
 # ── Routes ────────────────────────────────────────────────────────────────
