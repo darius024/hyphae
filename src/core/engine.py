@@ -9,7 +9,7 @@ import json, time
 import threading as _threading
 import re
 
-from .config import PROJECT_ROOT
+from .config import GEMINI_MODEL, PROJECT_ROOT
 
 _CACTUS_SRC = os.path.join(PROJECT_ROOT, "cactus", "python", "src")
 
@@ -365,7 +365,7 @@ def generate_cloud(messages, tools):
 
     def _call_gemini(contents_in):
         return client.models.generate_content(
-            model="gemini-2.5-flash-lite",
+            model=GEMINI_MODEL,
             contents=contents_in,
             config=types.GenerateContentConfig(
                 tools=gemini_tools,

@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 from datetime import datetime
 
-from .config import CACTUS_SRC, RAG_MODEL_PATH, CORPUS_DIR
+from .config import CACTUS_SRC, GEMINI_MODEL, RAG_MODEL_PATH, CORPUS_DIR
 from cactus import cactus_init, cactus_rag_query, cactus_complete, cactus_reset
 
 NOTES_DIR = os.path.join(CORPUS_DIR, "notes")
@@ -319,7 +319,7 @@ def _exec_generate_hypothesis(context, field="general science"):
     )
 
     response = client.models.generate_content(
-            model="gemini-2.5-flash-lite",
+            model=GEMINI_MODEL,
         contents=[prompt],
     )
 
@@ -341,7 +341,7 @@ def _exec_search_literature(query):
     )
 
     response = client.models.generate_content(
-            model="gemini-2.5-flash-lite",
+            model=GEMINI_MODEL,
         contents=[prompt],
     )
 

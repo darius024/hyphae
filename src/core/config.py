@@ -23,6 +23,8 @@ WHISPER_PATH = os.path.join(CACTUS_DIR, "weights", "whisper-small")
 RAG_MODEL_PATH = os.path.join(CACTUS_DIR, "weights", "lfm2-vl-450m")
 CORPUS_DIR = os.environ.get("HYPHAE_CORPUS", os.path.join(PROJECT_ROOT, "corpus"))
 
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash-lite")
+
 if CACTUS_SRC not in sys.path:
     sys.path.insert(0, CACTUS_SRC)
 

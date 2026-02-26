@@ -24,6 +24,7 @@ from fastapi import APIRouter, HTTPException, Query, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from core.config import GEMINI_MODEL
 from notebook.db import get_conn
 from routes.auth import get_current_user
 
@@ -761,7 +762,7 @@ async def writing_assist(body: WritingAssistRequest, _user: dict = Depends(get_c
     
     try:
         resp = client.models.generate_content(
-            model="gemini-2.5-flash-lite",
+            model=GEMINI_MODEL,
             contents=[prompt]
         )
         return {

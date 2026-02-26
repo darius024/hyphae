@@ -16,6 +16,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from typing import Optional
 
+from core.config import GEMINI_MODEL
 from routes.auth import get_current_user
 
 router = APIRouter(prefix="/api", tags=["notebooks"])
@@ -418,7 +419,7 @@ async def _nb_chat_core(nb_id: str, cid: str, question: str) -> dict:
     if client:
         from google.genai import types  # type: ignore
         resp = client.models.generate_content(
-            model="gemini-2.5-flash-lite",
+            model=GEMINI_MODEL,
             contents=[safe_q],
             config=types.GenerateContentConfig(system_instruction=system),
         )
@@ -458,7 +459,7 @@ async def _stream_nb_chat(nb_id: str, cid: str, question: str) -> AsyncIterator[
         full_answer = []
         try:
             for chunk in client.models.generate_content_stream(
-                model="gemini-2.5-flash-lite",
+                model=GEMINI_MODEL,
                 contents=[safe_q],
                 config=types.GenerateContentConfig(system_instruction=system),
             ):

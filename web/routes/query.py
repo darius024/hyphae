@@ -17,6 +17,8 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from typing import List
 
+from core.config import GEMINI_MODEL
+
 router = APIRouter(prefix="/api", tags=["query"])
 
 
@@ -144,7 +146,7 @@ def _synthesise_cloud_answer(user_message: str, tool_results: list) -> Optional[
         "Write as a knowledgeable research assistant."
     )
     try:
-        resp = client.models.generate_content(model="gemini-2.5-flash-lite", contents=[prompt])
+        resp = client.models.generate_content(model=GEMINI_MODEL, contents=[prompt])
         return resp.text
     except Exception as exc:
         log.warning("synthesise_cloud_answer failed: %s", exc)
