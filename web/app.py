@@ -98,15 +98,23 @@ from routes.notebooks import router as notebooks_router, configure as configure_
 from routes.query import router as query_router, configure as configure_query
 from routes.code import router as code_router
 from routes.auth import router as auth_router
-from routes.features import router as features_router, configure as configure_features_router
 from routes.corpus import router as corpus_router
+from routes.tags import router as tags_router
+from routes.analytics import router as analytics_router
+from routes.planning import router as planning_router
+from routes.notes import router as notes_router, configure as configure_notes
+from routes.collaboration import router as collaboration_router
 
 app.include_router(notebooks_router)
 app.include_router(query_router)
 app.include_router(code_router)
 app.include_router(auth_router)
-app.include_router(features_router)
 app.include_router(corpus_router)
+app.include_router(tags_router)
+app.include_router(analytics_router)
+app.include_router(planning_router)
+app.include_router(notes_router)
+app.include_router(collaboration_router)
 
 
 # ── CORS ──────────────────────────────────────────────────────────────────
@@ -185,7 +193,7 @@ configure_notebooks(
     gemini_fn=_gemini_client,
 )
 
-configure_features_router(gemini_fn=_gemini_client)
+configure_notes(gemini_fn=_gemini_client)
 
 
 # ── Static files + SPA ────────────────────────────────────────────────────
