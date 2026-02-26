@@ -11,10 +11,12 @@ import uuid
 from pathlib import Path
 from typing import AsyncIterator
 
-from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from typing import Optional
+
+from routes.auth import get_current_user
 
 router = APIRouter(prefix="/api", tags=["notebooks"])
 
@@ -160,7 +162,7 @@ async def list_notebooks():
 
 
 @router.post("/notebooks", status_code=201)
-async def create_notebook(body: _NotebookBody):
+async def create_notebook(body: _NotebookBody, _user: dict = Depends(get_current_user)):
     nb_id = str(uuid.uuid4())
     with get_conn() as conn:
         conn.execute("INSERT INTO notebooks (id, name) VALUES (?,?)", (nb_id, body.name.strip()))
@@ -173,7 +175,7 @@ async def get_notebook(nb_id: str):
 
 
 @router.patch("/notebooks/{nb_id}")
-async def update_notebook(nb_id: str, body: _NotebookBody):
+async def update_notebook(nb_id: str, body: _NotebookBody, _user: dict = Depends(get_current_user)):
     _nb_or_404(nb_id)
     with get_conn() as conn:
         conn.execute(
@@ -184,7 +186,7 @@ async def update_notebook(nb_id: str, body: _NotebookBody):
 
 
 @router.delete("/notebooks/{nb_id}")
-async def delete_notebook_endpoint(nb_id: str):
+async def delete_notebook_endpoint(nb_id: str, _user: dict = Depends(get_current_user)):
     _nb_or_404(nb_id)
     with get_conn() as conn:
         conn.execute("DELETE FROM notebooks WHERE id=?", (nb_id,))
@@ -211,7 +213,7 @@ async def list_sources(nb_id: str):
 
 
 @router.post("/notebooks/{nb_id}/upload", status_code=202)
-async def upload_source(nb_id: str, background_tasks: BackgroundTasks, file: UploadFile = File(...)):
+async def upload_source(nb_id: str, background_tasks: BackgroundTasks, file: UploadFile = File(...), _user: dict = Depends(get_current_user)):
     _nb_or_404(nb_id)
     filename = Path(file.filename).name if file.filename else "file"
     ext = Path(filename).suffix.lower().lstrip(".")
@@ -238,7 +240,7 @@ async def upload_source(nb_id: str, background_tasks: BackgroundTasks, file: Upl
 
 
 @router.post("/notebooks/{nb_id}/add-url", status_code=202)
-async def add_url_source(nb_id: str, background_tasks: BackgroundTasks, body: _UrlBody):
+async def add_url_source(nb_id: str, background_tasks: BackgroundTasks, body: _UrlBody, _user: dict = Depends(get_current_user)):
     _nb_or_404(nb_id)
     url = body.url.strip()
     src_id = str(uuid.uuid4())
@@ -259,7 +261,7 @@ async def get_source(nb_id: str, src_id: str):
 
 
 @router.delete("/notebooks/{nb_id}/sources/{src_id}")
-async def delete_source(nb_id: str, src_id: str):
+async def delete_source(nb_id: str, src_id: str, _user: dict = Depends(get_current_user)):
     _src_or_404(src_id, nb_id)
     with get_conn() as conn:
         conn.execute("DELETE FROM sources WHERE id=?", (src_id,))
@@ -267,7 +269,7 @@ async def delete_source(nb_id: str, src_id: str):
 
 
 @router.put("/notebooks/{nb_id}/sources/{src_id}/sensitivity")
-async def set_source_sensitivity(nb_id: str, src_id: str, body: _SensitivityBody):
+async def set_source_sensitivity(nb_id: str, src_id: str, body: _SensitivityBody, _user: dict = Depends(get_current_user)):
     """Toggle confidential / shareable on a notebook source."""
     _src_or_404(src_id, nb_id)
     with get_conn() as conn:
@@ -331,7 +333,7 @@ async def get_paper(nb_id: str):
 
 
 @router.post("/notebooks/{nb_id}/paper")
-async def save_paper(nb_id: str, body: _PaperBody):
+async def save_paper(nb_id: str, body: _PaperBody, _user: dict = Depends(get_current_user)):
     """Persist the paper draft (HTML content from the editor)."""
     _nb_or_404(nb_id)
     dest = UPLOAD_DIR / nb_id
@@ -353,7 +355,7 @@ async def list_conversations(nb_id: str):
 
 
 @router.post("/notebooks/{nb_id}/conversations", status_code=201)
-async def create_conversation(nb_id: str, body: _TitleBody):
+async def create_conversation(nb_id: str, body: _TitleBody, _user: dict = Depends(get_current_user)):
     _nb_or_404(nb_id)
     cid = str(uuid.uuid4())
     with get_conn() as conn:
@@ -364,7 +366,7 @@ async def create_conversation(nb_id: str, body: _TitleBody):
 
 
 @router.patch("/notebooks/{nb_id}/conversations/{cid}")
-async def rename_conversation(nb_id: str, cid: str, body: _TitleBody):
+async def rename_conversation(nb_id: str, cid: str, body: _TitleBody, _user: dict = Depends(get_current_user)):
     _conv_or_404(cid, nb_id)
     with get_conn() as conn:
         conn.execute(
@@ -375,7 +377,7 @@ async def rename_conversation(nb_id: str, cid: str, body: _TitleBody):
 
 
 @router.delete("/notebooks/{nb_id}/conversations/{cid}")
-async def delete_conversation(nb_id: str, cid: str):
+async def delete_conversation(nb_id: str, cid: str, _user: dict = Depends(get_current_user)):
     _conv_or_404(cid, nb_id)
     with get_conn() as conn:
         conn.execute("DELETE FROM conversations WHERE id=?", (cid,))
@@ -432,7 +434,7 @@ async def _nb_chat_core(nb_id: str, cid: str, question: str) -> dict:
 
 
 @router.post("/notebooks/{nb_id}/conversations/{cid}/chat")
-async def nb_chat(nb_id: str, cid: str, body: _ChatBody):
+async def nb_chat(nb_id: str, cid: str, body: _ChatBody, _user: dict = Depends(get_current_user)):
     _conv_or_404(cid, nb_id)
     return await _nb_chat_core(nb_id, cid, body.message.strip())
 
@@ -484,7 +486,7 @@ async def _stream_nb_chat(nb_id: str, cid: str, question: str) -> AsyncIterator[
 
 
 @router.post("/notebooks/{nb_id}/conversations/{cid}/chat/stream")
-async def nb_chat_stream(nb_id: str, cid: str, body: _ChatBody):
+async def nb_chat_stream(nb_id: str, cid: str, body: _ChatBody, _user: dict = Depends(get_current_user)):
     _conv_or_404(cid, nb_id)
     return StreamingResponse(
         _stream_nb_chat(nb_id, cid, body.message.strip()),
@@ -503,7 +505,7 @@ async def get_settings():
 
 
 @router.patch("/nb-settings/{key}")
-async def update_setting(key: str, body: _SettingBody):
+async def update_setting(key: str, body: _SettingBody, _user: dict = Depends(get_current_user)):
     with get_conn() as conn:
         conn.execute(
             "INSERT INTO nb_settings (key, value) VALUES (?,?) "
@@ -528,7 +530,7 @@ async def list_events(nb_id: str):
 
 
 @router.post("/notebooks/{nb_id}/events")
-async def create_event(nb_id: str, body: _EventBody):
+async def create_event(nb_id: str, body: _EventBody, _user: dict = Depends(get_current_user)):
     _nb_or_404(nb_id)
     eid = str(uuid.uuid4())
     with get_conn() as conn:
@@ -542,7 +544,7 @@ async def create_event(nb_id: str, body: _EventBody):
 
 
 @router.delete("/notebooks/{nb_id}/events/{eid}")
-async def delete_event(nb_id: str, eid: str):
+async def delete_event(nb_id: str, eid: str, _user: dict = Depends(get_current_user)):
     _nb_or_404(nb_id)
     with get_conn() as conn:
         conn.execute(

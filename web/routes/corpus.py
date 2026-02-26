@@ -9,9 +9,11 @@ import tempfile
 from pathlib import Path
 from typing import List
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
+
+from routes.auth import get_current_user
 
 router = APIRouter(prefix="/api", tags=["corpus"])
 
@@ -97,7 +99,7 @@ async def list_documents():
 
 
 @router.post("/upload")
-async def upload_documents(file: List[UploadFile] = File(...)):
+async def upload_documents(file: List[UploadFile] = File(...), _user: dict = Depends(get_current_user)):
     if add_file is None:
         raise HTTPException(503, "Corpus ingestion not available")
     originals_dir = Path(CORPUS_DIR) / ".originals"
@@ -167,7 +169,7 @@ async def raw_document(name: str):
 
 
 @router.delete("/documents/{name}")
-async def remove_document(name: str):
+async def remove_document(name: str, _user: dict = Depends(get_current_user)):
     name = _safe_name(name)
     path = Path(CORPUS_DIR) / name
     if not path.exists():
@@ -186,7 +188,7 @@ async def get_sensitivity():
 
 
 @router.put("/sensitivity/{name}")
-async def set_sensitivity(name: str, body: _SensitivityBody):
+async def set_sensitivity(name: str, body: _SensitivityBody, _user: dict = Depends(get_current_user)):
     data = _load_sensitivity()
     data[name] = body.level
     _save_sensitivity(data)

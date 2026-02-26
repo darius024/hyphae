@@ -20,11 +20,12 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 
-from fastapi import APIRouter, HTTPException, Header, Query, Depends
+from fastapi import APIRouter, HTTPException, Query, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from notebook.db import get_conn
+from routes.auth import get_current_user
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["features"])
@@ -56,7 +57,7 @@ async def list_tags():
 
 
 @router.post("/tags", status_code=201)
-async def create_tag(body: TagCreate):
+async def create_tag(body: TagCreate, _user: dict = Depends(get_current_user)):
     """Create a new tag."""
     tag_id = str(uuid.uuid4())
     with get_conn() as conn:
@@ -71,7 +72,7 @@ async def create_tag(body: TagCreate):
 
 
 @router.patch("/tags/{tag_id}")
-async def update_tag(tag_id: str, body: TagUpdate):
+async def update_tag(tag_id: str, body: TagUpdate, _user: dict = Depends(get_current_user)):
     """Update a tag's name or color."""
     with get_conn() as conn:
         existing = conn.execute("SELECT * FROM tags WHERE id=?", (tag_id,)).fetchone()
@@ -95,7 +96,7 @@ async def update_tag(tag_id: str, body: TagUpdate):
 
 
 @router.delete("/tags/{tag_id}")
-async def delete_tag(tag_id: str):
+async def delete_tag(tag_id: str, _user: dict = Depends(get_current_user)):
     """Delete a tag."""
     with get_conn() as conn:
         conn.execute("DELETE FROM tags WHERE id=?", (tag_id,))
@@ -116,7 +117,7 @@ async def get_source_tags(nb_id: str, src_id: str):
 
 
 @router.put("/notebooks/{nb_id}/sources/{src_id}/tags")
-async def set_source_tags(nb_id: str, src_id: str, body: SourceTagBody):
+async def set_source_tags(nb_id: str, src_id: str, body: SourceTagBody, _user: dict = Depends(get_current_user)):
     """Set tags for a source (replaces existing)."""
     with get_conn() as conn:
         # Verify source exists
@@ -204,7 +205,7 @@ async def get_knowledge_graph(nb_id: str):
 
 
 @router.post("/notebooks/{nb_id}/sources/{src_id}/links", status_code=201)
-async def create_document_link(nb_id: str, src_id: str, body: LinkCreate):
+async def create_document_link(nb_id: str, src_id: str, body: LinkCreate, _user: dict = Depends(get_current_user)):
     """Create a link between two documents."""
     link_id = str(uuid.uuid4())
     with get_conn() as conn:
@@ -228,7 +229,7 @@ async def create_document_link(nb_id: str, src_id: str, body: LinkCreate):
 
 
 @router.delete("/notebooks/{nb_id}/links/{link_id}")
-async def delete_document_link(nb_id: str, link_id: str):
+async def delete_document_link(nb_id: str, link_id: str, _user: dict = Depends(get_current_user)):
     """Delete a document link."""
     with get_conn() as conn:
         conn.execute("DELETE FROM document_links WHERE id=?", (link_id,))
@@ -261,7 +262,7 @@ def log_usage_event(event_type: str, event_data: dict = None, route: str = None,
 
 
 @router.post("/analytics/event")
-async def record_usage_event(body: UsageEvent):
+async def record_usage_event(body: UsageEvent, _user: dict = Depends(get_current_user)):
     """Record a usage event."""
     event_id = log_usage_event(
         event_type=body.event_type,
@@ -386,7 +387,7 @@ async def list_deadlines(
 
 
 @router.post("/deadlines", status_code=201)
-async def create_deadline(body: DeadlineCreate):
+async def create_deadline(body: DeadlineCreate, _user: dict = Depends(get_current_user)):
     """Create a new deadline."""
     dl_id = str(uuid.uuid4())
     with get_conn() as conn:
@@ -399,7 +400,7 @@ async def create_deadline(body: DeadlineCreate):
 
 
 @router.patch("/deadlines/{dl_id}")
-async def update_deadline(dl_id: str, body: DeadlineUpdate):
+async def update_deadline(dl_id: str, body: DeadlineUpdate, _user: dict = Depends(get_current_user)):
     """Update a deadline."""
     with get_conn() as conn:
         existing = conn.execute("SELECT * FROM deadlines WHERE id=?", (dl_id,)).fetchone()
@@ -422,7 +423,7 @@ async def update_deadline(dl_id: str, body: DeadlineUpdate):
 
 
 @router.delete("/deadlines/{dl_id}")
-async def delete_deadline(dl_id: str):
+async def delete_deadline(dl_id: str, _user: dict = Depends(get_current_user)):
     """Delete a deadline."""
     with get_conn() as conn:
         conn.execute("DELETE FROM deadlines WHERE id=?", (dl_id,))
@@ -430,7 +431,7 @@ async def delete_deadline(dl_id: str):
 
 
 @router.post("/reminders", status_code=201)
-async def create_reminder(body: ReminderCreate):
+async def create_reminder(body: ReminderCreate, _user: dict = Depends(get_current_user)):
     """Create a reminder for a deadline."""
     rem_id = str(uuid.uuid4())
     with get_conn() as conn:
@@ -476,9 +477,8 @@ class CalendarConnect(BaseModel):
 
 
 @router.get("/calendar/connections")
-async def list_calendar_connections(authorization: Optional[str] = Header(None)):
+async def list_calendar_connections(_user: dict = Depends(get_current_user)):
     """List user's calendar connections."""
-    # In production, extract user_id from auth token
     with get_conn() as conn:
         rows = conn.execute("""
             SELECT id, provider, calendar_id, last_sync, created_at FROM calendar_connections
@@ -487,11 +487,10 @@ async def list_calendar_connections(authorization: Optional[str] = Header(None))
 
 
 @router.post("/calendar/connect", status_code=201)
-async def connect_calendar(body: CalendarConnect, authorization: Optional[str] = Header(None)):
+async def connect_calendar(body: CalendarConnect, user: dict = Depends(get_current_user)):
     """Connect a calendar provider (store OAuth tokens)."""
     conn_id = str(uuid.uuid4())
-    # In production, get user_id from auth
-    user_id = "system"  # placeholder
+    user_id = user["id"]
     
     with get_conn() as conn:
         conn.execute("""
@@ -505,7 +504,7 @@ async def connect_calendar(body: CalendarConnect, authorization: Optional[str] =
 
 
 @router.post("/calendar/sync/{conn_id}")
-async def sync_calendar(conn_id: str):
+async def sync_calendar(conn_id: str, _user: dict = Depends(get_current_user)):
     """
     Sync events from connected calendar.
     
@@ -535,7 +534,7 @@ async def sync_calendar(conn_id: str):
 
 
 @router.delete("/calendar/disconnect/{conn_id}")
-async def disconnect_calendar(conn_id: str):
+async def disconnect_calendar(conn_id: str, _user: dict = Depends(get_current_user)):
     """Disconnect a calendar provider."""
     with get_conn() as conn:
         conn.execute("DELETE FROM calendar_connections WHERE id=?", (conn_id,))
@@ -567,7 +566,7 @@ async def list_notes(nb_id: str):
 
 
 @router.post("/notebooks/{nb_id}/notes", status_code=201)
-async def create_note(nb_id: str, body: NoteCreate):
+async def create_note(nb_id: str, body: NoteCreate, _user: dict = Depends(get_current_user)):
     """Create a new note."""
     note_id = str(uuid.uuid4())
     with get_conn() as conn:
@@ -597,7 +596,7 @@ async def get_note(nb_id: str, note_id: str):
 
 
 @router.patch("/notebooks/{nb_id}/notes/{note_id}")
-async def update_note(nb_id: str, note_id: str, body: NoteUpdate):
+async def update_note(nb_id: str, note_id: str, body: NoteUpdate, _user: dict = Depends(get_current_user)):
     """Update a note and create a new version."""
     with get_conn() as conn:
         existing = conn.execute(
@@ -635,7 +634,7 @@ async def update_note(nb_id: str, note_id: str, body: NoteUpdate):
 
 
 @router.delete("/notebooks/{nb_id}/notes/{note_id}")
-async def delete_note(nb_id: str, note_id: str):
+async def delete_note(nb_id: str, note_id: str, _user: dict = Depends(get_current_user)):
     """Delete a note and all its versions."""
     with get_conn() as conn:
         conn.execute("DELETE FROM notes WHERE id = ? AND notebook_id = ?", (note_id, nb_id))
@@ -676,7 +675,7 @@ async def get_note_version(nb_id: str, note_id: str, version_num: int):
 
 
 @router.post("/notebooks/{nb_id}/notes/{note_id}/restore/{version_num}")
-async def restore_note_version(nb_id: str, note_id: str, version_num: int):
+async def restore_note_version(nb_id: str, note_id: str, version_num: int, _user: dict = Depends(get_current_user)):
     """Restore a note to a previous version (creates new version with old content)."""
     with get_conn() as conn:
         # Get the version to restore
@@ -728,7 +727,7 @@ def configure(*, gemini_fn):
 
 
 @router.post("/writing/assist")
-async def writing_assist(body: WritingAssistRequest):
+async def writing_assist(body: WritingAssistRequest, _user: dict = Depends(get_current_user)):
     """
     AI writing assistant endpoint.
     
@@ -781,7 +780,8 @@ async def save_writing_session(
     notebook_id: Optional[str] = None,
     note_id: Optional[str] = None,
     content: str = "",
-    ai_suggestions: Optional[str] = None
+    ai_suggestions: Optional[str] = None,
+    _user: dict = Depends(get_current_user),
 ):
     """Save a writing session state."""
     session_id = str(uuid.uuid4())
@@ -825,11 +825,8 @@ class OrgInvite(BaseModel):
 
 
 @router.get("/organizations")
-async def list_user_organizations(x_user_id: Optional[str] = Header(default=None)):
+async def list_user_organizations(user: dict = Depends(get_current_user)):
     """List organizations the current user belongs to."""
-    if not x_user_id:
-        return {"organizations": []}
-    
     with get_conn() as conn:
         rows = conn.execute("""
             SELECT o.*, om.role as user_role,
@@ -839,16 +836,14 @@ async def list_user_organizations(x_user_id: Optional[str] = Header(default=None
             JOIN org_members om ON o.id = om.org_id
             WHERE om.user_id = ?
             ORDER BY o.name
-        """, (x_user_id,)).fetchall()
+        """, (user["id"],)).fetchall()
     
     return {"organizations": [dict(r) for r in rows]}
 
 
 @router.post("/organizations", status_code=201)
-async def create_organization(body: OrgCreate, x_user_id: Optional[str] = Header(default=None)):
+async def create_organization(body: OrgCreate, user: dict = Depends(get_current_user)):
     """Create a new organization."""
-    if not x_user_id:
-        raise HTTPException(401, "Authentication required")
     
     org_id = str(uuid.uuid4())
     with get_conn() as conn:
@@ -861,34 +856,30 @@ async def create_organization(body: OrgCreate, x_user_id: Optional[str] = Header
         conn.execute("""
             INSERT INTO organizations (id, name, slug, description, owner_id)
             VALUES (?, ?, ?, ?, ?)
-        """, (org_id, body.name, body.slug.lower(), body.description, x_user_id))
+        """, (org_id, body.name, body.slug.lower(), body.description, user["id"]))
         
         # Add owner as member with owner role
         member_id = str(uuid.uuid4())
         conn.execute("""
             INSERT INTO org_members (id, org_id, user_id, role)
             VALUES (?, ?, ?, 'owner')
-        """, (member_id, org_id, x_user_id))
+        """, (member_id, org_id, user["id"]))
     
     return {"id": org_id, "slug": body.slug.lower()}
 
 
 @router.get("/organizations/{org_id}")
-async def get_organization(org_id: str, x_user_id: Optional[str] = Header(default=None)):
+async def get_organization(org_id: str, user: dict = Depends(get_current_user)):
     """Get organization details."""
     with get_conn() as conn:
         org = conn.execute("SELECT * FROM organizations WHERE id=?", (org_id,)).fetchone()
         if not org:
             raise HTTPException(404, "Organization not found")
         
-        # Check membership
-        if x_user_id:
-            member = conn.execute(
-                "SELECT role FROM org_members WHERE org_id=? AND user_id=?",
-                (org_id, x_user_id)
-            ).fetchone()
-        else:
-            member = None
+        member = conn.execute(
+            "SELECT role FROM org_members WHERE org_id=? AND user_id=?",
+            (org_id, user["id"])
+        ).fetchone()
         
         # Get members
         members = conn.execute("""
@@ -914,16 +905,14 @@ async def get_organization(org_id: str, x_user_id: Optional[str] = Header(defaul
 
 
 @router.patch("/organizations/{org_id}")
-async def update_organization(org_id: str, body: OrgUpdate, x_user_id: Optional[str] = Header(default=None)):
+async def update_organization(org_id: str, body: OrgUpdate, user: dict = Depends(get_current_user)):
     """Update organization details (admin/owner only)."""
-    if not x_user_id:
-        raise HTTPException(401, "Authentication required")
     
     with get_conn() as conn:
         # Check permission
         member = conn.execute(
             "SELECT role FROM org_members WHERE org_id=? AND user_id=?",
-            (org_id, x_user_id)
+            (org_id, user["id"])
         ).fetchone()
         if not member or member["role"] not in ("owner", "admin"):
             raise HTTPException(403, "Admin access required")
@@ -949,16 +938,14 @@ async def update_organization(org_id: str, body: OrgUpdate, x_user_id: Optional[
 
 
 @router.delete("/organizations/{org_id}")
-async def delete_organization(org_id: str, x_user_id: Optional[str] = Header(default=None)):
+async def delete_organization(org_id: str, user: dict = Depends(get_current_user)):
     """Delete organization (owner only)."""
-    if not x_user_id:
-        raise HTTPException(401, "Authentication required")
     
     with get_conn() as conn:
         org = conn.execute("SELECT owner_id FROM organizations WHERE id=?", (org_id,)).fetchone()
         if not org:
             raise HTTPException(404, "Organization not found")
-        if org["owner_id"] != x_user_id:
+        if org["owner_id"] != user["id"]:
             raise HTTPException(403, "Only owner can delete organization")
         
         conn.execute("DELETE FROM organizations WHERE id=?", (org_id,))
@@ -967,7 +954,7 @@ async def delete_organization(org_id: str, x_user_id: Optional[str] = Header(def
 
 
 @router.get("/organizations/{org_id}/members")
-async def list_org_members(org_id: str):
+async def list_org_members(org_id: str, _user: dict = Depends(get_current_user)):
     """List organization members."""
     with get_conn() as conn:
         rows = conn.execute("""
@@ -981,16 +968,14 @@ async def list_org_members(org_id: str):
 
 
 @router.post("/organizations/{org_id}/invite", status_code=201)
-async def invite_to_org(org_id: str, body: OrgInvite, x_user_id: Optional[str] = Header(default=None)):
+async def invite_to_org(org_id: str, body: OrgInvite, user: dict = Depends(get_current_user)):
     """Invite a user to organization by email."""
-    if not x_user_id:
-        raise HTTPException(401, "Authentication required")
     
     with get_conn() as conn:
         # Check permission (admin/owner)
         member = conn.execute(
             "SELECT role FROM org_members WHERE org_id=? AND user_id=?",
-            (org_id, x_user_id)
+            (org_id, user["id"])
         ).fetchone()
         if not member or member["role"] not in ("owner", "admin"):
             raise HTTPException(403, "Admin access required")
@@ -1020,16 +1005,14 @@ async def invite_to_org(org_id: str, body: OrgInvite, x_user_id: Optional[str] =
         conn.execute("""
             INSERT INTO org_invites (id, org_id, email, role, token, invited_by, expires_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (invite_id, org_id, body.email, body.role, token, x_user_id, expires))
+        """, (invite_id, org_id, body.email, body.role, token, user["id"], expires))
     
     return {"invite_id": invite_id, "token": token}
 
 
 @router.post("/organizations/accept-invite/{token}")
-async def accept_org_invite(token: str, x_user_id: Optional[str] = Header(default=None)):
+async def accept_org_invite(token: str, user: dict = Depends(get_current_user)):
     """Accept an organization invite."""
-    if not x_user_id:
-        raise HTTPException(401, "Authentication required")
     
     with get_conn() as conn:
         invite = conn.execute("""
@@ -1043,7 +1026,7 @@ async def accept_org_invite(token: str, x_user_id: Optional[str] = Header(defaul
             raise HTTPException(400, "Invite has expired")
         
         # Get user email
-        user = conn.execute("SELECT email FROM users WHERE id=?", (x_user_id,)).fetchone()
+        user = conn.execute("SELECT email FROM users WHERE id=?", (user["id"],)).fetchone()
         if not user or user["email"].lower() != invite["email"].lower():
             raise HTTPException(400, "This invite was sent to a different email")
         
@@ -1052,7 +1035,7 @@ async def accept_org_invite(token: str, x_user_id: Optional[str] = Header(defaul
         conn.execute("""
             INSERT INTO org_members (id, org_id, user_id, role)
             VALUES (?, ?, ?, ?)
-        """, (member_id, invite["org_id"], x_user_id, invite["role"]))
+        """, (member_id, invite["org_id"], user["id"], invite["role"]))
         
         # Mark invite as accepted
         conn.execute("UPDATE org_invites SET accepted=1 WHERE id=?", (invite["id"],))
@@ -1061,23 +1044,21 @@ async def accept_org_invite(token: str, x_user_id: Optional[str] = Header(defaul
 
 
 @router.delete("/organizations/{org_id}/members/{user_id}")
-async def remove_org_member(org_id: str, user_id: str, x_user_id: Optional[str] = Header(default=None)):
+async def remove_org_member(org_id: str, user_id: str, user: dict = Depends(get_current_user)):
     """Remove a member from organization."""
-    if not x_user_id:
-        raise HTTPException(401, "Authentication required")
     
     with get_conn() as conn:
         # Check permission
         actor = conn.execute(
             "SELECT role FROM org_members WHERE org_id=? AND user_id=?",
-            (org_id, x_user_id)
+            (org_id, user["id"])
         ).fetchone()
         
         if not actor:
             raise HTTPException(403, "Not a member of this organization")
         
         # User can remove themselves
-        if user_id != x_user_id:
+        if user_id != user["id"]:
             # Only admin/owner can remove others
             if actor["role"] not in ("owner", "admin"):
                 raise HTTPException(403, "Admin access required")
@@ -1102,11 +1083,9 @@ async def remove_org_member(org_id: str, user_id: str, x_user_id: Optional[str] 
 async def update_member_role(
     org_id: str, user_id: str,
     role: str = Query(..., pattern=r"^(admin|member|viewer)$"),
-    x_user_id: Optional[str] = Header(default=None)
+    user: dict = Depends(get_current_user)
 ):
     """Update a member's role (admin/owner only)."""
-    if not x_user_id:
-        raise HTTPException(401, "Authentication required")
     
     with get_conn() as conn:
         # Check permission (only owner can change roles)
@@ -1116,7 +1095,7 @@ async def update_member_role(
         
         actor = conn.execute(
             "SELECT role FROM org_members WHERE org_id=? AND user_id=?",
-            (org_id, x_user_id)
+            (org_id, user["id"])
         ).fetchone()
         if not actor or actor["role"] not in ("owner", "admin"):
             raise HTTPException(403, "Admin access required")
@@ -1204,10 +1183,8 @@ async def get_comment_replies(comment_id: str):
 
 
 @router.post("/comments", status_code=201)
-async def create_comment(body: CommentCreate, x_user_id: Optional[str] = Header(default=None)):
+async def create_comment(body: CommentCreate, user: dict = Depends(get_current_user)):
     """Create a new comment."""
-    if not x_user_id:
-        raise HTTPException(401, "Authentication required")
     
     comment_id = str(uuid.uuid4())
     with get_conn() as conn:
@@ -1215,7 +1192,7 @@ async def create_comment(body: CommentCreate, x_user_id: Optional[str] = Header(
             INSERT INTO comments (id, user_id, notebook_id, source_id, note_id, conversation_id, parent_id, content)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            comment_id, x_user_id, body.notebook_id, body.source_id,
+            comment_id, user["id"], body.notebook_id, body.source_id,
             body.note_id, body.conversation_id, body.parent_id, body.content
         ))
         
@@ -1229,16 +1206,14 @@ async def create_comment(body: CommentCreate, x_user_id: Optional[str] = Header(
             conn.execute("""
                 INSERT INTO activity_feed (id, org_id, user_id, notebook_id, action, target_type, target_id)
                 VALUES (?, ?, ?, ?, 'commented', 'comment', ?)
-            """, (activity_id, org_id, x_user_id, body.notebook_id, comment_id))
+            """, (activity_id, org_id, user["id"], body.notebook_id, comment_id))
     
     return {"id": comment_id}
 
 
 @router.patch("/comments/{comment_id}")
-async def update_comment(comment_id: str, body: CommentUpdate, x_user_id: Optional[str] = Header(default=None)):
+async def update_comment(comment_id: str, body: CommentUpdate, user: dict = Depends(get_current_user)):
     """Update a comment (author only, or resolve by anyone in thread)."""
-    if not x_user_id:
-        raise HTTPException(401, "Authentication required")
     
     with get_conn() as conn:
         comment = conn.execute("SELECT * FROM comments WHERE id=?", (comment_id,)).fetchone()
@@ -1246,7 +1221,7 @@ async def update_comment(comment_id: str, body: CommentUpdate, x_user_id: Option
             raise HTTPException(404, "Comment not found")
         
         # Only author can edit content
-        if body.content is not None and comment["user_id"] != x_user_id:
+        if body.content is not None and comment["user_id"] != user["id"]:
             raise HTTPException(403, "Only author can edit comment")
         
         updates = []
@@ -1267,16 +1242,14 @@ async def update_comment(comment_id: str, body: CommentUpdate, x_user_id: Option
 
 
 @router.delete("/comments/{comment_id}")
-async def delete_comment(comment_id: str, x_user_id: Optional[str] = Header(default=None)):
+async def delete_comment(comment_id: str, user: dict = Depends(get_current_user)):
     """Delete a comment (author only)."""
-    if not x_user_id:
-        raise HTTPException(401, "Authentication required")
     
     with get_conn() as conn:
         comment = conn.execute("SELECT user_id FROM comments WHERE id=?", (comment_id,)).fetchone()
         if not comment:
             raise HTTPException(404, "Comment not found")
-        if comment["user_id"] != x_user_id:
+        if comment["user_id"] != user["id"]:
             raise HTTPException(403, "Only author can delete comment")
         
         conn.execute("DELETE FROM comments WHERE id=?", (comment_id,))
@@ -1329,7 +1302,7 @@ async def log_activity(
     target_title: Optional[str] = None,
     notebook_id: Optional[str] = None,
     metadata: Optional[str] = None,
-    x_user_id: Optional[str] = Header(default=None)
+    user: dict = Depends(get_current_user)
 ):
     """Log an activity event."""
     activity_id = str(uuid.uuid4())
@@ -1344,7 +1317,7 @@ async def log_activity(
         conn.execute("""
             INSERT INTO activity_feed (id, org_id, user_id, notebook_id, action, target_type, target_id, target_title, metadata)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (activity_id, org_id, x_user_id, notebook_id, action, target_type, target_id, target_title, metadata))
+        """, (activity_id, org_id, user["id"], notebook_id, action, target_type, target_id, target_title, metadata))
     
     return {"id": activity_id}
 
@@ -1369,16 +1342,14 @@ async def list_org_notebooks(org_id: str):
 
 
 @router.post("/organizations/{org_id}/notebooks/{nb_id}")
-async def add_notebook_to_org(org_id: str, nb_id: str, x_user_id: Optional[str] = Header(default=None)):
+async def add_notebook_to_org(org_id: str, nb_id: str, user: dict = Depends(get_current_user)):
     """Add an existing notebook to an organization."""
-    if not x_user_id:
-        raise HTTPException(401, "Authentication required")
     
     with get_conn() as conn:
         # Check membership
         member = conn.execute(
             "SELECT role FROM org_members WHERE org_id=? AND user_id=?",
-            (org_id, x_user_id)
+            (org_id, user["id"])
         ).fetchone()
         if not member:
             raise HTTPException(403, "Not a member of this organization")
@@ -1391,26 +1362,24 @@ async def add_notebook_to_org(org_id: str, nb_id: str, x_user_id: Optional[str] 
         conn.execute("""
             INSERT INTO activity_feed (id, org_id, user_id, notebook_id, action, target_type, target_id, target_title)
             VALUES (?, ?, ?, ?, 'shared', 'notebook', ?, ?)
-        """, (activity_id, org_id, x_user_id, nb_id, nb_id, nb["name"] if nb else None))
+        """, (activity_id, org_id, user["id"], nb_id, nb_id, nb["name"] if nb else None))
     
     return {"added": True}
 
 
 @router.delete("/organizations/{org_id}/notebooks/{nb_id}")
-async def remove_notebook_from_org(org_id: str, nb_id: str, x_user_id: Optional[str] = Header(default=None)):
+async def remove_notebook_from_org(org_id: str, nb_id: str, user: dict = Depends(get_current_user)):
     """Remove a notebook from organization (makes it personal)."""
-    if not x_user_id:
-        raise HTTPException(401, "Authentication required")
     
     with get_conn() as conn:
         member = conn.execute(
             "SELECT role FROM org_members WHERE org_id=? AND user_id=?",
-            (org_id, x_user_id)
+            (org_id, user["id"])
         ).fetchone()
         if not member or member["role"] not in ("owner", "admin"):
             raise HTTPException(403, "Admin access required")
         
         conn.execute("UPDATE notebooks SET org_id=NULL, user_id=? WHERE id=? AND org_id=?", 
-                     (x_user_id, nb_id, org_id))
+                     (user["id"], nb_id, org_id))
     
     return {"removed": True}
