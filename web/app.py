@@ -14,6 +14,7 @@ Run:
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -35,7 +36,7 @@ except Exception:
 
 # ── FastAPI ───────────────────────────────────────────────────────────────
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 # ── Hyphae core (guarded) ────────────────────────────────────────────────
@@ -194,6 +195,37 @@ configure_notebooks(
 )
 
 configure_notes(gemini_fn=_gemini_client)
+
+
+# ── Health / readiness probes ─────────────────────────────────────────────
+
+@app.get("/health", tags=["ops"])
+async def health():
+    """Liveness probe — returns 200 if the process is running."""
+    return {"status": "ok"}
+
+
+@app.get("/ready", tags=["ops"])
+async def ready():
+    """Readiness probe — verifies DB and core dependencies are available."""
+    checks: dict[str, str] = {}
+
+    # DB connectivity
+    try:
+        with get_conn() as conn:
+            conn.execute("SELECT 1").fetchone()
+        checks["db"] = "ok"
+    except Exception as exc:
+        checks["db"] = f"fail: {exc}"
+
+    # Core AI engine
+    checks["engine"] = "ok" if generate_hybrid is not None else "unavailable"
+    checks["tools"] = "ok" if execute_tool is not None else "unavailable"
+
+    all_ok = checks["db"] == "ok"
+    status_code = 200 if all_ok else 503
+    return JSONResponse({"status": "ready" if all_ok else "not_ready", "checks": checks},
+                        status_code=status_code)
 
 
 # ── Static files + SPA ────────────────────────────────────────────────────

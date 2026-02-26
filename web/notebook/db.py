@@ -462,3 +462,19 @@ def get_conn() -> Generator[sqlite3.Connection, None, None]:
         raise
     finally:
         conn.close()
+
+
+def purge_expired_sessions() -> int:
+    """Delete sessions whose expires_at is in the past. Returns count deleted."""
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        cur = conn.execute(
+            "DELETE FROM sessions WHERE expires_at < strftime('%Y-%m-%dT%H:%M:%SZ', 'now')"
+        )
+        conn.commit()
+        deleted = cur.rowcount
+        if deleted:
+            log.info("Purged %d expired session(s)", deleted)
+        return deleted
+    finally:
+        conn.close()
