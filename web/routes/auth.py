@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import logging
 import secrets
-import sqlite3
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -106,42 +105,36 @@ async def signup(req: SignupRequest):
     """Create a new user account."""
     user_id = secrets.token_hex(16)
     password_hash = hash_password(req.password)
-    
+
     with get_conn() as conn:
-        try:
-            conn.execute("""
-                INSERT INTO users (id, email, password_hash, name)
-                VALUES (?, ?, ?, ?)
-            """, (user_id, req.email, password_hash, req.name))
-            conn.commit()
-        except sqlite3.IntegrityError:
+        existing = conn.execute("SELECT 1 FROM users WHERE email=?", (req.email,)).fetchone()
+        if existing:
             raise HTTPException(400, "Email already registered")
-        
-        # Create session
+
+        conn.execute(
+            "INSERT INTO users (id, email, password_hash, name) VALUES (?, ?, ?, ?)",
+            (user_id, req.email, password_hash, req.name),
+        )
+
         token = create_session_token()
         session_id = secrets.token_hex(16)
         expires_at = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
-        
-        conn.execute("""
-            INSERT INTO sessions (id, user_id, token, expires_at)
-            VALUES (?, ?, ?, ?)
-        """, (session_id, user_id, token, expires_at))
-        conn.commit()
-        
-        cursor = conn.execute("""
-            SELECT id, email, name, avatar_url, created_at
-            FROM users WHERE id = ?
-        """, (user_id,))
-        row = cursor.fetchone()
-        
-        user = UserResponse(
-            id=row[0],
-            email=row[1],
-            name=row[2],
-            avatar_url=row[3],
-            created_at=row[4]
+
+        conn.execute(
+            "INSERT INTO sessions (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)",
+            (session_id, user_id, token, expires_at),
         )
-        
+
+        row = conn.execute(
+            "SELECT id, email, name, avatar_url, created_at FROM users WHERE id=?",
+            (user_id,),
+        ).fetchone()
+
+        user = UserResponse(
+            id=row[0], email=row[1], name=row[2],
+            avatar_url=row[3], created_at=row[4],
+        )
+
         return LoginResponse(token=token, user=user)
 
 
@@ -168,12 +161,11 @@ async def login(req: LoginRequest):
         session_id = secrets.token_hex(16)
         expires_at = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
         
-        conn.execute("""
-            INSERT INTO sessions (id, user_id, token, expires_at)
-            VALUES (?, ?, ?, ?)
-        """, (session_id, user_id, token, expires_at))
-        conn.commit()
-        
+        conn.execute(
+            "INSERT INTO sessions (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)",
+            (session_id, user_id, token, expires_at),
+        )
+
         user = UserResponse(
             id=user_id,
             email=email,
@@ -195,7 +187,6 @@ async def logout(authorization: Optional[str] = Header(None)):
     
     with get_conn() as conn:
         conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
-        conn.commit()
     
     return {"ok": True}
 
