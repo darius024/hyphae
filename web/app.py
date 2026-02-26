@@ -99,12 +99,14 @@ from routes.query import router as query_router, configure as configure_query
 from routes.code import router as code_router
 from routes.auth import router as auth_router
 from routes.features import router as features_router, configure as configure_features_router
+from routes.corpus import router as corpus_router
 
 app.include_router(notebooks_router)
 app.include_router(query_router)
 app.include_router(code_router)
 app.include_router(auth_router)
 app.include_router(features_router)
+app.include_router(corpus_router)
 
 
 # ── CORS ──────────────────────────────────────────────────────────────────

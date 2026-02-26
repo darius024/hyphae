@@ -35,6 +35,18 @@ def client(tmp_path, monkeypatch):
     return TestClient(app)
 
 
+@pytest.fixture()
+def auth_headers(client):
+    """Register a test user and return Authorization headers."""
+    r = client.post("/api/auth/signup", json={
+        "email": "test@example.com",
+        "password": "testpassword123",
+        "name": "Test User",
+    })
+    assert r.status_code == 200
+    return {"Authorization": f"Bearer {r.json()['token']}"}
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Corpus endpoints
 # ═══════════════════════════════════════════════════════════════════════════
@@ -59,15 +71,15 @@ class TestDocumentsApi:
         r = client.get("/api/documents/nonexistent.txt")
         assert r.status_code == 404
 
-    def test_delete_document(self, client):
-        r = client.delete("/api/documents/sample_doc.txt")
+    def test_delete_document(self, client, auth_headers):
+        r = client.delete("/api/documents/sample_doc.txt", headers=auth_headers)
         assert r.status_code == 200
         assert r.json()["removed"] == "sample_doc.txt"
         r2 = client.get("/api/documents/sample_doc.txt")
         assert r2.status_code == 404
 
-    def test_delete_nonexistent(self, client):
-        r = client.delete("/api/documents/nope.txt")
+    def test_delete_nonexistent(self, client, auth_headers):
+        r = client.delete("/api/documents/nope.txt", headers=auth_headers)
         assert r.status_code == 404
 
 
@@ -77,13 +89,13 @@ class TestSensitivityApi:
         assert r.status_code == 200
         assert "tags" in r.json()
 
-    def test_set_sensitivity(self, client):
-        r = client.put("/api/sensitivity/sample_doc.txt", json={"level": "confidential"})
+    def test_set_sensitivity(self, client, auth_headers):
+        r = client.put("/api/sensitivity/sample_doc.txt", json={"level": "confidential"}, headers=auth_headers)
         assert r.status_code == 200
         assert r.json()["level"] == "confidential"
 
-    def test_set_invalid_level(self, client):
-        r = client.put("/api/sensitivity/sample_doc.txt", json={"level": "secret"})
+    def test_set_invalid_level(self, client, auth_headers):
+        r = client.put("/api/sensitivity/sample_doc.txt", json={"level": "secret"}, headers=auth_headers)
         assert r.status_code == 422
 
 
@@ -137,15 +149,19 @@ class TestNotebookApi:
         assert r.status_code == 200
         assert "notebooks" in r.json()
 
-    def test_create_notebook(self, client):
-        r = client.post("/api/notebooks", json={"name": "Test Notebook"})
+    def test_create_notebook(self, client, auth_headers):
+        r = client.post("/api/notebooks", json={"name": "Test Notebook"}, headers=auth_headers)
         assert r.status_code == 201
         data = r.json()
         assert data["name"] == "Test Notebook"
         assert "id" in data
 
-    def test_get_notebook(self, client):
-        r = client.post("/api/notebooks", json={"name": "Get Test"})
+    def test_create_notebook_unauthenticated(self, client):
+        r = client.post("/api/notebooks", json={"name": "No Auth"})
+        assert r.status_code == 401
+
+    def test_get_notebook(self, client, auth_headers):
+        r = client.post("/api/notebooks", json={"name": "Get Test"}, headers=auth_headers)
         nb_id = r.json()["id"]
         r2 = client.get(f"/api/notebooks/{nb_id}")
         assert r2.status_code == 200
@@ -155,17 +171,17 @@ class TestNotebookApi:
         r = client.get("/api/notebooks/nonexistent-id")
         assert r.status_code == 404
 
-    def test_update_notebook(self, client):
-        r = client.post("/api/notebooks", json={"name": "Original"})
+    def test_update_notebook(self, client, auth_headers):
+        r = client.post("/api/notebooks", json={"name": "Original"}, headers=auth_headers)
         nb_id = r.json()["id"]
-        r2 = client.patch(f"/api/notebooks/{nb_id}", json={"name": "Updated"})
+        r2 = client.patch(f"/api/notebooks/{nb_id}", json={"name": "Updated"}, headers=auth_headers)
         assert r2.status_code == 200
         assert r2.json()["name"] == "Updated"
 
-    def test_delete_notebook(self, client):
-        r = client.post("/api/notebooks", json={"name": "Delete Me"})
+    def test_delete_notebook(self, client, auth_headers):
+        r = client.post("/api/notebooks", json={"name": "Delete Me"}, headers=auth_headers)
         nb_id = r.json()["id"]
-        r2 = client.delete(f"/api/notebooks/{nb_id}")
+        r2 = client.delete(f"/api/notebooks/{nb_id}", headers=auth_headers)
         assert r2.status_code == 200
         assert r2.json()["deleted"] == nb_id
         r3 = client.get(f"/api/notebooks/{nb_id}")
@@ -178,64 +194,74 @@ class TestNotebookApi:
 
 class TestConversationApi:
     @pytest.fixture()
-    def nb_id(self, client):
-        r = client.post("/api/notebooks", json={"name": "Conv Test"})
+    def nb_id(self, client, auth_headers):
+        r = client.post("/api/notebooks", json={"name": "Conv Test"}, headers=auth_headers)
         return r.json()["id"]
 
-    def test_list_conversations_empty(self, client, nb_id):
+    def test_list_conversations_empty(self, client, auth_headers, nb_id):
         r = client.get(f"/api/notebooks/{nb_id}/conversations")
         assert r.status_code == 200
         assert r.json()["conversations"] == []
 
-    def test_create_conversation(self, client, nb_id):
+    def test_create_conversation(self, client, auth_headers, nb_id):
         r = client.post(
             f"/api/notebooks/{nb_id}/conversations",
             json={"title": "My Chat"},
+            headers=auth_headers,
         )
         assert r.status_code == 201
         assert r.json()["title"] == "My Chat"
 
-    def test_rename_conversation(self, client, nb_id):
+    def test_rename_conversation(self, client, auth_headers, nb_id):
         r = client.post(
             f"/api/notebooks/{nb_id}/conversations",
             json={"title": "Old Title"},
+            headers=auth_headers,
         )
         cid = r.json()["id"]
         r2 = client.patch(
             f"/api/notebooks/{nb_id}/conversations/{cid}",
             json={"title": "New Title"},
+            headers=auth_headers,
         )
         assert r2.status_code == 200
         assert r2.json()["title"] == "New Title"
 
-    def test_rename_empty_title_fails(self, client, nb_id):
+    def test_rename_empty_title_fails(self, client, auth_headers, nb_id):
         r = client.post(
             f"/api/notebooks/{nb_id}/conversations",
             json={"title": "Test"},
+            headers=auth_headers,
         )
         cid = r.json()["id"]
         r2 = client.patch(
             f"/api/notebooks/{nb_id}/conversations/{cid}",
             json={"title": ""},
+            headers=auth_headers,
         )
         assert r2.status_code == 422
 
-    def test_delete_conversation(self, client, nb_id):
+    def test_delete_conversation(self, client, auth_headers, nb_id):
         r = client.post(
             f"/api/notebooks/{nb_id}/conversations",
             json={"title": "To Delete"},
+            headers=auth_headers,
         )
         cid = r.json()["id"]
-        r2 = client.delete(f"/api/notebooks/{nb_id}/conversations/{cid}")
+        r2 = client.delete(
+            f"/api/notebooks/{nb_id}/conversations/{cid}",
+            headers=auth_headers,
+        )
         assert r2.status_code == 200
         r3 = client.get(f"/api/notebooks/{nb_id}/conversations")
         ids = [c["id"] for c in r3.json()["conversations"]]
         assert cid not in ids
 
-    def test_list_messages_empty(self, client, nb_id):
+    def test_list_messages_empty(self, client, auth_headers, nb_id):
         r = client.post(
             f"/api/notebooks/{nb_id}/conversations",
             json={"title": "Empty"},
+            headers=auth_headers,
         )
         cid = r.json()["id"]
         r2 = client.get(f"/api/notebooks/{nb_id}/conversations/{cid}/messages")
@@ -254,13 +280,13 @@ class TestSettingsApi:
         keys = [s["key"] for s in r.json()["settings"]]
         assert "embed_model" in keys
 
-    def test_update_setting(self, client):
-        r = client.patch("/api/nb-settings/retrieval_top_k", json={"value": "10"})
+    def test_update_setting(self, client, auth_headers):
+        r = client.patch("/api/nb-settings/retrieval_top_k", json={"value": "10"}, headers=auth_headers)
         assert r.status_code == 200
         assert r.json()["value"] == "10"
 
-    def test_update_missing_value(self, client):
-        r = client.patch("/api/nb-settings/chunk_size", json={})
+    def test_update_missing_value(self, client, auth_headers):
+        r = client.patch("/api/nb-settings/chunk_size", json={}, headers=auth_headers)
         assert r.status_code == 422
 
 
