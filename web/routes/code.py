@@ -16,9 +16,11 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from routes.auth import get_current_user
 
 log = logging.getLogger(__name__)
 
@@ -96,6 +98,32 @@ def _git(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, timeout=60, check=False)
 
 
+_SAFE_BRANCH_RE = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9._/\-]*$')
+_INTERNAL_HOST_RE = re.compile(
+    r'://(localhost|127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|0\.0\.0\.0|\[::1\])',
+    re.IGNORECASE,
+)
+
+
+def _validate_clone_url(url: str) -> str:
+    """Reject non-HTTPS URLs and those targeting internal networks."""
+    url = url.strip()
+    if not url:
+        raise HTTPException(400, "URL is required")
+    if not url.startswith("https://"):
+        raise HTTPException(400, "Only HTTPS clone URLs are allowed")
+    if _INTERNAL_HOST_RE.search(url):
+        raise HTTPException(400, "Internal/loopback URLs are not allowed")
+    return url
+
+
+def _safe_git_arg(arg: str) -> str:
+    """Reject arguments that look like git flags to prevent option injection."""
+    if arg.startswith("-"):
+        raise HTTPException(400, f"Invalid argument: {arg!r}")
+    return arg
+
+
 IGNORED_DIRS = {
     ".git", "__pycache__", "node_modules", ".venv", ".venv-fast",
     "venv", ".mypy_cache", ".pytest_cache", ".tox", "dist",
@@ -110,18 +138,13 @@ MAX_FILE_SIZE = 2 * 1024 * 1024  # 2 MB
 # ══════════════════════════════════════════════════════════════════════════
 
 class CloneRequest(BaseModel):
-    url: str
+    url: str = Field(..., min_length=1)
 
 
 @router.post("/api/code/clone")
-async def code_clone(req: CloneRequest):
+async def code_clone(req: CloneRequest, _user: dict = Depends(get_current_user)):
     """Clone a git repo from HTTPS URL into the workspace."""
-    url = req.url.strip()
-    if not url:
-        raise HTTPException(400, "URL is required")
-    # Basic validation
-    if not (url.startswith("https://") or url.startswith("http://")):
-        raise HTTPException(400, "Only HTTPS URLs are supported")
+    url = _validate_clone_url(req.url)
 
     repo_name = _repo_name_from_url(url)
     safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', repo_name)
@@ -171,9 +194,11 @@ class ConnectRequest(BaseModel):
 
 
 @router.post("/api/code/connect")
-async def code_connect(req: ConnectRequest):
+async def code_connect(req: ConnectRequest, _user: dict = Depends(get_current_user)):
     """Re-connect to a previously cloned repo."""
-    p = Path(req.path)
+    p = Path(req.path).resolve()
+    if not str(p).startswith(str(WORKSPACE_DIR)):
+        raise HTTPException(403, "Cannot connect to paths outside workspace")
     if not p.exists():
         raise HTTPException(404, "Repository folder not found. It may have been deleted.")
     _set_active(p, req.url)
@@ -181,7 +206,7 @@ async def code_connect(req: ConnectRequest):
 
 
 @router.post("/api/code/disconnect")
-async def code_disconnect():
+async def code_disconnect(_user: dict = Depends(get_current_user)):
     """Disconnect the current repo (does NOT delete files)."""
     global _active_repo
     _active_repo = None
@@ -196,7 +221,7 @@ class DeleteRepoRequest(BaseModel):
 
 
 @router.post("/api/code/delete-repo")
-async def code_delete_repo(req: DeleteRepoRequest):
+async def code_delete_repo(req: DeleteRepoRequest, _user: dict = Depends(get_current_user)):
     """Delete a cloned repo from disk."""
     p = Path(req.path)
     if not str(p.resolve()).startswith(str(WORKSPACE_DIR)):
@@ -267,7 +292,7 @@ class WriteRequest(BaseModel):
 
 
 @router.post("/api/code/write")
-async def code_write(req: WriteRequest):
+async def code_write(req: WriteRequest, _user: dict = Depends(get_current_user)):
     """Write content to a file (creates directories if needed)."""
     fp = _safe_path(req.path)
     fp.parent.mkdir(parents=True, exist_ok=True)
@@ -283,7 +308,7 @@ class MkdirRequest(BaseModel):
 
 
 @router.post("/api/code/mkdir")
-async def code_mkdir(req: MkdirRequest):
+async def code_mkdir(req: MkdirRequest, _user: dict = Depends(get_current_user)):
     """Create a directory."""
     fp = _safe_path(req.path)
     fp.mkdir(parents=True, exist_ok=True)
@@ -413,7 +438,7 @@ async def git_status():
 async def git_diff(path: str = Query("")):
     """Get diff for a specific file or the whole repo."""
     if path:
-        # Try cached (staged) first, then unstaged
+        _safe_git_arg(path)
         result = _git("diff", "--cached", "--", path)
         if not result.stdout.strip():
             result = _git("diff", "--", path)
@@ -430,27 +455,27 @@ class StageRequest(BaseModel):
 
 
 @router.post("/api/git/stage")
-async def git_stage(req: StageRequest):
+async def git_stage(req: StageRequest, _user: dict = Depends(get_current_user)):
     """Stage files."""
     for p in req.paths:
-        _git("add", p)
+        _git("add", "--", _safe_git_arg(p))
     return {"ok": True}
 
 
 @router.post("/api/git/unstage")
-async def git_unstage(req: StageRequest):
+async def git_unstage(req: StageRequest, _user: dict = Depends(get_current_user)):
     """Unstage files."""
     for p in req.paths:
-        _git("reset", "HEAD", p)
+        _git("reset", "HEAD", "--", _safe_git_arg(p))
     return {"ok": True}
 
 
 class CommitRequest(BaseModel):
-    message: str
+    message: str = Field(..., min_length=1)
 
 
 @router.post("/api/git/commit")
-async def git_commit(req: CommitRequest):
+async def git_commit(req: CommitRequest, _user: dict = Depends(get_current_user)):
     """Commit staged changes."""
     result = _git("commit", "-m", req.message)
     if result.returncode != 0:
@@ -459,7 +484,7 @@ async def git_commit(req: CommitRequest):
 
 
 @router.post("/api/git/push")
-async def git_push():
+async def git_push(_user: dict = Depends(get_current_user)):
     """Push to origin."""
     result = _git("push", "origin", "HEAD")
     if result.returncode != 0:
@@ -472,7 +497,7 @@ async def git_push():
 
 
 @router.post("/api/git/pull")
-async def git_pull():
+async def git_pull(_user: dict = Depends(get_current_user)):
     """Pull from origin."""
     result = _git("pull", "--rebase")
     if result.returncode != 0:
@@ -504,13 +529,15 @@ async def git_branches():
 
 
 class CheckoutRequest(BaseModel):
-    branch: str
+    branch: str = Field(..., min_length=1)
     create: bool = False
 
 
 @router.post("/api/git/checkout")
-async def git_checkout(req: CheckoutRequest):
+async def git_checkout(req: CheckoutRequest, _user: dict = Depends(get_current_user)):
     """Switch branch or create a new one."""
+    if not _SAFE_BRANCH_RE.match(req.branch):
+        raise HTTPException(400, "Invalid branch name")
     if req.create:
         result = _git("checkout", "-b", req.branch)
     else:
