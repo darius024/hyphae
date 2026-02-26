@@ -3,6 +3,8 @@
 import sys
 import os
 
+os.environ.setdefault("RATE_LIMIT_RPM", "0")
+
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 for _p in (
     os.path.join(_project_root, "src"),

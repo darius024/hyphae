@@ -124,6 +124,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ── Rate limiting ─────────────────────────────────────────────────────────
+_GLOBAL_RPM = int(os.environ.get("RATE_LIMIT_RPM", "120"))
+_AUTH_RPM = int(os.environ.get("RATE_LIMIT_AUTH_RPM", "10"))
+
+if _GLOBAL_RPM > 0:
+    from middleware import RateLimitMiddleware
+    app.add_middleware(
+        RateLimitMiddleware,
+        global_rpm=_GLOBAL_RPM,
+        strict_paths=["/api/auth/login", "/api/auth/signup"],
+        strict_rpm=_AUTH_RPM,
+    )
+
 # ── No-cache middleware for static assets (dev convenience) ───────────────
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as _Req
