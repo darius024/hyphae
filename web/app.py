@@ -39,13 +39,20 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-# ── Hyphae core (guarded) ────────────────────────────────────────────────
+# In production, import failures must crash the process immediately so broken
+# deployments are never silently served.  In development (default), deferred
+# stubs let developers run the web UI without heavy ML dependencies installed.
+_IS_PRODUCTION = os.environ.get("HYPHAE_ENV", "development").lower() == "production"
+
+# ── Hyphae core ──────────────────────────────────────────────────────────
 try:
     from core.engine import generate_hybrid           # type: ignore
     from core.tools import ALL_TOOLS, execute_tool, LOCAL_ONLY_TOOLS, CLOUD_SAFE_TOOLS  # type: ignore
     from ingestion.corpus import add_file             # type: ignore
     from core.config import CORPUS_DIR                # type: ignore
 except Exception as _e:
+    if _IS_PRODUCTION:
+        raise ImportError(f"Core imports failed in production: {_e}") from _e
     logging.getLogger(__name__).warning("Deferred Hyphae core imports: %s", _e)
     generate_hybrid = None
     ALL_TOOLS = []
@@ -55,7 +62,7 @@ except Exception as _e:
     add_file = None
     CORPUS_DIR = str(Path(__file__).parent.parent / "corpus")
 
-# ── Notebook layer (guarded) ─────────────────────────────────────────────
+# ── Notebook layer ───────────────────────────────────────────────────────
 try:
     from notebook.db import init_db, get_conn                         # type: ignore
     from notebook.ingest import ingest_source, UPLOAD_DIR             # type: ignore
@@ -63,6 +70,8 @@ try:
     from notebook.citations import build_citations, build_context_prompt, build_system_prompt  # type: ignore
     from notebook.sanitiser import sanitise_text                      # type: ignore
 except Exception as _e:
+    if _IS_PRODUCTION:
+        raise ImportError(f"Notebook layer imports failed in production: {_e}") from _e
     logging.getLogger(__name__).warning("Deferred notebook-layer imports: %s", _e)
     def init_db(): return None
     def get_conn(): raise RuntimeError("DB not available")
