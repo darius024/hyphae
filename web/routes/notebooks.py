@@ -192,7 +192,7 @@ async def delete_notebook_endpoint(nb_id: str):
     try:
         delete_notebook_index(nb_id)
     except Exception:
-        pass
+        log.warning("Failed to delete index for notebook %s", nb_id, exc_info=True)
     return {"deleted": nb_id}
 
 

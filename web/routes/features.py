@@ -137,7 +137,7 @@ async def set_source_tags(nb_id: str, src_id: str, body: SourceTagBody):
                     (src_id, tag_id)
                 )
             except Exception:
-                pass  # Skip invalid tag_ids
+                log.warning("Skipping invalid tag_id %s for source %s", tag_id, src_id)
     
     return {"source_id": src_id, "tag_ids": body.tag_ids}
 
