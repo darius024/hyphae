@@ -42,6 +42,8 @@ def _safe_name(name: str) -> str:
         raise HTTPException(400, "Invalid filename")
     return clean
 add_file = None
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
+
 _HIDDEN_SUFFIXES = {".bin", ".idx", ".faiss", ".npy", ".pkl"}
 
 
@@ -106,6 +108,9 @@ async def upload_documents(file: List[UploadFile] = File(...)):
             continue
         suffix = Path(f.filename).suffix.lower()
         raw_bytes = await f.read()
+        if len(raw_bytes) > MAX_UPLOAD_BYTES:
+            results.append({"filename": f.filename, "added": False, "error": "File too large"})
+            continue
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             tmp.write(raw_bytes)
             tmp_path = tmp.name

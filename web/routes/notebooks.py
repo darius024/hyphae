@@ -83,6 +83,8 @@ def configure(*, conn_fn, ingest_fn, upload_dir, search_fn, delete_idx_fn,
 
 # ── Helpers ────────────────────────────────────────────────────────────
 
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
+
 _BAD_FILENAME_CHARS = re.compile(r'[\x00-\x1f\x7f/\\:]')
 _RESERVED_NAMES = frozenset(
     [f"{p}{n}" for p in ("CON", "PRN", "AUX", "NUL", "COM", "LPT") for n in ("", *"123456789")]
@@ -215,10 +217,14 @@ async def upload_source(nb_id: str, background_tasks: BackgroundTasks, file: Upl
     ext = Path(filename).suffix.lower().lstrip(".")
     src_type = ext if ext in ("pdf", "txt", "md") else "txt"
 
+    raw = await file.read()
+    if len(raw) > MAX_UPLOAD_BYTES:
+        raise HTTPException(413, f"File too large (max {MAX_UPLOAD_BYTES // (1024 * 1024)} MB)")
+
     dest_dir = UPLOAD_DIR / nb_id
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / filename
-    dest.write_bytes(await file.read())
+    dest.write_bytes(raw)
 
     src_id = str(uuid.uuid4())
     with get_conn() as conn:
