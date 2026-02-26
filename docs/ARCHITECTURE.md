@@ -46,7 +46,8 @@ hyphae/
 │   │   ├── query.py        # Hybrid query, classify, tools, voice
 │   │   ├── auth.py         # Authentication (bcrypt, sessions)
 │   │   ├── corpus.py       # Legacy corpus document endpoints
-│   │   └── code.py         # Git clone, file browse, edit, commit
+│   │   ├── code.py         # Git clone, file browse, edit, commit
+│   │   └── features.py     # Tags, knowledge graph, analytics, deadlines, notes, orgs
 │   ├── notebook/
 │   │   ├── db.py           # SQLite schema, connection manager
 │   │   ├── models.py       # Pydantic v2 schemas

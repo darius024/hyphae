@@ -98,7 +98,7 @@ from routes.notebooks import router as notebooks_router, configure as configure_
 from routes.query import router as query_router, configure as configure_query
 from routes.code import router as code_router
 from routes.auth import router as auth_router
-from routes.features import router as features_router
+from routes.features import router as features_router, configure as configure_features_router
 
 app.include_router(notebooks_router)
 app.include_router(query_router)
@@ -169,6 +169,8 @@ configure_notebooks(
     sanitise_fn=sanitise_text,
     gemini_fn=_gemini_client,
 )
+
+configure_features_router(gemini_fn=_gemini_client)
 
 
 # ── Static files + SPA ────────────────────────────────────────────────────

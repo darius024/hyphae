@@ -722,7 +722,7 @@ class WritingAssistRequest(BaseModel):
 # Injected at app startup
 _gemini_client_fn = None
 
-def configure_features(gemini_fn):
+def configure(*, gemini_fn):
     global _gemini_client_fn
     _gemini_client_fn = gemini_fn
 
