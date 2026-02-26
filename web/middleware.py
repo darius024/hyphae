@@ -101,3 +101,40 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         response.headers["X-RateLimit-Limit"] = str(limit)
         response.headers["X-RateLimit-Remaining"] = str(max(0, limit - len(timestamps)))
         return response
+
+
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    """Log method, path, status code, and duration for every request.
+
+    Static asset requests are skipped to keep logs focused on API traffic.
+
+    Parameters
+    ----------
+    app : ASGI app
+    skip_prefixes : tuple of str
+        Path prefixes to skip logging (default: static assets + favicon).
+    """
+
+    def __init__(self, app, *, skip_prefixes: tuple[str, ...] = ("/static/", "/favicon.ico")):
+        super().__init__(app)
+        self._skip = skip_prefixes
+
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        if path.startswith(self._skip):
+            return await call_next(request)
+
+        start = time.perf_counter()
+        response = await call_next(request)
+        duration_ms = (time.perf_counter() - start) * 1000
+
+        _req_log.info(
+            "%s %s %d %.1fms",
+            request.method,
+            path,
+            response.status_code,
+            duration_ms,
+        )
+
+        response.headers["X-Response-Time"] = f"{duration_ms:.1f}ms"
+        return response
