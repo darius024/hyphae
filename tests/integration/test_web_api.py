@@ -52,30 +52,34 @@ def auth_headers(client):
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TestDocumentsApi:
-    def test_list_documents(self, client):
-        r = client.get("/api/documents")
+    def test_list_documents(self, client, auth_headers):
+        r = client.get("/api/documents", headers=auth_headers)
         assert r.status_code == 200
         data = r.json()
         assert data["count"] >= 1
         names = [d["name"] for d in data["documents"]]
         assert "sample_doc.txt" in names
 
-    def test_preview_document(self, client):
-        r = client.get("/api/documents/sample_doc.txt")
+    def test_list_documents_unauthenticated(self, client):
+        r = client.get("/api/documents")
+        assert r.status_code == 401
+
+    def test_preview_document(self, client, auth_headers):
+        r = client.get("/api/documents/sample_doc.txt", headers=auth_headers)
         assert r.status_code == 200
         data = r.json()
         assert "Sample document content" in data["preview"]
         assert data["size_kb"] >= 0
 
-    def test_preview_nonexistent(self, client):
-        r = client.get("/api/documents/nonexistent.txt")
+    def test_preview_nonexistent(self, client, auth_headers):
+        r = client.get("/api/documents/nonexistent.txt", headers=auth_headers)
         assert r.status_code == 404
 
     def test_delete_document(self, client, auth_headers):
         r = client.delete("/api/documents/sample_doc.txt", headers=auth_headers)
         assert r.status_code == 200
         assert r.json()["removed"] == "sample_doc.txt"
-        r2 = client.get("/api/documents/sample_doc.txt")
+        r2 = client.get("/api/documents/sample_doc.txt", headers=auth_headers)
         assert r2.status_code == 404
 
     def test_delete_nonexistent(self, client, auth_headers):
@@ -84,8 +88,8 @@ class TestDocumentsApi:
 
 
 class TestSensitivityApi:
-    def test_get_sensitivity(self, client):
-        r = client.get("/api/sensitivity")
+    def test_get_sensitivity(self, client, auth_headers):
+        r = client.get("/api/sensitivity", headers=auth_headers)
         assert r.status_code == 200
         assert "tags" in r.json()
 
@@ -104,24 +108,28 @@ class TestSensitivityApi:
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TestClassifyApi:
-    def test_local_query(self, client):
-        r = client.post("/api/classify", json={"message": "summarize my notes"})
+    def test_local_query(self, client, auth_headers):
+        r = client.post("/api/classify", json={"message": "summarize my notes"}, headers=auth_headers)
         assert r.status_code == 200
         assert r.json()["route"] == "local"
 
-    def test_cloud_query(self, client):
-        r = client.post("/api/classify", json={"message": "search published literature"})
+    def test_cloud_query(self, client, auth_headers):
+        r = client.post("/api/classify", json={"message": "search published literature"}, headers=auth_headers)
         assert r.status_code == 200
         assert r.json()["route"] == "cloud"
 
-    def test_empty_query_rejected(self, client):
-        r = client.post("/api/classify", json={"message": ""})
+    def test_empty_query_rejected(self, client, auth_headers):
+        r = client.post("/api/classify", json={"message": ""}, headers=auth_headers)
         assert r.status_code == 422
+
+    def test_classify_unauthenticated(self, client):
+        r = client.post("/api/classify", json={"message": "test"})
+        assert r.status_code == 401
 
 
 class TestPrivacyLogApi:
-    def test_returns_entries(self, client):
-        r = client.get("/api/privacy-log")
+    def test_returns_entries(self, client, auth_headers):
+        r = client.get("/api/privacy-log", headers=auth_headers)
         assert r.status_code == 200
         assert "entries" in r.json()
 
@@ -131,8 +139,8 @@ class TestPrivacyLogApi:
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TestToolsApi:
-    def test_returns_list(self, client):
-        r = client.get("/api/tools")
+    def test_returns_list(self, client, auth_headers):
+        r = client.get("/api/tools", headers=auth_headers)
         assert r.status_code == 200
         data = r.json()
         assert "tools" in data

@@ -77,7 +77,7 @@ def _save_sensitivity(data: dict):
 
 
 @router.get("/documents")
-async def list_documents(limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0)):
+async def list_documents(limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0), _user: dict = Depends(get_current_user)):
     corpus = Path(CORPUS_DIR)
     if not corpus.is_dir():
         return {"documents": [], "count": 0, "total": 0}
@@ -128,7 +128,7 @@ async def upload_documents(file: List[UploadFile] = File(...), _user: dict = Dep
 
 
 @router.get("/documents/{name}")
-async def preview_document(name: str):
+async def preview_document(name: str, _user: dict = Depends(get_current_user)):
     name = _safe_name(name)
     path = Path(CORPUS_DIR) / name
     if not path.exists():
@@ -149,7 +149,7 @@ async def preview_document(name: str):
 
 
 @router.get("/documents/{name}/raw")
-async def raw_document(name: str):
+async def raw_document(name: str, _user: dict = Depends(get_current_user)):
     name = _safe_name(name)
     originals_dir = Path(CORPUS_DIR) / ".originals"
     pdf_path = originals_dir / name
@@ -184,7 +184,7 @@ async def remove_document(name: str, _user: dict = Depends(get_current_user)):
 
 
 @router.get("/sensitivity")
-async def get_sensitivity():
+async def get_sensitivity(_user: dict = Depends(get_current_user)):
     return {"tags": _load_sensitivity()}
 
 

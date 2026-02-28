@@ -127,8 +127,8 @@ class TestSensitivityValidation:
 
 
 class TestClassifyValidation:
-    def test_missing_message(self, client):
-        r = client.post("/api/classify", json={})
+    def test_missing_message(self, client, auth_headers):
+        r = client.post("/api/classify", json={}, headers=auth_headers)
         assert r.status_code == 422
 
 

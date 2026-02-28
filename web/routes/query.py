@@ -12,12 +12,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from typing import List
 
 from core.config import GEMINI_MODEL
+from routes.auth import get_current_user
 
 router = APIRouter(prefix="/api", tags=["query"])
 
@@ -164,14 +165,14 @@ _privacy_log: list = []
 
 
 @router.post("/classify")
-async def api_classify(body: _MessageBody):
+async def api_classify(body: _MessageBody, _user: dict = Depends(get_current_user)):
     words = set(body.message.strip().lower().split())
     needs_cloud = bool(words & _CLOUD_KEYWORDS)
     return {"route": "cloud" if needs_cloud else "local"}
 
 
 @router.get("/privacy-log")
-async def api_privacy_log():
+async def api_privacy_log(_user: dict = Depends(get_current_user)):
     return {"entries": _privacy_log[-100:]}
 
 
@@ -188,7 +189,7 @@ def _log_privacy_event(query: str, tools_used: list, data_local: bool, routing_m
 # ── Tools list ───────────────────────────────────────────────────────────
 
 @router.get("/tools")
-async def api_tools():
+async def api_tools(_user: dict = Depends(get_current_user)):
     if not ALL_TOOLS:
         return {"tools": [], "count": 0}
     tools = []
@@ -217,7 +218,7 @@ async def api_tools():
 # ── Query endpoint ───────────────────────────────────────────────────────
 
 @router.post("/query")
-async def api_query(body: _QueryBody):
+async def api_query(body: _QueryBody, _user: dict = Depends(get_current_user)):
     user_message = body.message.strip()
     if generate_hybrid is None or execute_tool is None:
         return JSONResponse(
@@ -276,7 +277,7 @@ def _to_wav(input_path: str) -> str:
 
 
 @router.post("/voice")
-async def api_voice(audio: UploadFile = File(...)):
+async def api_voice(audio: UploadFile = File(...), _user: dict = Depends(get_current_user)):
     suffix = Path(audio.filename).suffix if audio.filename else ".webm"
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         tmp.write(await audio.read())
