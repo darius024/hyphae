@@ -178,7 +178,7 @@ async def code_clone(req: CloneRequest, _user: dict = Depends(get_current_user))
 
 
 @router.get("/api/code/repos")
-async def code_repos():
+async def code_repos(_user: dict = Depends(get_current_user)):
     """List recent/cloned repos."""
     state = _load_state()
     repos = []
@@ -244,7 +244,7 @@ async def code_delete_repo(req: DeleteRepoRequest, _user: dict = Depends(get_cur
 # ══════════════════════════════════════════════════════════════════════════
 
 @router.get("/api/code/tree")
-async def code_tree():
+async def code_tree(_user: dict = Depends(get_current_user)):
     """Return directory tree as nested JSON."""
     root = _repo_root()
     def walk(p: Path, rel: str = ""):
@@ -270,7 +270,7 @@ async def code_tree():
 
 
 @router.get("/api/code/read")
-async def code_read(path: str = Query(...)):
+async def code_read(path: str = Query(...), _user: dict = Depends(get_current_user)):
     """Read a file's content."""
     fp = _safe_path(path)
     if not fp.exists():
@@ -316,7 +316,7 @@ async def code_mkdir(req: MkdirRequest, _user: dict = Depends(get_current_user))
 
 
 @router.get("/api/code/search")
-async def code_search(q: str = Query(...)):
+async def code_search(q: str = Query(...), _user: dict = Depends(get_current_user)):
     """Search for text across the repository using grep."""
     if not q.strip():
         return {"results": []}
@@ -366,7 +366,7 @@ MAX_PREVIEW_SIZE = 100 * 1024 * 1024   # 100 MB cap for media
 
 
 @router.get("/api/code/preview")
-async def code_preview(path: str = Query(...)):
+async def code_preview(path: str = Query(...), _user: dict = Depends(get_current_user)):
     """Serve a binary file for preview (PDF, images, audio, video)."""
     fp = _safe_path(path)
     if not fp.exists():
@@ -394,7 +394,7 @@ async def code_preview(path: str = Query(...)):
 # ══════════════════════════════════════════════════════════════════════════
 
 @router.get("/api/git/status")
-async def git_status():
+async def git_status(_user: dict = Depends(get_current_user)):
     """Return staged and unstaged file lists."""
     # Staged files
     staged_result = _git("diff", "--cached", "--name-status")
@@ -435,7 +435,7 @@ async def git_status():
 
 
 @router.get("/api/git/diff")
-async def git_diff(path: str = Query("")):
+async def git_diff(path: str = Query(""), _user: dict = Depends(get_current_user)):
     """Get diff for a specific file or the whole repo."""
     if path:
         _safe_git_arg(path)
@@ -506,7 +506,7 @@ async def git_pull(_user: dict = Depends(get_current_user)):
 
 
 @router.get("/api/git/branches")
-async def git_branches():
+async def git_branches(_user: dict = Depends(get_current_user)):
     """List all branches and the current one."""
     result = _git("branch", "-a")
     current = "main"
@@ -548,7 +548,7 @@ async def git_checkout(req: CheckoutRequest, _user: dict = Depends(get_current_u
 
 
 @router.get("/api/git/log")
-async def git_log(n: int = Query(20, ge=1, le=100)):
+async def git_log(n: int = Query(20, ge=1, le=100), _user: dict = Depends(get_current_user)):
     """Return recent commits."""
     result = _git("log", f"--max-count={n}", "--format=%H|%an|%ai|%s")
     commits = []
