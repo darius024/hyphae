@@ -53,6 +53,7 @@ async def list_deadlines(
     notebook_id: Optional[str] = None,
     status: Optional[str] = None,
     upcoming_days: int = Query(default=30, ge=1, le=365),
+    _user: dict = Depends(get_current_user),
 ):
     """List deadlines, optionally filtered."""
     until = (datetime.now(timezone.utc) + timedelta(days=upcoming_days)).isoformat()
@@ -139,7 +140,7 @@ async def create_reminder(body: ReminderCreate, _user: dict = Depends(get_curren
 
 
 @router.get("/reminders/pending")
-async def get_pending_reminders():
+async def get_pending_reminders(_user: dict = Depends(get_current_user)):
     """Get all pending (unsent) reminders that are due."""
     now = datetime.now(timezone.utc).isoformat()
     with get_conn() as conn:

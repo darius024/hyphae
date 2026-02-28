@@ -38,7 +38,7 @@ class LinkCreate(BaseModel):
 # ── Tag CRUD ──────────────────────────────────────────────────────────────
 
 @router.get("/tags")
-async def list_tags():
+async def list_tags(_user: dict = Depends(get_current_user)):
     """List all available tags."""
     with get_conn() as conn:
         rows = conn.execute(
@@ -97,7 +97,7 @@ async def delete_tag(tag_id: str, _user: dict = Depends(get_current_user)):
 # ── Source tags ───────────────────────────────────────────────────────────
 
 @router.get("/notebooks/{nb_id}/sources/{src_id}/tags")
-async def get_source_tags(nb_id: str, src_id: str):
+async def get_source_tags(nb_id: str, src_id: str, _user: dict = Depends(get_current_user)):
     """Get all tags for a source."""
     with get_conn() as conn:
         rows = conn.execute("""
@@ -136,7 +136,7 @@ async def set_source_tags(nb_id: str, src_id: str, body: SourceTagBody, _user: d
 # ── Knowledge graph / document links ─────────────────────────────────────
 
 @router.get("/notebooks/{nb_id}/graph")
-async def get_knowledge_graph(nb_id: str):
+async def get_knowledge_graph(nb_id: str, _user: dict = Depends(get_current_user)):
     """Get the knowledge graph for a notebook (nodes = sources, edges = links)."""
     with get_conn() as conn:
         sources = conn.execute("""

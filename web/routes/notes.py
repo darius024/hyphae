@@ -45,7 +45,7 @@ class WritingAssistRequest(BaseModel):
 # ── Note CRUD ─────────────────────────────────────────────────────────────
 
 @router.get("/notebooks/{nb_id}/notes")
-async def list_notes(nb_id: str):
+async def list_notes(nb_id: str, _user: dict = Depends(get_current_user)):
     """List all notes in a notebook."""
     with get_conn() as conn:
         rows = conn.execute("""
@@ -73,7 +73,7 @@ async def create_note(nb_id: str, body: NoteCreate, _user: dict = Depends(get_cu
 
 
 @router.get("/notebooks/{nb_id}/notes/{note_id}")
-async def get_note(nb_id: str, note_id: str):
+async def get_note(nb_id: str, note_id: str, _user: dict = Depends(get_current_user)):
     """Get a note with its content."""
     with get_conn() as conn:
         row = conn.execute("""
@@ -132,7 +132,7 @@ async def delete_note(nb_id: str, note_id: str, _user: dict = Depends(get_curren
 # ── Version history ───────────────────────────────────────────────────────
 
 @router.get("/notebooks/{nb_id}/notes/{note_id}/versions")
-async def list_note_versions(nb_id: str, note_id: str):
+async def list_note_versions(nb_id: str, note_id: str, _user: dict = Depends(get_current_user)):
     """List all versions of a note."""
     with get_conn() as conn:
         note = conn.execute(
@@ -150,7 +150,7 @@ async def list_note_versions(nb_id: str, note_id: str):
 
 
 @router.get("/notebooks/{nb_id}/notes/{note_id}/versions/{version_num}")
-async def get_note_version(nb_id: str, note_id: str, version_num: int):
+async def get_note_version(nb_id: str, note_id: str, version_num: int, _user: dict = Depends(get_current_user)):
     """Get a specific version of a note."""
     with get_conn() as conn:
         row = conn.execute("""
@@ -252,7 +252,7 @@ async def save_writing_session(
 
 
 @router.get("/writing/session/{session_id}")
-async def get_writing_session(session_id: str):
+async def get_writing_session(session_id: str, _user: dict = Depends(get_current_user)):
     """Get a saved writing session."""
     with get_conn() as conn:
         row = conn.execute(

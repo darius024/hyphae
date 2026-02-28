@@ -323,7 +323,7 @@ async def update_member_role(
 # ── Org notebooks ─────────────────────────────────────────────────────────
 
 @router.get("/organizations/{org_id}/notebooks")
-async def list_org_notebooks(org_id: str):
+async def list_org_notebooks(org_id: str, _user: dict = Depends(get_current_user)):
     """List all notebooks in an organization."""
     with get_conn() as conn:
         rows = conn.execute("""
@@ -388,6 +388,7 @@ async def list_comments(
     notebook_id: Optional[str] = None,
     source_id: Optional[str] = None,
     note_id: Optional[str] = None,
+    _user: dict = Depends(get_current_user),
 ):
     """List comments for a specific target."""
     with get_conn() as conn:
@@ -419,7 +420,7 @@ async def list_comments(
 
 
 @router.get("/comments/{comment_id}/replies")
-async def get_comment_replies(comment_id: str):
+async def get_comment_replies(comment_id: str, _user: dict = Depends(get_current_user)):
     """Get replies to a comment."""
     with get_conn() as conn:
         rows = conn.execute("""
@@ -510,6 +511,7 @@ async def get_activity_feed(
     org_id: Optional[str] = None,
     notebook_id: Optional[str] = None,
     limit: int = Query(default=50, ge=1, le=200),
+    _user: dict = Depends(get_current_user),
 ):
     """Get activity feed for org or notebook."""
     with get_conn() as conn:

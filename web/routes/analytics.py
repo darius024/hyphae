@@ -59,7 +59,7 @@ async def record_usage_event(body: UsageEvent, _user: dict = Depends(get_current
 
 
 @router.get("/analytics/dashboard")
-async def get_analytics_dashboard(days: int = Query(default=30, ge=1, le=365)):
+async def get_analytics_dashboard(days: int = Query(default=30, ge=1, le=365), _user: dict = Depends(get_current_user)):
     """Get analytics dashboard data."""
     since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
 
