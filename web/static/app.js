@@ -466,6 +466,15 @@ const nbSendBtn       = document.getElementById("nb-send-btn");
 const nbClearBtn      = document.getElementById("nb-clear-btn");
 const nbCitationsBar  = document.getElementById("nb-citations-bar");
 const nbCitationsList = document.getElementById("nb-citations-list");
+
+// Ensure clicks on dynamically-rendered "Create your first notebook" buttons always open
+// the create-notebook modal (delegation prevents missed listeners when the list is re-rendered).
+nbListEl?.addEventListener('click', (e) => {
+    const btn = e.target && e.target.closest && e.target.closest('[data-action="new-notebook"]');
+    if (btn) {
+        openNbCreateModal();
+    }
+});
 const nbVoiceBtn      = document.getElementById("nb-voice-btn");
 const chatWelcome     = document.getElementById("chat-welcome");
 
