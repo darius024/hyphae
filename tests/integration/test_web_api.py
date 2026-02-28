@@ -144,10 +144,14 @@ class TestToolsApi:
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TestNotebookApi:
-    def test_list_notebooks(self, client):
-        r = client.get("/api/notebooks")
+    def test_list_notebooks(self, client, auth_headers):
+        r = client.get("/api/notebooks", headers=auth_headers)
         assert r.status_code == 200
         assert "notebooks" in r.json()
+
+    def test_list_notebooks_unauthenticated(self, client):
+        r = client.get("/api/notebooks")
+        assert r.status_code == 401
 
     def test_create_notebook(self, client, auth_headers):
         r = client.post("/api/notebooks", json={"name": "Test Notebook"}, headers=auth_headers)
@@ -163,12 +167,12 @@ class TestNotebookApi:
     def test_get_notebook(self, client, auth_headers):
         r = client.post("/api/notebooks", json={"name": "Get Test"}, headers=auth_headers)
         nb_id = r.json()["id"]
-        r2 = client.get(f"/api/notebooks/{nb_id}")
+        r2 = client.get(f"/api/notebooks/{nb_id}", headers=auth_headers)
         assert r2.status_code == 200
         assert r2.json()["name"] == "Get Test"
 
-    def test_get_nonexistent(self, client):
-        r = client.get("/api/notebooks/nonexistent-id")
+    def test_get_nonexistent(self, client, auth_headers):
+        r = client.get("/api/notebooks/nonexistent-id", headers=auth_headers)
         assert r.status_code == 404
 
     def test_update_notebook(self, client, auth_headers):
@@ -184,7 +188,7 @@ class TestNotebookApi:
         r2 = client.delete(f"/api/notebooks/{nb_id}", headers=auth_headers)
         assert r2.status_code == 200
         assert r2.json()["deleted"] == nb_id
-        r3 = client.get(f"/api/notebooks/{nb_id}")
+        r3 = client.get(f"/api/notebooks/{nb_id}", headers=auth_headers)
         assert r3.status_code == 404
 
 
@@ -199,7 +203,7 @@ class TestConversationApi:
         return r.json()["id"]
 
     def test_list_conversations_empty(self, client, auth_headers, nb_id):
-        r = client.get(f"/api/notebooks/{nb_id}/conversations")
+        r = client.get(f"/api/notebooks/{nb_id}/conversations", headers=auth_headers)
         assert r.status_code == 200
         assert r.json()["conversations"] == []
 
@@ -253,7 +257,7 @@ class TestConversationApi:
             headers=auth_headers,
         )
         assert r2.status_code == 200
-        r3 = client.get(f"/api/notebooks/{nb_id}/conversations")
+        r3 = client.get(f"/api/notebooks/{nb_id}/conversations", headers=auth_headers)
         ids = [c["id"] for c in r3.json()["conversations"]]
         assert cid not in ids
 
@@ -264,7 +268,7 @@ class TestConversationApi:
             headers=auth_headers,
         )
         cid = r.json()["id"]
-        r2 = client.get(f"/api/notebooks/{nb_id}/conversations/{cid}/messages")
+        r2 = client.get(f"/api/notebooks/{nb_id}/conversations/{cid}/messages", headers=auth_headers)
         assert r2.status_code == 200
         assert r2.json()["messages"] == []
 
@@ -274,8 +278,8 @@ class TestConversationApi:
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TestSettingsApi:
-    def test_get_settings(self, client):
-        r = client.get("/api/nb-settings")
+    def test_get_settings(self, client, auth_headers):
+        r = client.get("/api/nb-settings", headers=auth_headers)
         assert r.status_code == 200
         keys = [s["key"] for s in r.json()["settings"]]
         assert "embed_model" in keys
