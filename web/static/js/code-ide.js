@@ -556,26 +556,28 @@ const codeIDE = (() => {
             </div>`;
         }).join('');
 
-        listEl.querySelectorAll('button[data-action]').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                const action = btn.dataset.action;
-                const path = btn.dataset.path;
-                if (action === 'stage') {
-                    await api(`${GIT}/stage`, { method: 'POST', body: JSON.stringify({ paths: [path] }) });
-                    refreshGit();
-                } else if (action === 'unstage') {
-                    await api(`${GIT}/unstage`, { method: 'POST', body: JSON.stringify({ paths: [path] }) });
-                    refreshGit();
-                } else if (action === 'diff') {
-                    showDiff(path);
-                }
-            });
-        });
-        listEl.querySelectorAll('.code-git-file').forEach(el => {
-            el.addEventListener('click', () => openFileTab(el.dataset.path));
-        });
     }
+
+    function _handleGitListClick(e) {
+        const btn = e.target.closest('button[data-action]');
+        if (btn) {
+            e.stopPropagation();
+            const action = btn.dataset.action;
+            const path = btn.dataset.path;
+            if (action === 'stage') {
+                api(`${GIT}/stage`, { method: 'POST', body: JSON.stringify({ paths: [path] }) }).then(refreshGit);
+            } else if (action === 'unstage') {
+                api(`${GIT}/unstage`, { method: 'POST', body: JSON.stringify({ paths: [path] }) }).then(refreshGit);
+            } else if (action === 'diff') {
+                showDiff(path);
+            }
+            return;
+        }
+        const row = e.target.closest('.code-git-file');
+        if (row) openFileTab(row.dataset.path);
+    }
+    stagedList?.addEventListener('click', _handleGitListClick);
+    changesList?.addEventListener('click', _handleGitListClick);
 
     async function showDiff(path) {
         const data = await api(`${GIT}/diff?path=${encodeURIComponent(path)}`);
@@ -689,12 +691,11 @@ const codeIDE = (() => {
                 `<div class="code-search-result-line" data-file="${r.file}" data-line="${m.line}">${m.line}: ${m.text.replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), match => `<span class="code-search-match">${match}</span>`)}</div>`
             ).join('')}
         `).join('');
-        searchResults.querySelectorAll('.code-search-result-line').forEach(el => {
-            el.addEventListener('click', () => {
-                openFileTab(el.dataset.file);
-            });
-        });
     }
+    searchResults?.addEventListener('click', (e) => {
+        const line = e.target.closest('.code-search-result-line');
+        if (line) openFileTab(line.dataset.file);
+    });
 
     // ── Keyboard shortcut: Ctrl+P quick open ─────────────────────
     document.addEventListener('keydown', (e) => {

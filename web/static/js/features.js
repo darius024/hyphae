@@ -726,11 +726,13 @@ const Features = (() => {
     }
     
     let lastContent = '';
+    let _autoSaveInterval = null;
     function setupAutoVersionSave() {
+        if (_autoSaveInterval) clearInterval(_autoSaveInterval);
         const editor = document.getElementById('latex-source-main');
         if (!editor) return;
         
-        setInterval(() => {
+        _autoSaveInterval = setInterval(() => {
             const content = editor.value;
             if (content && content !== lastContent && content.length > 50) {
                 saveVersion(content, 'Auto-save');
@@ -799,10 +801,11 @@ const Features = (() => {
             </div>
         `).join('');
         
-        orgsList.querySelectorAll('.org-item').forEach(item => {
-            item.addEventListener('click', () => loadOrgDetails(item.dataset.orgId));
-        });
     }
+    orgsList?.addEventListener('click', (e) => {
+        const item = e.target.closest('.org-item');
+        if (item) loadOrgDetails(item.dataset.orgId);
+    });
     
     async function loadOrgDetails(orgId) {
         currentOrgId = orgId;
@@ -1147,6 +1150,15 @@ const Features = (() => {
         init();
     }
     
+    function cleanup() {
+        if (_autoSaveInterval) {
+            clearInterval(_autoSaveInterval);
+            _autoSaveInterval = null;
+        }
+    }
+
+    window.addEventListener('beforeunload', cleanup);
+
     return {
         showTagsModal,
         showLinksModal,
@@ -1160,6 +1172,7 @@ const Features = (() => {
         loadOrganizations,
         saveVersion,
         loadComments,
-        addComment
+        addComment,
+        cleanup
     };
 })();

@@ -571,6 +571,7 @@ function renderNotebookList(notebooks) {
 }
 
 async function selectNotebook(nbId, name) {
+    clearSourcePollers();
     currentNbId = nbId;
     if (currentConvId) exitNotebookChat();
     currentConvId = null;
@@ -694,6 +695,42 @@ async function deleteNotebook(nbId) {
 
 let _srcPollTimers = {};
 
+function clearSourcePollers() {
+    Object.keys(_srcPollTimers).forEach(id => {
+        clearInterval(_srcPollTimers[id]);
+        delete _srcPollTimers[id];
+    });
+}
+
+// Event delegation for dynamically rendered source list items
+nbSourceList?.addEventListener("click", async (e) => {
+    const del = e.target.closest(".src-del");
+    if (del) {
+        e.stopPropagation();
+        deleteSource(currentNbId, del.dataset.id);
+        return;
+    }
+
+    const lock = e.target.closest(".src-lock-btn");
+    if (lock) {
+        e.stopPropagation();
+        const nowLocked = lock.dataset.locked === "true";
+        const newLevel  = nowLocked ? "shareable" : "confidential";
+        await fetch(`/api/notebooks/${lock.dataset.nbId}/sources/${lock.dataset.srcId}/sensitivity`, {
+            method:  "PUT",
+            headers: { "Content-Type": "application/json" },
+            body:    JSON.stringify({ level: newLevel }),
+        });
+        loadSources(currentNbId);
+        return;
+    }
+
+    if (e.target.closest(".src-download-btn")) return;
+
+    const row = e.target.closest(".nb-source-clickable");
+    if (row) previewNbSource(row);
+});
+
 let _currentSources = [];
 
 async function loadSources(nbId) {
@@ -756,36 +793,6 @@ function renderSources(nbId, sources) {
             </div>
         </div>`;
     }).join("");
-
-    // preview on click (whole row)
-    nbSourceList.querySelectorAll(".nb-source-clickable").forEach(el => {
-        el.addEventListener("click", (e) => {
-            if (e.target.closest(".src-del, .src-lock-btn, .src-download-btn")) return;
-            previewNbSource(el);
-        });
-    });
-
-    nbSourceList.querySelectorAll(".src-del").forEach(btn => {
-        btn.addEventListener("click", (e) => {
-            e.stopPropagation();
-            deleteSource(nbId, btn.dataset.id);
-        });
-    });
-
-    // lock / unlock toggle
-    nbSourceList.querySelectorAll(".src-lock-btn").forEach(btn => {
-        btn.addEventListener("click", async (e) => {
-            e.stopPropagation();
-            const nowLocked = btn.dataset.locked === "true";
-            const newLevel  = nowLocked ? "shareable" : "confidential";
-            await fetch(`/api/notebooks/${btn.dataset.nbId}/sources/${btn.dataset.srcId}/sensitivity`, {
-                method:  "PUT",
-                headers: { "Content-Type": "application/json" },
-                body:    JSON.stringify({ level: newLevel }),
-            });
-            loadSources(nbId);
-        });
-    });
 
     // poll for processing sources
     sources.filter(s => s.status === "pending" || s.status === "processing").forEach(s => {
@@ -2573,3 +2580,11 @@ function _renderNbItems(notebooks) {
     const emptyBtn = nbListEl.querySelector('[data-action="new-notebook"]');
     if (emptyBtn) emptyBtn.addEventListener("click", openNbCreateModal);
 }
+
+// ── Page unload cleanup — clear all active timers ─────────────────────
+window.addEventListener("beforeunload", () => {
+    clearSourcePollers();
+    clearTimeout(_previewTimer);
+    clearTimeout(_paperSaveTimer);
+    clearTimeout(_nbClassifyTimer);
+});
