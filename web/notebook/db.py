@@ -5,6 +5,7 @@ Tables: notebooks, sources, chunks, conversations, messages, settings
 FTS5 virtual table chunks_fts for BM25 full-text search.
 """
 
+import re
 import sqlite3
 import logging
 from contextlib import contextmanager
@@ -462,6 +463,44 @@ def get_conn() -> Generator[sqlite3.Connection, None, None]:
         raise
     finally:
         conn.close()
+
+
+_SAFE_COLUMN = re.compile(r"^[a-z][a-z0-9_]*$")
+
+
+def safe_update(
+    conn: sqlite3.Connection,
+    table: str,
+    assignments: dict,
+    where_col: str,
+    where_val,
+    *,
+    auto_timestamp: bool = True,
+) -> None:
+    """Execute an UPDATE with validated column names.
+
+    Every key in *assignments* is checked against a strict identifier pattern
+    before interpolation, eliminating the risk of SQL injection through
+    dynamically-built SET clauses.
+    """
+    if not assignments:
+        return
+    if not _SAFE_COLUMN.match(table):
+        raise ValueError(f"Unsafe table name: {table!r}")
+    if not _SAFE_COLUMN.match(where_col):
+        raise ValueError(f"Unsafe WHERE column: {where_col!r}")
+    for col in assignments:
+        if not _SAFE_COLUMN.match(col):
+            raise ValueError(f"Unsafe column name: {col!r}")
+
+    parts = [f"{col}=?" for col in assignments]
+    params: list = list(assignments.values())
+
+    if auto_timestamp:
+        parts.append("updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')")
+
+    params.append(where_val)
+    conn.execute(f"UPDATE {table} SET {', '.join(parts)} WHERE {where_col}=?", params)
 
 
 def purge_expired_sessions() -> int:

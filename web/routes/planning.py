@@ -10,7 +10,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from notebook.db import get_conn
+from notebook.db import get_conn, safe_update
 from routes.auth import get_current_user
 
 log = logging.getLogger(__name__)
@@ -97,17 +97,10 @@ async def update_deadline(dl_id: str, body: DeadlineUpdate, _user: dict = Depend
         if not existing:
             raise HTTPException(404, "Deadline not found")
 
-        updates = []
-        params = []
-        for field in ["title", "due_date", "priority", "status", "note"]:
-            val = getattr(body, field, None)
-            if val is not None:
-                updates.append(f"{field}=?")
-                params.append(val)
+        _ALLOWED = ("title", "due_date", "priority", "status", "note")
+        fields = {f: getattr(body, f) for f in _ALLOWED if getattr(body, f, None) is not None}
 
-        if updates:
-            params.append(dl_id)
-            conn.execute(f"UPDATE deadlines SET {', '.join(updates)} WHERE id=?", params)
+        safe_update(conn, "deadlines", fields, "id", dl_id, auto_timestamp=False)
 
     return {"id": dl_id, "updated": True}
 

@@ -9,7 +9,7 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from notebook.db import get_conn
+from notebook.db import get_conn, safe_update
 from routes.auth import get_current_user
 
 log = logging.getLogger(__name__)
@@ -70,18 +70,13 @@ async def update_tag(tag_id: str, body: TagUpdate, _user: dict = Depends(get_cur
         if not existing:
             raise HTTPException(404, "Tag not found")
 
-        updates = []
-        params = []
+        fields = {}
         if body.name is not None:
-            updates.append("name=?")
-            params.append(body.name.strip())
+            fields["name"] = body.name.strip()
         if body.color is not None:
-            updates.append("color=?")
-            params.append(body.color)
+            fields["color"] = body.color
 
-        if updates:
-            params.append(tag_id)
-            conn.execute(f"UPDATE tags SET {', '.join(updates)} WHERE id=?", params)
+        safe_update(conn, "tags", fields, "id", tag_id, auto_timestamp=False)
 
     return {"id": tag_id, "updated": True}
 

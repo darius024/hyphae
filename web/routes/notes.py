@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from core.config import GEMINI_MODEL
-from notebook.db import get_conn
+from notebook.db import get_conn, safe_update
 from routes.auth import get_current_user
 
 log = logging.getLogger(__name__)
@@ -94,14 +94,11 @@ async def update_note(nb_id: str, note_id: str, body: NoteUpdate, _user: dict = 
         if not existing:
             raise HTTPException(404, "Note not found")
 
-        updates = []
-        params = []
+        fields = {}
         if body.title is not None:
-            updates.append("title=?")
-            params.append(body.title)
+            fields["title"] = body.title
         if body.content is not None:
-            updates.append("content=?")
-            params.append(body.content)
+            fields["content"] = body.content
 
             last_ver = conn.execute(
                 "SELECT MAX(version_num) as max_ver FROM note_versions WHERE note_id=?",
@@ -113,10 +110,7 @@ async def update_note(nb_id: str, note_id: str, body: NoteUpdate, _user: dict = 
                 INSERT INTO note_versions (id, note_id, content, version_num) VALUES (?, ?, ?, ?)
             """, (ver_id, note_id, body.content, new_ver))
 
-        if updates:
-            updates.append("updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')")
-            params.append(note_id)
-            conn.execute(f"UPDATE notes SET {', '.join(updates)} WHERE id=?", params)
+        safe_update(conn, "notes", fields, "id", note_id)
 
     return {"id": note_id, "updated": True}
 

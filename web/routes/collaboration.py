@@ -11,7 +11,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from notebook.db import get_conn
+from notebook.db import get_conn, safe_update
 from routes.auth import get_current_user
 
 log = logging.getLogger(__name__)
@@ -136,22 +136,15 @@ async def update_organization(org_id: str, body: OrgUpdate, user: dict = Depends
         if not member or member["role"] not in ("owner", "admin"):
             raise HTTPException(403, "Admin access required")
 
-        updates = []
-        params = []
+        fields = {}
         if body.name is not None:
-            updates.append("name=?")
-            params.append(body.name)
+            fields["name"] = body.name
         if body.description is not None:
-            updates.append("description=?")
-            params.append(body.description)
+            fields["description"] = body.description
         if body.avatar_url is not None:
-            updates.append("avatar_url=?")
-            params.append(body.avatar_url)
+            fields["avatar_url"] = body.avatar_url
 
-        if updates:
-            updates.append("updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')")
-            params.append(org_id)
-            conn.execute(f"UPDATE organizations SET {', '.join(updates)} WHERE id=?", params)
+        safe_update(conn, "organizations", fields, "id", org_id)
 
     return {"updated": True}
 
@@ -470,19 +463,13 @@ async def update_comment(comment_id: str, body: CommentUpdate, user: dict = Depe
         if body.content is not None and comment["user_id"] != user["id"]:
             raise HTTPException(403, "Only author can edit comment")
 
-        updates = []
-        params = []
+        fields = {}
         if body.content is not None:
-            updates.append("content=?")
-            params.append(body.content)
+            fields["content"] = body.content
         if body.resolved is not None:
-            updates.append("resolved=?")
-            params.append(1 if body.resolved else 0)
+            fields["resolved"] = 1 if body.resolved else 0
 
-        if updates:
-            updates.append("updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')")
-            params.append(comment_id)
-            conn.execute(f"UPDATE comments SET {', '.join(updates)} WHERE id=?", params)
+        safe_update(conn, "comments", fields, "id", comment_id)
 
     return {"updated": True}
 
