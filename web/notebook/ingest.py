@@ -38,12 +38,13 @@ def extract_text_file(file_path: str) -> str:
     return Path(file_path).read_text(errors="replace")
 
 
-async def extract_url(url: str) -> str:
+def extract_url_sync(url: str) -> str:
+    """Fetch a URL and extract readable text (synchronous, safe for thread pools)."""
     try:
         import httpx          # type: ignore
         import trafilatura    # type: ignore
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.get(url, follow_redirects=True)
+        with httpx.Client(timeout=30, follow_redirects=True) as client:
+            resp = client.get(url)
             resp.raise_for_status()
             text = trafilatura.extract(resp.text) or resp.text
             return text
@@ -137,17 +138,7 @@ def ingest_source(source_id: str) -> None:
             full_path = str(UPLOAD_DIR / nb_id / filename)
             pages = [extract_text_file(full_path)]
         elif src_type == "url":
-            import asyncio
-            try:
-                loop = asyncio.get_running_loop()
-            except RuntimeError:
-                loop = None
-            if loop and loop.is_running():
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as pool:
-                    pages = [pool.submit(asyncio.run, extract_url(url)).result()]
-            else:
-                pages = [asyncio.run(extract_url(url))]
+            pages = [extract_url_sync(url)]
         else:
             raise ValueError(f"Unknown source type: {src_type}")
 
