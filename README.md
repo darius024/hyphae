@@ -4,7 +4,7 @@
 
 > **Hyphae** (pronounced *hy-fee*) are the branching, thread-like filaments of a fungal network — the hidden infrastructure that connects organisms underground, sharing nutrients and signals without exposing the network itself. Just like hyphae enable communication while keeping the root system private, our system enables research reasoning while keeping raw experimental data confidential.
 
-Built for the Cactus x Google DeepMind Hackathon.
+Built for the Cactus x Google DeepMind Hackathon
 
 ---
 
