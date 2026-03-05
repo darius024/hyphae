@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import base64
 import logging
+import os
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -14,6 +16,59 @@ from notebook.db import get_conn, safe_update
 from routes.auth import get_current_user
 
 log = logging.getLogger(__name__)
+
+# ── Token encryption ────────────────────────────────────────────────────────
+# OAuth tokens are encrypted at rest using Fernet (AES-128-CBC + HMAC-SHA256).
+# Set TOKEN_ENCRYPTION_KEY in the environment to a 32-byte base64url key, e.g.:
+#   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# If unset, a warning is logged and tokens are stored as-is (development only).
+
+_fernet = None
+
+def _get_fernet():
+    """Return a lazily-initialised Fernet instance, or None if unconfigured."""
+    global _fernet
+    if _fernet is not None:
+        return _fernet
+    raw_key = os.environ.get("TOKEN_ENCRYPTION_KEY")
+    if not raw_key:
+        log.warning(
+            "TOKEN_ENCRYPTION_KEY is not set — OAuth tokens will be stored in plaintext. "
+            "Set this variable in production."
+        )
+        return None
+    try:
+        from cryptography.fernet import Fernet  # type: ignore
+        _fernet = Fernet(raw_key.encode())
+        return _fernet
+    except Exception as exc:
+        log.error("Failed to initialise token encryption: %s", exc)
+        return None
+
+
+def _encrypt_token(value: Optional[str]) -> Optional[str]:
+    """Encrypt *value* with Fernet; return it unchanged if encryption is unavailable."""
+    if value is None:
+        return None
+    fernet = _get_fernet()
+    if fernet is None:
+        return value
+    return fernet.encrypt(value.encode()).decode()
+
+
+def _decrypt_token(value: Optional[str]) -> Optional[str]:
+    """Decrypt a Fernet-encrypted *value*; return it unchanged if encryption is unavailable."""
+    if value is None:
+        return None
+    fernet = _get_fernet()
+    if fernet is None:
+        return value
+    try:
+        return fernet.decrypt(value.encode()).decode()
+    except Exception:
+        # Value was stored before encryption was enabled — return as-is.
+        return value
+
 router = APIRouter(prefix="/api", tags=["planning"])
 
 
@@ -164,17 +219,20 @@ async def list_calendar_connections(user: dict = Depends(get_current_user)):
 
 @router.post("/calendar/connect", status_code=201)
 async def connect_calendar(body: CalendarConnect, user: dict = Depends(get_current_user)):
-    """Connect a calendar provider (store OAuth tokens)."""
+    """Connect a calendar provider (store OAuth tokens encrypted at rest)."""
     conn_id = str(uuid.uuid4())
     user_id = user["id"]
+
+    encrypted_access = _encrypt_token(body.access_token)
+    encrypted_refresh = _encrypt_token(body.refresh_token)
 
     with get_conn() as conn:
         conn.execute("""
             INSERT INTO calendar_connections
             (id, user_id, provider, access_token, refresh_token, token_expiry, calendar_id)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (conn_id, user_id, body.provider, body.access_token,
-              body.refresh_token, body.token_expiry, body.calendar_id))
+        """, (conn_id, user_id, body.provider, encrypted_access,
+              encrypted_refresh, body.token_expiry, body.calendar_id))
 
     return {"id": conn_id, "provider": body.provider, "status": "connected"}
 
