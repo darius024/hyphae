@@ -93,7 +93,7 @@ async def create_organization(body: OrgCreate, user: dict = Depends(get_current_
 
 @router.get("/organizations/{org_id}")
 async def get_organization(org_id: str, user: dict = Depends(get_current_user)):
-    """Get organization details."""
+    """Get organization details. Only accessible to current members."""
     with get_conn() as conn:
         org = conn.execute("SELECT * FROM organizations WHERE id=?", (org_id,)).fetchone()
         if not org:
@@ -103,6 +103,8 @@ async def get_organization(org_id: str, user: dict = Depends(get_current_user)):
             "SELECT role FROM org_members WHERE org_id=? AND user_id=?",
             (org_id, user["id"]),
         ).fetchone()
+        if not member:
+            raise HTTPException(403, "You are not a member of this organization")
 
         members = conn.execute("""
             SELECT om.*, u.name, u.email, u.avatar_url
