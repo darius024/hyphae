@@ -151,12 +151,14 @@ async def get_pending_reminders(_user: dict = Depends(get_current_user)):
 # ── Calendar connections ──────────────────────────────────────────────────
 
 @router.get("/calendar/connections")
-async def list_calendar_connections(_user: dict = Depends(get_current_user)):
-    """List user's calendar connections."""
+async def list_calendar_connections(user: dict = Depends(get_current_user)):
+    """List the current user's calendar connections."""
     with get_conn() as conn:
         rows = conn.execute("""
-            SELECT id, provider, calendar_id, last_sync, created_at FROM calendar_connections
-        """).fetchall()
+            SELECT id, provider, calendar_id, last_sync, created_at
+            FROM calendar_connections
+            WHERE user_id = ?
+        """, (user["id"],)).fetchall()
     return {"connections": [dict(r) for r in rows]}
 
 
