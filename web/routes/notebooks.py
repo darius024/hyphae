@@ -108,12 +108,19 @@ def _safe_filename(name: str) -> str:
     return clean
 
 
-def _nb_or_404(nb_id: str) -> dict:
+def _nb_or_404(nb_id: str, user_id: str | None = None) -> dict:
+    """Fetch a notebook or raise 404.  When *user_id* is given, also enforce
+    ownership: raises 403 if the notebook is owned by a different user.
+    Notebooks that pre-date ownership (user_id IS NULL) remain accessible.
+    """
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM notebooks WHERE id=?", (nb_id,)).fetchone()
     if row is None:
         raise HTTPException(404, f"Notebook {nb_id} not found")
-    return dict(row)
+    nb = dict(row)
+    if user_id is not None and nb.get("user_id") and nb["user_id"] != user_id:
+        raise HTTPException(403, "Access denied")
+    return nb
 
 
 def _src_or_404(src_id: str, nb_id: str) -> dict:
@@ -153,45 +160,52 @@ def _persist_message(conv_id: str, nb_id: str, role: str, content: str, citation
 # ── Notebook CRUD ──────────────────────────────────────────────────────
 
 @router.get("/notebooks")
-async def list_notebooks(limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0), _user: dict = Depends(get_current_user)):
+async def list_notebooks(limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0), user: dict = Depends(get_current_user)):
+    uid = user["id"]
     with get_conn() as conn:
-        total = conn.execute("SELECT COUNT(*) FROM notebooks").fetchone()[0]
+        total = conn.execute(
+            "SELECT COUNT(*) FROM notebooks WHERE user_id=? OR user_id IS NULL", (uid,)
+        ).fetchone()[0]
         rows = conn.execute(
             "SELECT n.*, COUNT(s.id) AS source_count FROM notebooks n "
-            "LEFT JOIN sources s ON s.notebook_id=n.id GROUP BY n.id "
-            "ORDER BY n.updated_at DESC LIMIT ? OFFSET ?",
-            (limit, offset),
+            "LEFT JOIN sources s ON s.notebook_id=n.id "
+            "WHERE n.user_id=? OR n.user_id IS NULL "
+            "GROUP BY n.id ORDER BY n.updated_at DESC LIMIT ? OFFSET ?",
+            (uid, limit, offset),
         ).fetchall()
     return {"notebooks": [dict(r) for r in rows], "total": total}
 
 
 @router.post("/notebooks", status_code=201)
-async def create_notebook(body: _NotebookBody, _user: dict = Depends(get_current_user)):
+async def create_notebook(body: _NotebookBody, user: dict = Depends(get_current_user)):
     nb_id = str(uuid.uuid4())
     with get_conn() as conn:
-        conn.execute("INSERT INTO notebooks (id, name) VALUES (?,?)", (nb_id, body.name.strip()))
+        conn.execute(
+            "INSERT INTO notebooks (id, name, user_id) VALUES (?,?,?)",
+            (nb_id, body.name.strip(), user["id"]),
+        )
     return {"id": nb_id, "name": body.name.strip()}
 
 
 @router.get("/notebooks/{nb_id}")
-async def get_notebook(nb_id: str, _user: dict = Depends(get_current_user)):
-    return _nb_or_404(nb_id)
+async def get_notebook(nb_id: str, user: dict = Depends(get_current_user)):
+    return _nb_or_404(nb_id, user_id=user["id"])
 
 
 @router.patch("/notebooks/{nb_id}")
-async def update_notebook(nb_id: str, body: _NotebookBody, _user: dict = Depends(get_current_user)):
-    _nb_or_404(nb_id)
+async def update_notebook(nb_id: str, body: _NotebookBody, user: dict = Depends(get_current_user)):
+    _nb_or_404(nb_id, user_id=user["id"])
     with get_conn() as conn:
         conn.execute(
             "UPDATE notebooks SET name=?, updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id=?",
             (body.name.strip(), nb_id),
         )
-    return _nb_or_404(nb_id)
+    return _nb_or_404(nb_id, user_id=user["id"])
 
 
 @router.delete("/notebooks/{nb_id}")
-async def delete_notebook_endpoint(nb_id: str, _user: dict = Depends(get_current_user)):
-    _nb_or_404(nb_id)
+async def delete_notebook_endpoint(nb_id: str, user: dict = Depends(get_current_user)):
+    _nb_or_404(nb_id, user_id=user["id"])
     with get_conn() as conn:
         conn.execute("DELETE FROM notebooks WHERE id=?", (nb_id,))
     upload_path = UPLOAD_DIR / nb_id
@@ -207,8 +221,8 @@ async def delete_notebook_endpoint(nb_id: str, _user: dict = Depends(get_current
 # ── Sources ────────────────────────────────────────────────────────────
 
 @router.get("/notebooks/{nb_id}/sources")
-async def list_sources(nb_id: str, limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0), _user: dict = Depends(get_current_user)):
-    _nb_or_404(nb_id)
+async def list_sources(nb_id: str, limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0), user: dict = Depends(get_current_user)):
+    _nb_or_404(nb_id, user_id=user["id"])
     with get_conn() as conn:
         total = conn.execute("SELECT COUNT(*) FROM sources WHERE notebook_id=?", (nb_id,)).fetchone()[0]
         rows = conn.execute(
@@ -219,8 +233,8 @@ async def list_sources(nb_id: str, limit: int = Query(100, ge=1, le=500), offset
 
 
 @router.post("/notebooks/{nb_id}/upload", status_code=202)
-async def upload_source(nb_id: str, background_tasks: BackgroundTasks, file: UploadFile = File(...), _user: dict = Depends(get_current_user)):
-    _nb_or_404(nb_id)
+async def upload_source(nb_id: str, background_tasks: BackgroundTasks, file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    _nb_or_404(nb_id, user_id=user["id"])
     filename = Path(file.filename).name if file.filename else "file"
     ext = Path(filename).suffix.lower().lstrip(".")
     src_type = ext if ext in ("pdf", "txt", "md") else "txt"
@@ -246,8 +260,8 @@ async def upload_source(nb_id: str, background_tasks: BackgroundTasks, file: Upl
 
 
 @router.post("/notebooks/{nb_id}/add-url", status_code=202)
-async def add_url_source(nb_id: str, background_tasks: BackgroundTasks, body: _UrlBody, _user: dict = Depends(get_current_user)):
-    _nb_or_404(nb_id)
+async def add_url_source(nb_id: str, background_tasks: BackgroundTasks, body: _UrlBody, user: dict = Depends(get_current_user)):
+    _nb_or_404(nb_id, user_id=user["id"])
     url = body.url.strip()
     src_id = str(uuid.uuid4())
     title = body.title or url[:80]
@@ -262,12 +276,14 @@ async def add_url_source(nb_id: str, background_tasks: BackgroundTasks, body: _U
 
 
 @router.get("/notebooks/{nb_id}/sources/{src_id}")
-async def get_source(nb_id: str, src_id: str, _user: dict = Depends(get_current_user)):
+async def get_source(nb_id: str, src_id: str, user: dict = Depends(get_current_user)):
+    _nb_or_404(nb_id, user_id=user["id"])
     return _src_or_404(src_id, nb_id)
 
 
 @router.delete("/notebooks/{nb_id}/sources/{src_id}")
-async def delete_source(nb_id: str, src_id: str, _user: dict = Depends(get_current_user)):
+async def delete_source(nb_id: str, src_id: str, user: dict = Depends(get_current_user)):
+    _nb_or_404(nb_id, user_id=user["id"])
     _src_or_404(src_id, nb_id)
     with get_conn() as conn:
         conn.execute("DELETE FROM sources WHERE id=?", (src_id,))
@@ -275,8 +291,9 @@ async def delete_source(nb_id: str, src_id: str, _user: dict = Depends(get_curre
 
 
 @router.put("/notebooks/{nb_id}/sources/{src_id}/sensitivity")
-async def set_source_sensitivity(nb_id: str, src_id: str, body: _SensitivityBody, _user: dict = Depends(get_current_user)):
+async def set_source_sensitivity(nb_id: str, src_id: str, body: _SensitivityBody, user: dict = Depends(get_current_user)):
     """Toggle confidential / shareable on a notebook source."""
+    _nb_or_404(nb_id, user_id=user["id"])
     _src_or_404(src_id, nb_id)
     with get_conn() as conn:
         conn.execute("UPDATE sources SET sensitivity=? WHERE id=?", (body.level, src_id))
@@ -284,9 +301,10 @@ async def set_source_sensitivity(nb_id: str, src_id: str, body: _SensitivityBody
 
 
 @router.get("/notebooks/{nb_id}/sources/{src_id}/raw")
-async def raw_source(nb_id: str, src_id: str, _user: dict = Depends(get_current_user)):
+async def raw_source(nb_id: str, src_id: str, user: dict = Depends(get_current_user)):
     """Return the raw file (PDF or text) for download / inline display."""
     from fastapi.responses import FileResponse as FR
+    _nb_or_404(nb_id, user_id=user["id"])
     src = _src_or_404(src_id, nb_id)
     filename = src.get("filename")
     if not filename:
@@ -305,8 +323,9 @@ async def raw_source(nb_id: str, src_id: str, _user: dict = Depends(get_current_
 
 
 @router.get("/notebooks/{nb_id}/sources/{src_id}/preview")
-async def preview_source(nb_id: str, src_id: str, _user: dict = Depends(get_current_user)):
+async def preview_source(nb_id: str, src_id: str, user: dict = Depends(get_current_user)):
     """Return a text preview (first 3000 chars) of a notebook source file."""
+    _nb_or_404(nb_id, user_id=user["id"])
     src = _src_or_404(src_id, nb_id)
     filename = src.get("filename")
     if not filename:
@@ -330,18 +349,18 @@ async def preview_source(nb_id: str, src_id: str, _user: dict = Depends(get_curr
 # ── Paper editor ───────────────────────────────────────────────────────────
 
 @router.get("/notebooks/{nb_id}/paper")
-async def get_paper(nb_id: str, _user: dict = Depends(get_current_user)):
+async def get_paper(nb_id: str, user: dict = Depends(get_current_user)):
     """Retrieve the saved paper draft for this notebook."""
-    _nb_or_404(nb_id)
+    _nb_or_404(nb_id, user_id=user["id"])
     paper_path = UPLOAD_DIR / nb_id / "_paper.html"
     content = paper_path.read_text(errors="replace") if paper_path.exists() else ""
     return {"notebook_id": nb_id, "content": content}
 
 
 @router.post("/notebooks/{nb_id}/paper")
-async def save_paper(nb_id: str, body: _PaperBody, _user: dict = Depends(get_current_user)):
+async def save_paper(nb_id: str, body: _PaperBody, user: dict = Depends(get_current_user)):
     """Persist the paper draft (HTML content from the editor)."""
-    _nb_or_404(nb_id)
+    _nb_or_404(nb_id, user_id=user["id"])
     dest = UPLOAD_DIR / nb_id
     dest.mkdir(parents=True, exist_ok=True)
     (dest / "_paper.html").write_text(body.content, encoding="utf-8")
@@ -351,8 +370,8 @@ async def save_paper(nb_id: str, body: _PaperBody, _user: dict = Depends(get_cur
 # ── Conversations ──────────────────────────────────────────────────────
 
 @router.get("/notebooks/{nb_id}/conversations")
-async def list_conversations(nb_id: str, limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0), _user: dict = Depends(get_current_user)):
-    _nb_or_404(nb_id)
+async def list_conversations(nb_id: str, limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0), user: dict = Depends(get_current_user)):
+    _nb_or_404(nb_id, user_id=user["id"])
     with get_conn() as conn:
         total = conn.execute(
             "SELECT COUNT(*) FROM conversations WHERE notebook_id=?", (nb_id,)
@@ -365,8 +384,8 @@ async def list_conversations(nb_id: str, limit: int = Query(50, ge=1, le=200), o
 
 
 @router.post("/notebooks/{nb_id}/conversations", status_code=201)
-async def create_conversation(nb_id: str, body: _TitleBody, _user: dict = Depends(get_current_user)):
-    _nb_or_404(nb_id)
+async def create_conversation(nb_id: str, body: _TitleBody, user: dict = Depends(get_current_user)):
+    _nb_or_404(nb_id, user_id=user["id"])
     cid = str(uuid.uuid4())
     with get_conn() as conn:
         conn.execute(
@@ -376,7 +395,8 @@ async def create_conversation(nb_id: str, body: _TitleBody, _user: dict = Depend
 
 
 @router.patch("/notebooks/{nb_id}/conversations/{cid}")
-async def rename_conversation(nb_id: str, cid: str, body: _TitleBody, _user: dict = Depends(get_current_user)):
+async def rename_conversation(nb_id: str, cid: str, body: _TitleBody, user: dict = Depends(get_current_user)):
+    _nb_or_404(nb_id, user_id=user["id"])
     _conv_or_404(cid, nb_id)
     with get_conn() as conn:
         conn.execute(
@@ -387,7 +407,8 @@ async def rename_conversation(nb_id: str, cid: str, body: _TitleBody, _user: dic
 
 
 @router.delete("/notebooks/{nb_id}/conversations/{cid}")
-async def delete_conversation(nb_id: str, cid: str, _user: dict = Depends(get_current_user)):
+async def delete_conversation(nb_id: str, cid: str, user: dict = Depends(get_current_user)):
+    _nb_or_404(nb_id, user_id=user["id"])
     _conv_or_404(cid, nb_id)
     with get_conn() as conn:
         conn.execute("DELETE FROM conversations WHERE id=?", (cid,))
@@ -397,7 +418,8 @@ async def delete_conversation(nb_id: str, cid: str, _user: dict = Depends(get_cu
 # ── Messages ───────────────────────────────────────────────────────────
 
 @router.get("/notebooks/{nb_id}/conversations/{cid}/messages")
-async def list_messages(nb_id: str, cid: str, limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0), _user: dict = Depends(get_current_user)):
+async def list_messages(nb_id: str, cid: str, limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0), user: dict = Depends(get_current_user)):
+    _nb_or_404(nb_id, user_id=user["id"])
     _conv_or_404(cid, nb_id)
     with get_conn() as conn:
         total = conn.execute(
@@ -448,7 +470,8 @@ async def _nb_chat_core(nb_id: str, cid: str, question: str) -> dict:
 
 
 @router.post("/notebooks/{nb_id}/conversations/{cid}/chat")
-async def nb_chat(nb_id: str, cid: str, body: _ChatBody, _user: dict = Depends(get_current_user)):
+async def nb_chat(nb_id: str, cid: str, body: _ChatBody, user: dict = Depends(get_current_user)):
+    _nb_or_404(nb_id, user_id=user["id"])
     _conv_or_404(cid, nb_id)
     return await _nb_chat_core(nb_id, cid, body.message.strip())
 
@@ -500,7 +523,8 @@ async def _stream_nb_chat(nb_id: str, cid: str, question: str) -> AsyncIterator[
 
 
 @router.post("/notebooks/{nb_id}/conversations/{cid}/chat/stream")
-async def nb_chat_stream(nb_id: str, cid: str, body: _ChatBody, _user: dict = Depends(get_current_user)):
+async def nb_chat_stream(nb_id: str, cid: str, body: _ChatBody, user: dict = Depends(get_current_user)):
+    _nb_or_404(nb_id, user_id=user["id"])
     _conv_or_404(cid, nb_id)
     return StreamingResponse(
         _stream_nb_chat(nb_id, cid, body.message.strip()),
@@ -533,8 +557,8 @@ async def update_setting(key: str, body: _SettingBody, _user: dict = Depends(get
 # ── Calendar events ────────────────────────────────────────────────────
 
 @router.get("/notebooks/{nb_id}/events")
-async def list_events(nb_id: str, limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0), _user: dict = Depends(get_current_user)):
-    _nb_or_404(nb_id)
+async def list_events(nb_id: str, limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0), user: dict = Depends(get_current_user)):
+    _nb_or_404(nb_id, user_id=user["id"])
     with get_conn() as conn:
         total = conn.execute(
             "SELECT COUNT(*) FROM calendar_events WHERE notebook_id=?", (nb_id,)
@@ -547,8 +571,8 @@ async def list_events(nb_id: str, limit: int = Query(100, ge=1, le=500), offset:
 
 
 @router.post("/notebooks/{nb_id}/events")
-async def create_event(nb_id: str, body: _EventBody, _user: dict = Depends(get_current_user)):
-    _nb_or_404(nb_id)
+async def create_event(nb_id: str, body: _EventBody, user: dict = Depends(get_current_user)):
+    _nb_or_404(nb_id, user_id=user["id"])
     eid = str(uuid.uuid4())
     with get_conn() as conn:
         conn.execute(
@@ -561,8 +585,8 @@ async def create_event(nb_id: str, body: _EventBody, _user: dict = Depends(get_c
 
 
 @router.delete("/notebooks/{nb_id}/events/{eid}")
-async def delete_event(nb_id: str, eid: str, _user: dict = Depends(get_current_user)):
-    _nb_or_404(nb_id)
+async def delete_event(nb_id: str, eid: str, user: dict = Depends(get_current_user)):
+    _nb_or_404(nb_id, user_id=user["id"])
     with get_conn() as conn:
         conn.execute(
             "DELETE FROM calendar_events WHERE id=? AND notebook_id=?", (eid, nb_id)
