@@ -40,6 +40,7 @@ class WritingAssistRequest(BaseModel):
     content: str = Field(..., min_length=1)
     action: str = Field(..., pattern=r"^(autocomplete|grammar|style|summarize|expand|simplify)$")
     context: Optional[str] = None
+    notebook_id: Optional[str] = None  # when set, cloud use is gated on allow_cloud
 
 
 # ── Note CRUD ─────────────────────────────────────────────────────────────
@@ -202,7 +203,25 @@ _WRITING_PROMPTS = {
 
 @router.post("/writing/assist")
 async def writing_assist(body: WritingAssistRequest, _user: dict = Depends(get_current_user)):
-    """AI writing assistant — autocomplete, grammar, style, summarize, expand, simplify."""
+    """AI writing assistant — autocomplete, grammar, style, summarize, expand, simplify.
+
+    When *notebook_id* is provided the notebook's *allow_cloud* flag is checked
+    before sending any content to the Gemini cloud API.
+    """
+    if body.notebook_id:
+        with get_conn() as conn:
+            nb = conn.execute(
+                "SELECT allow_cloud FROM notebooks WHERE id=?", (body.notebook_id,)
+            ).fetchone()
+        if nb is None:
+            raise HTTPException(404, "Notebook not found")
+        if not nb["allow_cloud"]:
+            raise HTTPException(
+                403,
+                "Cloud AI is disabled for this notebook. "
+                "Enable it in notebook settings to use the writing assistant.",
+            )
+
     if not _gemini_client_fn:
         raise HTTPException(503, "AI assistant not configured")
 
