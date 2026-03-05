@@ -15,6 +15,23 @@ from typing import List, Tuple
 
 log = logging.getLogger(__name__)
 
+# ── SSRF protection ───────────────────────────────────────────────────────
+
+# Reject URLs targeting localhost, link-local, and RFC-1918 private ranges.
+_INTERNAL_HOST_RE = re.compile(
+    r'://(localhost|127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.'
+    r'|169\.254\.|0\.0\.0\.0|\[::1\])',
+    re.IGNORECASE,
+)
+
+
+def _validate_fetch_url(url: str) -> None:
+    """Raise ValueError if *url* targets an internal/loopback host."""
+    if not url.startswith(("http://", "https://")):
+        raise ValueError("Only HTTP/HTTPS URLs are supported")
+    if _INTERNAL_HOST_RE.search(url):
+        raise ValueError("Requests to internal or loopback addresses are not allowed")
+
 UPLOAD_DIR = Path(__file__).parents[1] / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
@@ -39,12 +56,23 @@ def extract_text_file(file_path: str) -> str:
 
 
 def extract_url_sync(url: str) -> str:
-    """Fetch a URL and extract readable text (synchronous, safe for thread pools)."""
+    """Fetch a URL and extract readable text (synchronous, safe for thread pools).
+
+    Raises ValueError for URLs that target internal/loopback hosts (SSRF protection).
+    Also validates the final URL after redirects to block open-redirect SSRF chains.
+    """
+    _validate_fetch_url(url)
     try:
         import httpx          # type: ignore
         import trafilatura    # type: ignore
         with httpx.Client(timeout=30, follow_redirects=True) as client:
             resp = client.get(url)
+            # Validate the final URL reached after following any redirects.
+            final_url = str(resp.url)
+            if _INTERNAL_HOST_RE.search(final_url):
+                raise ValueError(
+                    f"SSRF: URL redirected to an internal host ({final_url!r})"
+                )
             resp.raise_for_status()
             text = trafilatura.extract(resp.text) or resp.text
             return text
