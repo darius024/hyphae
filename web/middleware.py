@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 import threading
 from collections import defaultdict
@@ -50,11 +51,23 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self._lock = threading.Lock()
         self._last_cleanup = time.monotonic()
 
+    # Only trust X-Forwarded-For when the direct peer is a known private/loopback
+    # address, meaning a real reverse proxy is sitting in front.  Requests
+    # arriving directly from public IPs must use the TCP peer address so that
+    # clients cannot spoof an arbitrary IP to bypass per-IP rate limiting.
+    _PRIVATE_IP_RE = re.compile(
+        r'^(127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|::1$|localhost$)',
+        re.IGNORECASE,
+    )
+
     def _client_ip(self, request: Request) -> str:
-        forwarded = request.headers.get("x-forwarded-for")
-        if forwarded:
-            return forwarded.split(",")[0].strip()
-        return request.client.host if request.client else "unknown"
+        peer = request.client.host if request.client else ""
+        if peer and self._PRIVATE_IP_RE.match(peer):
+            # Behind a trusted reverse proxy — use the first forwarded address.
+            forwarded = request.headers.get("x-forwarded-for")
+            if forwarded:
+                return forwarded.split(",")[0].strip()
+        return peer or "unknown"
 
     def _prune(self, timestamps: list[float], cutoff: float) -> list[float]:
         """Remove entries older than *cutoff* (in-place for efficiency)."""
