@@ -1,5 +1,6 @@
 import json
 import os
+import threading
 from pathlib import Path
 from datetime import datetime
 
@@ -149,8 +150,13 @@ ALL_TOOLS = [
     TOOL_SEARCH_TEXT,
 ]
 
-LOCAL_ONLY_TOOLS = {"search_papers", "summarise_notes", "create_note", "list_documents", "compare_documents", "read_document", "search_text"}
+LOCAL_ONLY_TOOLS = frozenset({"search_papers", "summarise_notes", "create_note", "list_documents", "compare_documents", "read_document", "search_text"})
 CLOUD_SAFE_TOOLS = {"generate_hypothesis", "search_literature"}
+
+
+# Serialises cactus_reset + cactus_complete so concurrent summarise_notes
+# calls don't reset the shared _rag_model while another call is mid-inference.
+_rag_inference_lock = threading.Lock()
 
 
 # ── Tool execution ──────────────────────────────────────────────────────
@@ -207,15 +213,19 @@ def _exec_summarise_notes(topic):
         return {"summary": "No notes found on this topic.", "source": "local"}
 
     context = "\n---\n".join(c["text"] for c in chunks)
-    cactus_reset(model)
-    response = cactus_complete(
-        model,
-        [
-            {"role": "system", "content": "Summarise the following research notes concisely. Only use the provided text."},
-            {"role": "user", "content": context},
-        ],
-        max_tokens=256,
-    )
+    # Acquire the lock so that cactus_reset + cactus_complete are atomic.
+    # Without this, a concurrent call could reset the model's KV cache while
+    # another generation is in progress, corrupting both responses.
+    with _rag_inference_lock:
+        cactus_reset(model)
+        response = cactus_complete(
+            model,
+            [
+                {"role": "system", "content": "Summarise the following research notes concisely. Only use the provided text."},
+                {"role": "user", "content": context},
+            ],
+            max_tokens=256,
+        )
     try:
         result = json.loads(response)
         return {"summary": result.get("response", ""), "source": "local"}
