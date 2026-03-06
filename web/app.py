@@ -140,7 +140,7 @@ from routes.notebooks import router as notebooks_router, configure as configure_
 from routes.query import router as query_router, configure as configure_query
 from routes.code import router as code_router
 from routes.auth import router as auth_router
-from routes.corpus import router as corpus_router
+from routes.corpus import router as corpus_router, configure as configure_corpus
 from routes.tags import router as tags_router
 from routes.analytics import router as analytics_router
 from routes.planning import router as planning_router
@@ -240,6 +240,8 @@ configure_notebooks(
 )
 
 configure_notes(gemini_fn=_gemini_client)
+
+configure_corpus(corpus_dir=CORPUS_DIR, add_file_fn=add_file)
 
 
 # ── Health / readiness probes ─────────────────────────────────────────────
