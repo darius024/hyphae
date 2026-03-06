@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 _PATTERNS: List[Tuple[str, str, str]] = [
     ("email",       r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", "[EMAIL]"),
     ("ipv4",        r"\b(?:\d{1,3}\.){3}\d{1,3}\b",                     "[IP]"),
-    ("url",         r"https?://[^\s]+",                                  "[URL]"),
+    ("url",         r"(?:https?|ftp|ftps|file|s3)://[^\s]+",             "[URL]"),
     ("phone",       r"\b(?:\+\d{1,3}[\s-]?)?\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b", "[PHONE]"),
     ("ssn",         r"\b\d{3}-\d{2}-\d{4}\b",                           "[SSN]"),
     ("date",        r"\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b",               "[DATE]"),
@@ -24,7 +24,7 @@ _PATTERNS: List[Tuple[str, str, str]] = [
     ("lab_code",    r"\b[A-Z]{2}-\d{4,}\b",                              "[LAB_CODE]"),
     ("sample_id",   r"\b(?:sample|specimen|patient|subject)[_-]?\d+\b",  "[SAMPLE_ID]"),
     ("measurement", r"\b\d+(?:\.\d+)?\s*(?:mg|ml|g|kg|°C|°F|nm|μm|mM)\b", "[MEASUREMENT]"),
-    ("api_key",     r"\b[A-Za-z0-9_\-]{40,}\b",                          "[API_KEY]"),
+    ("api_key",     r"\b(?:AIza[A-Za-z0-9_\-]{35,}|sk-[A-Za-z0-9]{40,}|[A-Za-z0-9_\-]{64,})\b", "[API_KEY]"),
 ]
 
 _COMPILED = [
