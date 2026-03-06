@@ -55,27 +55,41 @@ def extract_text_file(file_path: str) -> str:
     return Path(file_path).read_text(errors="replace")
 
 
+MAX_FETCH_BYTES = 50 * 1024 * 1024  # 50 MB — hard cap on URL response size
+
+
 def extract_url_sync(url: str) -> str:
     """Fetch a URL and extract readable text (synchronous, safe for thread pools).
 
     Raises ValueError for URLs that target internal/loopback hosts (SSRF protection).
     Also validates the final URL after redirects to block open-redirect SSRF chains.
+    Response bodies larger than MAX_FETCH_BYTES are rejected before being read.
     """
     _validate_fetch_url(url)
     try:
         import httpx          # type: ignore
         import trafilatura    # type: ignore
         with httpx.Client(timeout=30, follow_redirects=True) as client:
-            resp = client.get(url)
-            # Validate the final URL reached after following any redirects.
-            final_url = str(resp.url)
-            if _INTERNAL_HOST_RE.search(final_url):
-                raise ValueError(
-                    f"SSRF: URL redirected to an internal host ({final_url!r})"
-                )
-            resp.raise_for_status()
-            text = trafilatura.extract(resp.text) or resp.text
-            return text
+            with client.stream("GET", url) as resp:
+                # Validate the final URL reached after following any redirects.
+                final_url = str(resp.url)
+                if _INTERNAL_HOST_RE.search(final_url):
+                    raise ValueError(
+                        f"SSRF: URL redirected to an internal host ({final_url!r})"
+                    )
+                resp.raise_for_status()
+                chunks: list[bytes] = []
+                total = 0
+                for chunk in resp.iter_bytes(65536):
+                    total += len(chunk)
+                    if total > MAX_FETCH_BYTES:
+                        raise ValueError(
+                            f"Response too large (>{MAX_FETCH_BYTES // (1024 * 1024)} MB)"
+                        )
+                    chunks.append(chunk)
+                raw_bytes = b"".join(chunks)
+        text = raw_bytes.decode(errors="replace")
+        return trafilatura.extract(text) or text
     except ImportError:
         raise RuntimeError("httpx + trafilatura required. pip install httpx trafilatura")
 
