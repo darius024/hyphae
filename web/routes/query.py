@@ -8,6 +8,7 @@ import os
 import subprocess
 import tempfile
 import time
+from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -298,10 +299,8 @@ async def api_voice(audio: UploadFile = File(...), _user: dict = Depends(get_cur
         )
     finally:
         for p in cleanup:
-            try:
+            with suppress(OSError):
                 os.unlink(p)
-            except OSError:
-                pass
 
     if not transcript.strip():
         return JSONResponse(status_code=400, content={"error": "Could not transcribe audio."})
