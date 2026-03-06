@@ -7,6 +7,7 @@ Three-tier routing: rule-based → FunctionGemma (on-device) → Gemini (cloud).
 import os, logging
 import json, time
 import threading as _threading
+import concurrent.futures as _futures
 import re
 
 from .config import GEMINI_MODEL, PROJECT_ROOT
@@ -44,7 +45,11 @@ functiongemma_path = _find_functiongemma_path()
 _cached_cactus_model = None
 _cactus_init_failed = False
 _cactus_lock = _threading.Lock()
-_cactus_inference_lock = _threading.Lock()
+
+# Serialises inference calls and enforces a per-request wall-clock timeout.
+# max_workers=1 guarantees only one cactus_complete runs at a time.
+_cactus_pool = _futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="cactus-inference")
+_CACTUS_TIMEOUT = int(os.environ.get("CACTUS_TIMEOUT", "30"))
 
 def _get_cactus_model():
     """Return a cached Cactus model handle, initialising once on first call (thread-safe)."""
@@ -76,7 +81,11 @@ def _prewarm_cactus():
         _get_cactus_model()
     except Exception:
         pass
-_threading.Thread(target=_prewarm_cactus, daemon=True).start()
+
+# Only prewarm when explicitly requested — avoids loading the model during
+# test runs, benchmarks, and CLI imports where it is unnecessary.
+if os.environ.get("CACTUS_PREWARM", "0") == "1":
+    _threading.Thread(target=_prewarm_cactus, daemon=True).start()
 
 try:
     from .privacy import sanitise_for_cloud
@@ -158,7 +167,10 @@ _TOOL_DESCRIPTION_HINTS = {
     ),
 }
 
-_CLAUSE_SPLIT = re.compile(r'[,;]|\b(and|also|then|plus)\b', re.IGNORECASE)
+# Non-capturing group prevents re.split from emitting the matched conjunction
+# as a separate element, which would otherwise appear as an extra clause and
+# cause spurious action over-counting.
+_CLAUSE_SPLIT = re.compile(r'[,;]|\b(?:and|also|then|plus)\b', re.IGNORECASE)
 
 _TOOL_ACTION_VERBS = {
     "set", "send", "text", "play", "check", "get", "find", "look",
@@ -240,8 +252,13 @@ def _build_system_prompt(messages, tools) -> str:
 
 
 def _repair_json(raw_str):
-    """Fix common JSON issues from small models (leading zeros, trailing commas)."""
-    raw_str = re.sub(r'(?<=:)\s*0(\d+)', r' \1', raw_str)
+    """Fix common JSON issues from small models (leading zeros, trailing commas).
+
+    Uses 0+([1-9]\d*) instead of 0(\d+) so that valid JSON floats like 0.5
+    are never touched (the decimal point fails [1-9]), and multiple consecutive
+    leading zeros (e.g. 00123) are all consumed by the 0+ prefix.
+    """
+    raw_str = re.sub(r'(?<=:)\s*0+([1-9]\d*)', r' \1', raw_str)
     raw_str = re.sub(r',\s*([}\]])', r'\1', raw_str)
     return raw_str
 
@@ -272,21 +289,32 @@ def generate_cactus(messages, tools):
 
     system_prompt = _build_system_prompt(messages, tools)
 
-    with _cactus_inference_lock:
-        try:
-            raw_str = cactus_complete(
-                model,
-                [{"role": "system", "content": system_prompt}] + messages,
-                tools=cactus_tools,
-                force_tools=True,
-                max_tokens=300,
-                stop_sequences=["<|im_end|>", "<end_of_turn>"],
-                tool_rag_top_k=0,
-                confidence_threshold=0.0,
-            )
-        except Exception as e:
-            log.warning("cactus_complete failed: %s", e)
-            return {"function_calls": rule_calls, "total_time_ms": 0, "confidence": 0}
+    # Capture loop-local variables so the closure is side-effect-free.
+    _system = system_prompt
+    _msgs = messages
+    _tools = cactus_tools
+    _model = model
+
+    def _do_complete():
+        return cactus_complete(
+            _model,
+            [{"role": "system", "content": _system}] + _msgs,
+            tools=_tools,
+            force_tools=True,
+            max_tokens=300,
+            stop_sequences=["<|im_end|>", "<end_of_turn>"],
+            tool_rag_top_k=0,
+            confidence_threshold=0.0,
+        )
+
+    try:
+        raw_str = _cactus_pool.submit(_do_complete).result(timeout=_CACTUS_TIMEOUT)
+    except _futures.TimeoutError:
+        log.warning("cactus_complete timed out after %ds", _CACTUS_TIMEOUT)
+        return {"function_calls": rule_calls, "total_time_ms": 0, "confidence": 0}
+    except Exception as e:
+        log.warning("cactus_complete failed: %s", e)
+        return {"function_calls": rule_calls, "total_time_ms": 0, "confidence": 0}
 
     try:
         raw = json.loads(raw_str)
