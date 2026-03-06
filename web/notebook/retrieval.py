@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import re
+import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -22,6 +23,24 @@ FAISS_DIR.mkdir(exist_ok=True)
 
 _indexes: Dict[str, Any] = {}
 _id_maps: Dict[str, List[str]] = {}
+
+# Per-notebook RLocks prevent two concurrent requests from simultaneously
+# creating duplicate index objects or corrupting FAISS .index files on disk.
+_nb_locks: Dict[str, threading.RLock] = {}
+_nb_locks_mu = threading.Lock()  # protects the _nb_locks dict itself
+
+
+def _get_nb_lock(notebook_id: str) -> threading.RLock:
+    """Return (creating lazily) a per-notebook reentrant lock."""
+    # Fast-path: lock already exists.
+    try:
+        return _nb_locks[notebook_id]
+    except KeyError:
+        pass
+    with _nb_locks_mu:
+        if notebook_id not in _nb_locks:
+            _nb_locks[notebook_id] = threading.RLock()
+        return _nb_locks[notebook_id]
 
 
 def _faiss():
@@ -47,71 +66,75 @@ def _idmap_path(notebook_id: str) -> Path:
 
 
 def get_index(notebook_id: str):
-    if notebook_id not in _indexes:
-        faiss = _faiss()
-        if faiss is None:
-            _indexes[notebook_id] = None
-            _id_maps[notebook_id] = []
-            return _indexes[notebook_id], _id_maps[notebook_id]
-        idx_path = _index_path(notebook_id)
-        idmap_path = _idmap_path(notebook_id)
-        if idx_path.exists():
-            index = faiss.read_index(str(idx_path))
-            id_map = idmap_path.read_text().splitlines() if idmap_path.exists() else []
-        else:
-            index = faiss.IndexFlatIP(EMBED_DIM)
-            id_map = []
-        _indexes[notebook_id] = index
-        _id_maps[notebook_id] = id_map
-    return _indexes[notebook_id], _id_maps[notebook_id]
+    with _get_nb_lock(notebook_id):
+        if notebook_id not in _indexes:
+            faiss = _faiss()
+            if faiss is None:
+                _indexes[notebook_id] = None
+                _id_maps[notebook_id] = []
+                return _indexes[notebook_id], _id_maps[notebook_id]
+            idx_path = _index_path(notebook_id)
+            idmap_path = _idmap_path(notebook_id)
+            if idx_path.exists():
+                index = faiss.read_index(str(idx_path))
+                id_map = idmap_path.read_text().splitlines() if idmap_path.exists() else []
+            else:
+                index = faiss.IndexFlatIP(EMBED_DIM)
+                id_map = []
+            _indexes[notebook_id] = index
+            _id_maps[notebook_id] = id_map
+        return _indexes[notebook_id], _id_maps[notebook_id]
 
 
 def _save_index(notebook_id: str) -> None:
-    faiss = _faiss()
-    if faiss is None or _indexes.get(notebook_id) is None:
-        return
-    index, id_map = _indexes[notebook_id], _id_maps[notebook_id]
-    faiss.write_index(index, str(_index_path(notebook_id)))
-    _idmap_path(notebook_id).write_text("\n".join(id_map))
+    with _get_nb_lock(notebook_id):
+        faiss = _faiss()
+        if faiss is None or _indexes.get(notebook_id) is None:
+            return
+        index, id_map = _indexes[notebook_id], _id_maps[notebook_id]
+        faiss.write_index(index, str(_index_path(notebook_id)))
+        _idmap_path(notebook_id).write_text("\n".join(id_map))
 
 
 def add_chunks(notebook_id: str, chunk_ids: List[str], vectors: List[List[float]]) -> List[int]:
     """Add vectors to the notebook FAISS index. Returns list of assigned FAISS IDs."""
     np = _np()
-    index, id_map = get_index(notebook_id)
-    if index is None:
-        log.warning("Skipping vector add: faiss not available")
-        return []
-    mat = np.array(vectors, dtype=np.float32)
-    norms = np.linalg.norm(mat, axis=1, keepdims=True)
-    norms = np.where(norms == 0, 1, norms)
-    mat = mat / norms
-    start = len(id_map)
-    index.add(mat)
-    id_map.extend(chunk_ids)
-    _save_index(notebook_id)
-    return list(range(start, start + len(chunk_ids)))
+    with _get_nb_lock(notebook_id):
+        index, id_map = get_index(notebook_id)  # RLock allows safe reentry
+        if index is None:
+            log.warning("Skipping vector add: faiss not available")
+            return []
+        mat = np.array(vectors, dtype=np.float32)
+        norms = np.linalg.norm(mat, axis=1, keepdims=True)
+        norms = np.where(norms == 0, 1, norms)
+        mat = mat / norms
+        start = len(id_map)
+        index.add(mat)
+        id_map.extend(chunk_ids)
+        _save_index(notebook_id)  # RLock allows safe reentry
+        return list(range(start, start + len(chunk_ids)))
 
 
 def vector_search(notebook_id: str, query_vec: List[float], top_k: int = 6) -> List[Tuple[str, float]]:
     """Return [(chunk_id, cosine_score)] sorted descending."""
     np = _np()
-    index, id_map = get_index(notebook_id)
-    if index is None:
-        return []
-    if index.ntotal == 0:
-        return []
-    q = np.array([query_vec], dtype=np.float32)
-    norm = np.linalg.norm(q)
-    if norm > 0:
-        q = q / norm
-    k = min(top_k, index.ntotal)
-    scores, indices = index.search(q, k)
-    results = []
-    for score, idx in zip(scores[0], indices[0]):
-        if 0 <= idx < len(id_map):
-            results.append((id_map[idx], float(score)))
-    return results
+    with _get_nb_lock(notebook_id):
+        index, id_map = get_index(notebook_id)
+        if index is None:
+            return []
+        if index.ntotal == 0:
+            return []
+        q = np.array([query_vec], dtype=np.float32)
+        norm = np.linalg.norm(q)
+        if norm > 0:
+            q = q / norm
+        k = min(top_k, index.ntotal)
+        scores, indices = index.search(q, k)
+        results = []
+        for score, idx in zip(scores[0], indices[0]):
+            if 0 <= idx < len(id_map):
+                results.append((id_map[idx], float(score)))
+        return results
 
 
 def bm25_search(notebook_id: str, query: str, top_k: int = 6) -> List[Tuple[str, float]]:
@@ -184,7 +207,8 @@ def hybrid_search(notebook_id: str, query: str, query_vec: List[float], top_k: i
 
 def delete_notebook_index(notebook_id: str) -> None:
     """Remove FAISS index files and clear in-memory cache for a notebook."""
-    _indexes.pop(notebook_id, None)
-    _id_maps.pop(notebook_id, None)
-    _index_path(notebook_id).unlink(missing_ok=True)
-    _idmap_path(notebook_id).unlink(missing_ok=True)
+    with _get_nb_lock(notebook_id):
+        _indexes.pop(notebook_id, None)
+        _id_maps.pop(notebook_id, None)
+        _index_path(notebook_id).unlink(missing_ok=True)
+        _idmap_path(notebook_id).unlink(missing_ok=True)
