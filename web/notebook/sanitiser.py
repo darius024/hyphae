@@ -18,11 +18,11 @@ _PATTERNS: List[Tuple[str, str, str]] = [
     ("url",         r"(?:https?|ftp|ftps|file|s3)://[^\s]+",             "[URL]"),
     ("phone",       r"\b(?:\+\d{1,3}[\s-]?)?\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b", "[PHONE]"),
     ("ssn",         r"\b\d{3}-\d{2}-\d{4}\b",                           "[SSN]"),
-    ("date",        r"\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b",               "[DATE]"),
+    ("date",        r"\b(?:\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4})\b", "[DATE]"),
     ("gps",         r"\b-?\d{1,3}\.\d+,\s*-?\d{1,3}\.\d+\b",            "[GPS]"),
     ("file_path",   r"(?:/[^\s]+)+",                                     "[PATH]"),
     ("lab_code",    r"\b[A-Z]{2}-\d{4,}\b",                              "[LAB_CODE]"),
-    ("sample_id",   r"\b(?:sample|specimen|patient|subject)[_-]?\d+\b",  "[SAMPLE_ID]"),
+    ("sample_id",   r"\b(?:sample|specimen|patient|subject)(?:[_-]?\d+|\s+#?[A-Za-z0-9][A-Za-z0-9_-]*)\b", "[SAMPLE_ID]"),
     ("measurement", r"\b\d+(?:\.\d+)?\s*(?:mg|ml|g|kg|°C|°F|nm|μm|mM)\b", "[MEASUREMENT]"),
     ("api_key",     r"\b(?:AIza[A-Za-z0-9_\-]{35,}|sk-[A-Za-z0-9]{40,}|[A-Za-z0-9_\-]{64,})\b", "[API_KEY]"),
 ]
