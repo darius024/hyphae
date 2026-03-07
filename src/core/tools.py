@@ -442,20 +442,21 @@ def _exec_compare_documents(doc_a, doc_b, topic):
 
     try:
         model = _get_rag_model()
-        cactus_reset(model)
-        response = cactus_complete(
-            model,
-            [
-                {"role": "system", "content": "You are a research assistant. Compare the provided sources concisely with inline citations [doc]."},
-                {"role": "user", "content": (
-                    f"Compare the following two sources on '{topic}'. Include inline citations like [doc_a] and [doc_b].\n\n"
-                    f"--- Source A ({doc_a}) ---\n{context_a}\n\n"
-                    f"--- Source B ({doc_b}) ---\n{context_b}\n\n"
-                    f"Provide similarities, differences, and a one-line takeaway."
-                )},
-            ],
-            max_tokens=512,
-        )
+        with _rag_inference_lock:
+            cactus_reset(model)
+            response = cactus_complete(
+                model,
+                [
+                    {"role": "system", "content": "You are a research assistant. Compare the provided sources concisely with inline citations [doc]."},
+                    {"role": "user", "content": (
+                        f"Compare the following two sources on '{topic}'. Include inline citations like [doc_a] and [doc_b].\n\n"
+                        f"--- Source A ({doc_a}) ---\n{context_a}\n\n"
+                        f"--- Source B ({doc_b}) ---\n{context_b}\n\n"
+                        f"Provide similarities, differences, and a one-line takeaway."
+                    )},
+                ],
+                max_tokens=512,
+            )
         try:
             result = json.loads(response)
             return {"comparison": result.get("response", ""), "source": "local"}
