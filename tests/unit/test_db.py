@@ -165,3 +165,106 @@ class TestNotebookCrud:
             msg = conn.execute("SELECT * FROM messages WHERE notebook_id='nb-del2'").fetchone()
         assert conv is None
         assert msg is None
+
+
+# ── purge_expired_sessions ────────────────────────────────────────────────
+
+class TestPurgeExpiredSessions:
+    """Verify that purge_expired_sessions removes only past-expired rows."""
+
+    def _insert_session(self, expires_at: str) -> str:
+        """Insert a user + session pair; return the session id."""
+        import uuid
+        user_id = str(uuid.uuid4())
+        session_id = str(uuid.uuid4())
+        token = str(uuid.uuid4())
+        with get_conn() as conn:
+            conn.execute(
+                "INSERT INTO users (id, email, password_hash, name) VALUES (?,?,?,?)",
+                (user_id, f"{user_id}@example.com", "hash", "Test"),
+            )
+            conn.execute(
+                "INSERT INTO sessions (id, user_id, token, expires_at) VALUES (?,?,?,?)",
+                (session_id, user_id, token, expires_at),
+            )
+        return session_id
+
+    def test_purges_expired_session(self, _use_temp_db):
+        from notebook.db import purge_expired_sessions
+        expired_id = self._insert_session("2000-01-01T00:00:00Z")
+        deleted = purge_expired_sessions()
+        assert deleted == 1
+        with get_conn() as conn:
+            row = conn.execute(
+                "SELECT id FROM sessions WHERE id=?", (expired_id,)
+            ).fetchone()
+        assert row is None
+
+    def test_keeps_active_session(self, _use_temp_db):
+        from notebook.db import purge_expired_sessions
+        live_id = self._insert_session("2099-12-31T23:59:59Z")
+        deleted = purge_expired_sessions()
+        assert deleted == 0
+        with get_conn() as conn:
+            row = conn.execute(
+                "SELECT id FROM sessions WHERE id=?", (live_id,)
+            ).fetchone()
+        assert row is not None
+
+    def test_mixed_removes_only_expired(self, _use_temp_db):
+        from notebook.db import purge_expired_sessions
+        expired_id = self._insert_session("2000-01-01T00:00:00Z")
+        live_id = self._insert_session("2099-12-31T23:59:59Z")
+        deleted = purge_expired_sessions()
+        assert deleted == 1
+        with get_conn() as conn:
+            remaining = {
+                r[0]
+                for r in conn.execute("SELECT id FROM sessions").fetchall()
+            }
+        assert expired_id not in remaining
+        assert live_id in remaining
+
+    def test_returns_zero_when_nothing_to_purge(self, _use_temp_db):
+        from notebook.db import purge_expired_sessions
+        assert purge_expired_sessions() == 0
+
+
+# ── migration idempotency ─────────────────────────────────────────────────
+
+class TestMigrationIdempotency:
+    """Running init_db() multiple times must never raise or corrupt the schema."""
+
+    def test_init_db_three_times_is_safe(self, _use_temp_db):
+        init_db()
+        init_db()  # third call — all migrations use IF NOT EXISTS / try-except
+
+    def test_sensitivity_column_survives_reinit(self, _use_temp_db):
+        init_db()
+        with get_conn() as conn:
+            cols = {
+                row[1]
+                for row in conn.execute("PRAGMA table_info(sources)").fetchall()
+            }
+        assert "sensitivity" in cols
+
+    def test_org_id_column_survives_reinit(self, _use_temp_db):
+        init_db()
+        with get_conn() as conn:
+            cols = {
+                row[1]
+                for row in conn.execute("PRAGMA table_info(notebooks)").fetchall()
+            }
+        assert "org_id" in cols
+
+    def test_calendar_events_table_survives_reinit(self, _use_temp_db):
+        init_db()
+        with get_conn() as conn:
+            tables = {
+                row[0]
+                for row in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                ).fetchall()
+            }
+        assert "calendar_events" in tables
+
