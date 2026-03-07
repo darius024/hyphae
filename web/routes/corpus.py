@@ -12,6 +12,7 @@ from typing import List
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
+from typing import Annotated, Callable, Optional
 
 from routes.auth import get_current_user
 
@@ -21,8 +22,39 @@ router = APIRouter(prefix="/api", tags=["corpus"])
 class _SensitivityBody(BaseModel):
     level: str = Field(..., pattern=r"^(confidential|shareable)$")
 
-# These are injected by app.py at startup
+# Module-level state populated once at startup by configure().
 CORPUS_DIR: str = ""
+add_file: Optional[Callable] = None
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
+
+_HIDDEN_SUFFIXES = {".bin", ".idx", ".faiss", ".npy", ".pkl"}
+
+
+def configure(corpus_dir: str, add_file_fn):
+    """Called once from app.py to wire dependencies."""
+    global CORPUS_DIR, add_file
+    CORPUS_DIR = corpus_dir
+    add_file = add_file_fn
+
+
+# ── Dependency providers ─────────────────────────────────────────────────
+
+def _get_corpus_dir() -> str:
+    """FastAPI dependency — resolves the configured corpus directory."""
+    if not CORPUS_DIR:
+        raise HTTPException(503, "Corpus not configured")
+    return CORPUS_DIR
+
+
+def _get_add_file() -> Callable:
+    """FastAPI dependency — resolves the add_file ingestion function."""
+    if add_file is None:
+        raise HTTPException(503, "Corpus ingestion not available")
+    return add_file
+
+
+_CorpusDirDep = Annotated[str, Depends(_get_corpus_dir)]
+_AddFileDep = Annotated[Callable, Depends(_get_add_file)]
 
 
 _BAD_FILENAME_CHARS = re.compile(r'[\x00-\x1f\x7f/\\:]')
@@ -43,25 +75,14 @@ def _safe_name(name: str) -> str:
     if clean.split(".")[0].upper() in _RESERVED_NAMES:
         raise HTTPException(400, "Invalid filename")
     return clean
-add_file = None
-MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
-
-_HIDDEN_SUFFIXES = {".bin", ".idx", ".faiss", ".npy", ".pkl"}
 
 
-def configure(corpus_dir: str, add_file_fn):
-    """Called once from app.py to wire dependencies."""
-    global CORPUS_DIR, add_file
-    CORPUS_DIR = corpus_dir
-    add_file = add_file_fn
+def _sensitivity_path(corpus_dir: str) -> Path:
+    return Path(corpus_dir) / ".sensitivity.json"
 
 
-def _sensitivity_path() -> Path:
-    return Path(CORPUS_DIR) / ".sensitivity.json"
-
-
-def _load_sensitivity() -> dict:
-    p = _sensitivity_path()
+def _load_sensitivity(corpus_dir: str) -> dict:
+    p = _sensitivity_path(corpus_dir)
     if p.exists():
         try:
             return json.loads(p.read_text())
@@ -70,19 +91,24 @@ def _load_sensitivity() -> dict:
     return {}
 
 
-def _save_sensitivity(data: dict):
-    p = _sensitivity_path()
+def _save_sensitivity(corpus_dir: str, data: dict):
+    p = _sensitivity_path(corpus_dir)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(data, indent=2))
 
 
 @router.get("/documents")
-async def list_documents(limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0), _user: dict = Depends(get_current_user)):
-    corpus = Path(CORPUS_DIR)
+async def list_documents(
+    corpus_dir: _CorpusDirDep,
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    _user: dict = Depends(get_current_user),
+):
+    corpus = Path(corpus_dir)
     if not corpus.is_dir():
         return {"documents": [], "count": 0, "total": 0}
     originals_dir = corpus / ".originals"
-    sens = _load_sensitivity()
+    sens = _load_sensitivity(corpus_dir)
     all_docs = []
     for f in sorted(corpus.iterdir()):
         if not f.is_file() or f.name.startswith(".") or f.suffix.lower() in _HIDDEN_SUFFIXES:
@@ -100,10 +126,13 @@ async def list_documents(limit: int = Query(100, ge=1, le=500), offset: int = Qu
 
 
 @router.post("/upload")
-async def upload_documents(file: List[UploadFile] = File(...), _user: dict = Depends(get_current_user)):
-    if add_file is None:
-        raise HTTPException(503, "Corpus ingestion not available")
-    originals_dir = Path(CORPUS_DIR) / ".originals"
+async def upload_documents(
+    corpus_dir: _CorpusDirDep,
+    add_file_fn: _AddFileDep,
+    file: List[UploadFile] = File(...),
+    _user: dict = Depends(get_current_user),
+):
+    originals_dir = Path(corpus_dir) / ".originals"
     originals_dir.mkdir(parents=True, exist_ok=True)
     results = []
     for f in file:
@@ -118,7 +147,7 @@ async def upload_documents(file: List[UploadFile] = File(...), _user: dict = Dep
             tmp.write(raw_bytes)
             tmp_path = tmp.name
         try:
-            success = add_file(tmp_path, dest_name=Path(f.filename).stem + ".txt")
+            success = add_file_fn(tmp_path, dest_name=Path(f.filename).stem + ".txt")
             if success and suffix == ".pdf":
                 (originals_dir / f.filename).write_bytes(raw_bytes)
             results.append({"filename": f.filename, "added": bool(success)})
@@ -128,16 +157,16 @@ async def upload_documents(file: List[UploadFile] = File(...), _user: dict = Dep
 
 
 @router.get("/documents/{name}")
-async def preview_document(name: str, _user: dict = Depends(get_current_user)):
+async def preview_document(name: str, corpus_dir: _CorpusDirDep, _user: dict = Depends(get_current_user)):
     name = _safe_name(name)
-    path = Path(CORPUS_DIR) / name
+    path = Path(corpus_dir) / name
     if not path.exists():
         raise HTTPException(404, f"Not found: {name}")
     try:
         text = path.read_text(errors="replace")
     except Exception as exc:
         raise HTTPException(500, str(exc))
-    originals_dir = Path(CORPUS_DIR) / ".originals"
+    originals_dir = Path(corpus_dir) / ".originals"
     has_pdf = (originals_dir / (path.stem + ".pdf")).exists()
     return {
         "name": name,
@@ -149,9 +178,9 @@ async def preview_document(name: str, _user: dict = Depends(get_current_user)):
 
 
 @router.get("/documents/{name}/raw")
-async def raw_document(name: str, _user: dict = Depends(get_current_user)):
+async def raw_document(name: str, corpus_dir: _CorpusDirDep, _user: dict = Depends(get_current_user)):
     name = _safe_name(name)
-    originals_dir = Path(CORPUS_DIR) / ".originals"
+    originals_dir = Path(corpus_dir) / ".originals"
     pdf_path = originals_dir / name
     if pdf_path.exists() and pdf_path.suffix.lower() == ".pdf":
         return FileResponse(
@@ -159,7 +188,7 @@ async def raw_document(name: str, _user: dict = Depends(get_current_user)):
             media_type="application/pdf",
             headers={"Content-Disposition": f'inline; filename="{name}"'},
         )
-    text_path = Path(CORPUS_DIR) / name
+    text_path = Path(corpus_dir) / name
     if text_path.exists():
         return FileResponse(
             str(text_path),
@@ -170,13 +199,13 @@ async def raw_document(name: str, _user: dict = Depends(get_current_user)):
 
 
 @router.delete("/documents/{name}")
-async def remove_document(name: str, _user: dict = Depends(get_current_user)):
+async def remove_document(name: str, corpus_dir: _CorpusDirDep, _user: dict = Depends(get_current_user)):
     name = _safe_name(name)
-    path = Path(CORPUS_DIR) / name
+    path = Path(corpus_dir) / name
     if not path.exists():
         raise HTTPException(404, f"Not found: {name}")
     path.unlink()
-    originals_dir = Path(CORPUS_DIR) / ".originals"
+    originals_dir = Path(corpus_dir) / ".originals"
     pdf_orig = originals_dir / (path.stem + ".pdf")
     if pdf_orig.exists():
         pdf_orig.unlink()
@@ -184,13 +213,13 @@ async def remove_document(name: str, _user: dict = Depends(get_current_user)):
 
 
 @router.get("/sensitivity")
-async def get_sensitivity(_user: dict = Depends(get_current_user)):
-    return {"tags": _load_sensitivity()}
+async def get_sensitivity(corpus_dir: _CorpusDirDep, _user: dict = Depends(get_current_user)):
+    return {"tags": _load_sensitivity(corpus_dir)}
 
 
 @router.put("/sensitivity/{name}")
-async def set_sensitivity(name: str, body: _SensitivityBody, _user: dict = Depends(get_current_user)):
-    data = _load_sensitivity()
+async def set_sensitivity(name: str, body: _SensitivityBody, corpus_dir: _CorpusDirDep, _user: dict = Depends(get_current_user)):
+    data = _load_sensitivity(corpus_dir)
     data[name] = body.level
-    _save_sensitivity(data)
+    _save_sensitivity(corpus_dir, data)
     return {"name": name, "level": body.level}
