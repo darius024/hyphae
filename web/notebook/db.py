@@ -350,6 +350,23 @@ CREATE TABLE IF NOT EXISTS activity_feed (
 CREATE INDEX IF NOT EXISTS idx_activity_org ON activity_feed(org_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_activity_nb ON activity_feed(notebook_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_activity_user ON activity_feed(user_id, created_at);
+
+-- ════════════════════════════════════════════════════════════════════════
+-- CALENDAR EVENTS
+-- ════════════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS calendar_events (
+    id          TEXT PRIMARY KEY,
+    notebook_id TEXT NOT NULL REFERENCES notebooks(id) ON DELETE CASCADE,
+    title       TEXT NOT NULL,
+    date        TEXT NOT NULL,
+    end_date    TEXT,
+    type        TEXT NOT NULL DEFAULT 'event',
+    note        TEXT,
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_cal_nb ON calendar_events(notebook_id, date);
 """
 
 _FTS_TRIGGERS = """
@@ -385,7 +402,7 @@ def init_db() -> None:
         try:
             conn.execute("ALTER TABLE sources ADD COLUMN sensitivity TEXT NOT NULL DEFAULT 'shareable'")
             conn.commit()
-        except Exception:
+        except sqlite3.OperationalError:
             pass  # column already exists
         
         # Add org_id to notebooks (nullable - null means personal)
@@ -393,7 +410,7 @@ def init_db() -> None:
             conn.execute("ALTER TABLE notebooks ADD COLUMN org_id TEXT REFERENCES organizations(id) ON DELETE SET NULL")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_nb_org ON notebooks(org_id)")
             conn.commit()
-        except Exception:
+        except sqlite3.OperationalError:
             pass
         
         # Add user_id to notebooks (for personal notebooks)
@@ -401,24 +418,9 @@ def init_db() -> None:
             conn.execute("ALTER TABLE notebooks ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE CASCADE")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_nb_user ON notebooks(user_id)")
             conn.commit()
-        except Exception:
+        except sqlite3.OperationalError:
             pass
         
-        # Calendar events table
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS calendar_events (
-                id          TEXT PRIMARY KEY,
-                notebook_id TEXT NOT NULL REFERENCES notebooks(id) ON DELETE CASCADE,
-                title       TEXT NOT NULL,
-                date        TEXT NOT NULL,
-                end_date    TEXT,
-                type        TEXT NOT NULL DEFAULT 'event',
-                note        TEXT,
-                created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
-            )
-        """)
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_cal_nb ON calendar_events(notebook_id, date)")
-        conn.commit()
         _seed_defaults(conn)
         conn.commit()
         log.info("Notebook DB ready at %s", DB_PATH)
@@ -505,15 +507,11 @@ def safe_update(
 
 def purge_expired_sessions() -> int:
     """Delete sessions whose expires_at is in the past. Returns count deleted."""
-    conn = sqlite3.connect(DB_PATH)
-    try:
+    with get_conn() as conn:
         cur = conn.execute(
             "DELETE FROM sessions WHERE expires_at < strftime('%Y-%m-%dT%H:%M:%SZ', 'now')"
         )
-        conn.commit()
         deleted = cur.rowcount
-        if deleted:
-            log.info("Purged %d expired session(s)", deleted)
-        return deleted
-    finally:
-        conn.close()
+    if deleted:
+        log.info("Purged %d expired session(s)", deleted)
+    return deleted
