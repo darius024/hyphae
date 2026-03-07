@@ -10,7 +10,7 @@ class TestSanitiseForCloud:
         messages = [{"role": "user", "content": "Check /data/experiment_1.csv for results"}]
         result = sanitise_for_cloud(messages)
         assert "/data/experiment_1.csv" not in result[0]["content"]
-        assert "[REDACTED]" in result[0]["content"]
+        assert "[PATH]" in result[0]["content"]
 
     def test_strips_measurements(self):
         messages = [{"role": "user", "content": "The sample measured 3.5 mg at 25.0 °C"}]
@@ -41,7 +41,7 @@ class TestSanitiseForCloud:
         messages = [{"role": "user", "content": "Contact researcher at jane.doe@labcorp.org"}]
         result = sanitise_for_cloud(messages)
         assert "jane.doe@labcorp.org" not in result[0]["content"]
-        assert "[REDACTED]" in result[0]["content"]
+        assert "[EMAIL]" in result[0]["content"]
 
     def test_strips_urls(self):
         messages = [{"role": "user", "content": "Data at https://internal.lab.io/exp/42"}]
