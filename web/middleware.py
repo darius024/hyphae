@@ -6,7 +6,7 @@ import logging
 import re
 import time
 import threading
-from collections import defaultdict
+from collections import defaultdict, deque
 from typing import Sequence
 
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -47,7 +47,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self._strict_rpm = strict_rpm
         self._cleanup_interval = cleanup_interval
 
-        self._hits: dict[str, list[float]] = defaultdict(list)
+        self._hits: dict[str, deque[float]] = defaultdict(deque)
         self._lock = threading.Lock()
         self._last_cleanup = time.monotonic()
 
@@ -69,10 +69,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 return forwarded.split(",")[0].strip()
         return peer or "unknown"
 
-    def _prune(self, timestamps: list[float], cutoff: float) -> list[float]:
+    def _prune(self, timestamps: deque[float], cutoff: float) -> deque[float]:
         """Remove entries older than *cutoff* (in-place for efficiency)."""
         while timestamps and timestamps[0] < cutoff:
-            timestamps.pop(0)
+            timestamps.popleft()
         return timestamps
 
     def _maybe_cleanup(self):
