@@ -8,8 +8,10 @@ Hybrid ranking: normalised cosine + BM25 score merged via Reciprocal Rank Fusion
 from __future__ import annotations
 
 import logging
+import os
 import re
 import threading
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -21,8 +23,14 @@ log = logging.getLogger(__name__)
 FAISS_DIR = Path(__file__).parents[1] / "indexes"
 FAISS_DIR.mkdir(exist_ok=True)
 
+# Maximum seconds an index may sit idle in memory before being evicted.
+# Tune via FAISS_INDEX_TTL env var; 0 disables eviction.
+_INDEX_TTL = int(os.environ.get("FAISS_INDEX_TTL", "300"))
+_EVICT_INTERVAL = max(30, _INDEX_TTL // 2) if _INDEX_TTL else 0
+
 _indexes: Dict[str, Any] = {}
 _id_maps: Dict[str, List[str]] = {}
+_last_access: Dict[str, float] = {}  # notebook_id -> monotonic timestamp of last use
 
 # Per-notebook RLocks prevent two concurrent requests from simultaneously
 # creating duplicate index objects or corrupting FAISS .index files on disk.
@@ -41,6 +49,46 @@ def _get_nb_lock(notebook_id: str) -> threading.RLock:
         if notebook_id not in _nb_locks:
             _nb_locks[notebook_id] = threading.RLock()
         return _nb_locks[notebook_id]
+
+
+def _evict_idle_indexes() -> None:
+    """Remove in-memory indexes that have not been accessed within _INDEX_TTL seconds.
+
+    Acquires each per-notebook lock individually so active notebooks are not blocked.
+    """
+    if not _INDEX_TTL:
+        return
+    cutoff = time.monotonic() - _INDEX_TTL
+    # Snapshot current keys to avoid mutating the dict during iteration.
+    with _nb_locks_mu:
+        candidates = list(_last_access.keys())
+    for nb_id in candidates:
+        last = _last_access.get(nb_id, 0)
+        if last < cutoff:
+            with _get_nb_lock(nb_id):
+                # Re-check under the lock in case it was just accessed.
+                if _last_access.get(nb_id, 0) < cutoff:
+                    _indexes.pop(nb_id, None)
+                    _id_maps.pop(nb_id, None)
+                    _last_access.pop(nb_id, None)
+                    log.debug("Evicted idle FAISS index for notebook %s", nb_id)
+
+
+def _eviction_loop() -> None:
+    """Background daemon thread that periodically calls _evict_idle_indexes."""
+    while True:
+        time.sleep(_EVICT_INTERVAL)
+        try:
+            _evict_idle_indexes()
+        except Exception:
+            log.exception("Error during FAISS index eviction")
+
+
+if _EVICT_INTERVAL:
+    _eviction_thread = threading.Thread(
+        target=_eviction_loop, daemon=True, name="faiss-eviction"
+    )
+    _eviction_thread.start()
 
 
 def _faiss():
@@ -67,6 +115,7 @@ def _idmap_path(notebook_id: str) -> Path:
 
 def get_index(notebook_id: str):
     with _get_nb_lock(notebook_id):
+        _last_access[notebook_id] = time.monotonic()
         if notebook_id not in _indexes:
             faiss = _faiss()
             if faiss is None:
@@ -210,5 +259,6 @@ def delete_notebook_index(notebook_id: str) -> None:
     with _get_nb_lock(notebook_id):
         _indexes.pop(notebook_id, None)
         _id_maps.pop(notebook_id, None)
+        _last_access.pop(notebook_id, None)
         _index_path(notebook_id).unlink(missing_ok=True)
         _idmap_path(notebook_id).unlink(missing_ok=True)
