@@ -153,6 +153,44 @@ ALL_TOOLS = [
 LOCAL_ONLY_TOOLS = frozenset({"search_papers", "summarise_notes", "create_note", "list_documents", "compare_documents", "read_document", "search_text"})
 CLOUD_SAFE_TOOLS = {"generate_hypothesis", "search_literature"}
 
+# Per-tool description hints injected by the routing engine to reduce
+# FunctionGemma confusion between semantically similar tools.
+TOOL_DESCRIPTION_HINTS: dict[str, str] = {
+    "set_alarm":       (
+        " Use ONLY to alert at a specific clock time (e.g. 7:30 AM, 10 PM). "
+        "Requires 'hour' (integer, 24h) and 'minute' (integer). "
+        "NOT for countdowns — use set_timer for that."
+    ),
+    "set_timer":       (
+        " Use ONLY for a countdown duration (e.g. '5 minutes', '20 minutes'). "
+        "Requires 'minutes' (integer). "
+        "NOT for a specific clock time — use set_alarm for that."
+    ),
+    "send_message":    (
+        " Use ONLY to send a direct text message to a named person. "
+        "Requires 'recipient' (string, person's name) and 'message' (string, the text to send). "
+        "NOT for creating reminders — use create_reminder for that."
+    ),
+    "create_reminder": (
+        " Use ONLY to create a personal reminder with a title and a time. "
+        "Requires 'title' (string, what to remember) and 'time' (string, e.g. '3:00 PM'). "
+        "NOT for sending messages to people — use send_message for that."
+    ),
+    "search_contacts": (
+        " Use ONLY to find/look up a person in the contacts list by name. "
+        "Requires 'query' (string, the name to search for)."
+    ),
+    "play_music":      (
+        " Use ONLY to play a specific song, artist, or playlist. "
+        "Requires 'song' (string: set this to exactly the genre/song/playlist phrase the user named, "
+        "e.g. 'jazz', 'classical music', 'lo-fi beats', 'summer hits', 'Bohemian Rhapsody')."
+    ),
+    "get_weather":     (
+        " Use ONLY to get the current weather or forecast for a city. "
+        "Requires 'location' (string, city name)."
+    ),
+}
+
 
 # Serialises cactus_reset + cactus_complete so concurrent summarise_notes
 # calls don't reset the shared _rag_model while another call is mid-inference.
