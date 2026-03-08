@@ -151,7 +151,7 @@ ALL_TOOLS = [
 ]
 
 LOCAL_ONLY_TOOLS = frozenset({"search_papers", "summarise_notes", "create_note", "list_documents", "compare_documents", "read_document", "search_text"})
-CLOUD_SAFE_TOOLS = {"generate_hypothesis", "search_literature"}
+CLOUD_SAFE_TOOLS = frozenset({"generate_hypothesis", "search_literature"})
 
 # Per-tool description hints injected by the routing engine to reduce
 # FunctionGemma confusion between semantically similar tools.
