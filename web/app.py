@@ -178,7 +178,7 @@ app.add_middleware(
 _GLOBAL_RPM = int(os.environ.get("RATE_LIMIT_RPM", "120"))
 _AUTH_RPM = int(os.environ.get("RATE_LIMIT_AUTH_RPM", "10"))
 
-from middleware import RequestLoggingMiddleware
+from middleware import RequestLoggingMiddleware, NoCacheStatic
 
 if _GLOBAL_RPM > 0:
     from middleware import RateLimitMiddleware
@@ -190,17 +190,6 @@ if _GLOBAL_RPM > 0:
     )
 
 app.add_middleware(RequestLoggingMiddleware)
-
-# ── No-cache middleware for static assets (dev convenience) ───────────────
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request as _Req
-
-class NoCacheStatic(BaseHTTPMiddleware):
-    async def dispatch(self, request: _Req, call_next):
-        response = await call_next(request)
-        if request.url.path.startswith("/static/"):
-            response.headers["Cache-Control"] = "no-store"
-        return response
 
 app.add_middleware(NoCacheStatic)
 

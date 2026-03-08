@@ -151,3 +151,13 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
         response.headers["X-Response-Time"] = f"{duration_ms:.1f}ms"
         return response
+
+
+class NoCacheStatic(BaseHTTPMiddleware):
+    """Add Cache-Control: no-store to all static-asset responses (dev convenience)."""
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/static/"):
+            response.headers["Cache-Control"] = "no-store"
+        return response
