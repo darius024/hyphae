@@ -196,6 +196,23 @@ TOOL_DESCRIPTION_HINTS: dict[str, str] = {
 # calls don't reset the shared _rag_model while another call is mid-inference.
 _rag_inference_lock = threading.Lock()
 
+# Lazy genai.Client singleton — avoids constructing a new HTTP client on
+# every cloud tool call, which would open (and leak) a socket each time.
+_genai_client = None
+_genai_client_lock = threading.Lock()
+
+
+def _get_cloud_client():
+    """Return a cached google.genai.Client, initialised once per process."""
+    global _genai_client
+    if _genai_client is not None:
+        return _genai_client
+    with _genai_client_lock:
+        if _genai_client is None:
+            from google import genai
+            _genai_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+    return _genai_client
+
 
 # ── Tool execution ──────────────────────────────────────────────────────
 
@@ -356,10 +373,7 @@ def _exec_list_documents():
 
 
 def _exec_generate_hypothesis(context, field="general science"):
-    from google import genai
-    from google.genai import types
-
-    client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+    client = _get_cloud_client()
     prompt = (
         f"You are a research scientist in {field}. "
         f"Based on the following abstract observation, propose 2-3 testable hypotheses.\n\n"
@@ -379,9 +393,7 @@ def _exec_generate_hypothesis(context, field="general science"):
 
 
 def _exec_search_literature(query):
-    from google import genai
-
-    client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+    client = _get_cloud_client()
     prompt = (
         f"You are a scientific literature search assistant. "
         f"For the query below, list 3-5 relevant published papers or known research findings "
