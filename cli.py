@@ -108,7 +108,7 @@ def interactive_text():
 
 def interactive_voice():
     """Voice mode — speak queries, Whisper transcribes, tools execute."""
-    from voice import listen_and_transcribe
+    from core.voice import listen_and_transcribe
 
     print("\n  Hyphae — Voice Mode")
     print("  Press Enter to speak, 'quit' to exit.\n")
