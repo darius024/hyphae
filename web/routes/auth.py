@@ -17,6 +17,8 @@ from typing import Optional
 import bcrypt
 from fastapi import APIRouter, HTTPException, Header, Depends
 from pydantic import BaseModel, Field
+import os
+import re as _re
 
 from notebook.db import get_conn
 
@@ -26,15 +28,21 @@ router = APIRouter()
 
 # ── Models ────────────────────────────────────────────────────────────────
 
+# Maximum concurrent sessions kept per user (oldest are pruned on login).
+_MAX_SESSIONS_PER_USER = int(os.environ.get("MAX_SESSIONS_PER_USER", "10"))
+
+_EMAIL_RE = _re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
 class SignupRequest(BaseModel):
-    email: str = Field(..., min_length=3)
-    password: str = Field(..., min_length=8)
+    email: str = Field(..., min_length=3, max_length=254)
+    password: str = Field(..., min_length=8, max_length=72)  # bcrypt hard limit
     name: str = Field(..., min_length=1, max_length=200)
 
 
 class LoginRequest(BaseModel):
-    email: str = Field(..., min_length=3)
-    password: str = Field(..., min_length=1)
+    email: str = Field(..., min_length=3, max_length=254)
+    password: str = Field(..., min_length=1, max_length=72)
 
 
 class UserResponse(BaseModel):
@@ -111,6 +119,8 @@ require_user = Depends(get_current_user)
 async def signup(req: SignupRequest):
     """Create a new user account."""
     user_id = secrets.token_hex(16)
+    if not _EMAIL_RE.match(req.email):
+        raise HTTPException(400, "Invalid email address")
     password_hash = hash_password(req.password)
 
     with get_conn() as conn:
@@ -173,14 +183,22 @@ async def login(req: LoginRequest):
             (session_id, user_id, token, expires_at),
         )
 
+        # Prune oldest sessions beyond the per-user cap.
+        if _MAX_SESSIONS_PER_USER > 0:
+            conn.execute("""
+                DELETE FROM sessions
+                WHERE user_id = ? AND id NOT IN (
+                    SELECT id FROM sessions WHERE user_id = ?
+                    ORDER BY expires_at DESC
+                    LIMIT ?
+                )
+            """, (user_id, user_id, _MAX_SESSIONS_PER_USER))
+
         user = UserResponse(
-            id=user_id,
-            email=email,
-            name=name,
-            avatar_url=avatar_url,
-            created_at=created_at
+            id=user_id, email=email, name=name,
+            avatar_url=avatar_url, created_at=created_at,
         )
-        
+
         return LoginResponse(token=token, user=user)
 
 
@@ -189,12 +207,9 @@ async def logout(authorization: Optional[str] = Header(None)):
     """Logout (invalidate session)."""
     if not authorization or not authorization.startswith("Bearer "):
         return {"ok": True}
-    
-    token = authorization.replace("Bearer ", "")
-    
+    token = authorization[7:]  # consistent with _resolve_token
     with get_conn() as conn:
-        conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
-    
+        conn.execute("DELETE FROM sessions WHERE token=?", (token,))
     return {"ok": True}
 
 
