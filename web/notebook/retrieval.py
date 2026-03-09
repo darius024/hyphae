@@ -141,7 +141,10 @@ def _save_index(notebook_id: str) -> None:
         if faiss is None or _indexes.get(notebook_id) is None:
             return
         index, id_map = _indexes[notebook_id], _id_maps[notebook_id]
-        faiss.write_index(index, str(_index_path(notebook_id)))
+        final_path = _index_path(notebook_id)
+        tmp_path = final_path.with_suffix(".tmp")
+        faiss.write_index(index, str(tmp_path))
+        tmp_path.replace(final_path)
         _idmap_path(notebook_id).write_text("\n".join(id_map))
 
 

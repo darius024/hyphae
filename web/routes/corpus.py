@@ -6,6 +6,7 @@ import json
 import os
 import re
 import tempfile
+import threading
 from pathlib import Path
 from typing import List
 
@@ -28,6 +29,7 @@ add_file: Optional[Callable] = None
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 
 _HIDDEN_SUFFIXES = {".bin", ".idx", ".faiss", ".npy", ".pkl"}
+_sensitivity_lock = threading.Lock()
 
 
 def configure(corpus_dir: str, add_file_fn):
@@ -219,7 +221,8 @@ async def get_sensitivity(corpus_dir: _CorpusDirDep, _user: dict = Depends(get_c
 
 @router.put("/sensitivity/{name}")
 async def set_sensitivity(name: str, body: _SensitivityBody, corpus_dir: _CorpusDirDep, _user: dict = Depends(get_current_user)):
-    data = _load_sensitivity(corpus_dir)
-    data[name] = body.level
-    _save_sensitivity(corpus_dir, data)
+    with _sensitivity_lock:
+        data = _load_sensitivity(corpus_dir)
+        data[name] = body.level
+        _save_sensitivity(corpus_dir, data)
     return {"name": name, "level": body.level}

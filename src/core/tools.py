@@ -10,16 +10,19 @@ from cactus import cactus_init, cactus_rag_query, cactus_complete, cactus_reset
 NOTES_DIR = os.path.join(CORPUS_DIR, "notes")
 
 _rag_model = None
+_rag_init_lock = threading.Lock()
 
 
 def _get_rag_model():
     global _rag_model
     if _rag_model is None:
-        os.makedirs(CORPUS_DIR, exist_ok=True)
-        _rag_model = cactus_init(
-            RAG_MODEL_PATH,
-            corpus_dir=CORPUS_DIR,
-        )
+        with _rag_init_lock:
+            if _rag_model is None:  # re-check after acquiring lock
+                os.makedirs(CORPUS_DIR, exist_ok=True)
+                _rag_model = cactus_init(
+                    RAG_MODEL_PATH,
+                    corpus_dir=CORPUS_DIR,
+                )
     return _rag_model
 
 

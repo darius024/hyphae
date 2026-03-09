@@ -235,7 +235,7 @@ async def list_sources(nb_id: str, limit: int = Query(100, ge=1, le=500), offset
 @router.post("/notebooks/{nb_id}/upload", status_code=202)
 async def upload_source(nb_id: str, background_tasks: BackgroundTasks, file: UploadFile = File(...), user: dict = Depends(get_current_user)):
     _nb_or_404(nb_id, user_id=user["id"])
-    filename = Path(file.filename).name if file.filename else "file"
+    filename = _safe_filename(file.filename or "file")
     ext = Path(filename).suffix.lower().lstrip(".")
     src_type = ext if ext in ("pdf", "txt", "md") else "txt"
 
