@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import logging
 import os
+import threading
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -24,26 +25,30 @@ log = logging.getLogger(__name__)
 # If unset, a warning is logged and tokens are stored as-is (development only).
 
 _fernet = None
+_fernet_lock = threading.Lock()
 
 def _get_fernet():
     """Return a lazily-initialised Fernet instance, or None if unconfigured."""
     global _fernet
     if _fernet is not None:
         return _fernet
-    raw_key = os.environ.get("TOKEN_ENCRYPTION_KEY")
-    if not raw_key:
-        log.warning(
-            "TOKEN_ENCRYPTION_KEY is not set — OAuth tokens will be stored in plaintext. "
-            "Set this variable in production."
-        )
-        return None
-    try:
-        from cryptography.fernet import Fernet  # type: ignore
-        _fernet = Fernet(raw_key.encode())
-        return _fernet
-    except Exception as exc:
-        log.error("Failed to initialise token encryption: %s", exc)
-        return None
+    with _fernet_lock:
+        if _fernet is not None:  # re-check after acquiring lock
+            return _fernet
+        raw_key = os.environ.get("TOKEN_ENCRYPTION_KEY")
+        if not raw_key:
+            log.warning(
+                "TOKEN_ENCRYPTION_KEY is not set — OAuth tokens will be stored in plaintext. "
+                "Set this variable in production."
+            )
+            return None
+        try:
+            from cryptography.fernet import Fernet  # type: ignore
+            _fernet = Fernet(raw_key.encode())
+            return _fernet
+        except Exception as exc:
+            log.error("Failed to initialise token encryption: %s", exc)
+            return None
 
 
 def _encrypt_token(value: Optional[str]) -> Optional[str]:
@@ -113,8 +118,8 @@ async def list_deadlines(
     """List deadlines, optionally filtered."""
     until = (datetime.now(timezone.utc) + timedelta(days=upcoming_days)).isoformat()
 
-    query = "SELECT * FROM deadlines WHERE due_date <= ?"
-    params: list = [until]
+    query = "SELECT * FROM deadlines WHERE due_date <= ? AND user_id = ?"
+    params: list = [until, _user["id"]]
 
     if notebook_id:
         query += " AND notebook_id = ?"
@@ -137,9 +142,9 @@ async def create_deadline(body: DeadlineCreate, _user: dict = Depends(get_curren
     dl_id = str(uuid.uuid4())
     with get_conn() as conn:
         conn.execute("""
-            INSERT INTO deadlines (id, notebook_id, source_id, title, due_date, priority, note)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (dl_id, body.notebook_id, body.source_id, body.title, body.due_date, body.priority, body.note))
+            INSERT INTO deadlines (id, notebook_id, source_id, title, due_date, priority, note, user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (dl_id, body.notebook_id, body.source_id, body.title, body.due_date, body.priority, body.note, _user["id"]))
 
     return {"id": dl_id, "title": body.title, "due_date": body.due_date}
 
@@ -151,6 +156,8 @@ async def update_deadline(dl_id: str, body: DeadlineUpdate, _user: dict = Depend
         existing = conn.execute("SELECT * FROM deadlines WHERE id=?", (dl_id,)).fetchone()
         if not existing:
             raise HTTPException(404, "Deadline not found")
+        if existing["user_id"] and existing["user_id"] != _user["id"]:
+            raise HTTPException(403, "Access denied")
 
         _ALLOWED = ("title", "due_date", "priority", "status", "note")
         fields = {f: getattr(body, f) for f in _ALLOWED if getattr(body, f, None) is not None}
@@ -164,6 +171,9 @@ async def update_deadline(dl_id: str, body: DeadlineUpdate, _user: dict = Depend
 async def delete_deadline(dl_id: str, _user: dict = Depends(get_current_user)):
     """Delete a deadline."""
     with get_conn() as conn:
+        existing = conn.execute("SELECT user_id FROM deadlines WHERE id=?", (dl_id,)).fetchone()
+        if existing and existing["user_id"] and existing["user_id"] != _user["id"]:
+            raise HTTPException(403, "Access denied")
         conn.execute("DELETE FROM deadlines WHERE id=?", (dl_id,))
     return {"deleted": dl_id}
 
@@ -175,14 +185,16 @@ async def create_reminder(body: ReminderCreate, _user: dict = Depends(get_curren
     """Create a reminder for a deadline."""
     rem_id = str(uuid.uuid4())
     with get_conn() as conn:
-        dl = conn.execute("SELECT id FROM deadlines WHERE id=?", (body.deadline_id,)).fetchone()
+        dl = conn.execute("SELECT id, user_id FROM deadlines WHERE id=?", (body.deadline_id,)).fetchone()
         if not dl:
             raise HTTPException(404, "Deadline not found")
+        if dl["user_id"] and dl["user_id"] != _user["id"]:
+            raise HTTPException(403, "Access denied")
 
         conn.execute("""
-            INSERT INTO reminders (id, deadline_id, remind_at)
-            VALUES (?, ?, ?)
-        """, (rem_id, body.deadline_id, body.remind_at))
+            INSERT INTO reminders (id, deadline_id, user_id, remind_at)
+            VALUES (?, ?, ?, ?)
+        """, (rem_id, body.deadline_id, _user["id"], body.remind_at))
 
     return {"id": rem_id, "deadline_id": body.deadline_id, "remind_at": body.remind_at}
 
@@ -196,9 +208,9 @@ async def get_pending_reminders(_user: dict = Depends(get_current_user)):
             SELECT r.*, d.title as deadline_title, d.due_date
             FROM reminders r
             JOIN deadlines d ON r.deadline_id = d.id
-            WHERE r.sent = 0 AND r.remind_at <= ?
+            WHERE r.sent = 0 AND r.remind_at <= ? AND r.user_id = ?
             ORDER BY r.remind_at
-        """, (now,)).fetchall()
+        """, (now, _user["id"])).fetchall()
 
     return {"reminders": [dict(r) for r in rows]}
 

@@ -194,6 +194,7 @@ CREATE TABLE IF NOT EXISTS deadlines (
 
 CREATE INDEX IF NOT EXISTS idx_deadlines_due ON deadlines(due_date);
 CREATE INDEX IF NOT EXISTS idx_deadlines_nb ON deadlines(notebook_id);
+CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conversation_id);
 
 CREATE TABLE IF NOT EXISTS reminders (
     id          TEXT PRIMARY KEY,
@@ -417,6 +418,14 @@ def init_db() -> None:
         try:
             conn.execute("ALTER TABLE notebooks ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE CASCADE")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_nb_user ON notebooks(user_id)")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
+
+        # Add user_id to deadlines (for ownership checks)
+        try:
+            conn.execute("ALTER TABLE deadlines ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE CASCADE")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_deadlines_user ON deadlines(user_id)")
             conn.commit()
         except sqlite3.OperationalError:
             pass
