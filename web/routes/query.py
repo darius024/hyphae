@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import collections
 import json
 import logging
 import os
@@ -162,7 +163,7 @@ _CLOUD_KEYWORDS = {
     "literature", "published", "papers", "citations", "cite", "prior",
 }
 
-_privacy_log: list = []
+_privacy_log: collections.deque = collections.deque(maxlen=1000)
 
 
 @router.post("/classify")
@@ -174,7 +175,7 @@ async def api_classify(body: _MessageBody, _user: dict = Depends(get_current_use
 
 @router.get("/privacy-log")
 async def api_privacy_log(_user: dict = Depends(get_current_user)):
-    return {"entries": _privacy_log[-100:]}
+    return {"entries": list(_privacy_log)[-100:]}
 
 
 def _log_privacy_event(query: str, tools_used: list, data_local: bool, routing_ms: float):
@@ -269,7 +270,7 @@ def _to_wav(input_path: str) -> str:
     try:
         subprocess.run(
             ["ffmpeg", "-y", "-i", input_path, "-ar", "16000", "-ac", "1", "-sample_fmt", "s16", wav_path],
-            check=True, capture_output=True,
+            check=True, capture_output=True, timeout=30,
         )
         return wav_path
     except Exception as exc:
@@ -279,9 +280,13 @@ def _to_wav(input_path: str) -> str:
 
 @router.post("/voice")
 async def api_voice(audio: UploadFile = File(...), _user: dict = Depends(get_current_user)):
+    MAX_AUDIO_BYTES = 25 * 1024 * 1024  # 25 MB
+    raw = await audio.read(MAX_AUDIO_BYTES + 1)
+    if len(raw) > MAX_AUDIO_BYTES:
+        raise HTTPException(413, "Audio file too large (max 25 MB)")
     suffix = Path(audio.filename).suffix if audio.filename else ".webm"
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        tmp.write(await audio.read())
+        tmp.write(raw)
         tmp_path = tmp.name
 
     wav_path = _to_wav(tmp_path)
