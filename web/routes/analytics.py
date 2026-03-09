@@ -54,6 +54,7 @@ async def record_usage_event(body: UsageEvent, _user: dict = Depends(get_current
         route=body.route,
         tools_used=body.tools_used,
         latency_ms=body.latency_ms,
+        user_id=_user["id"],
     )
     return {"id": event_id}
 
@@ -62,27 +63,28 @@ async def record_usage_event(body: UsageEvent, _user: dict = Depends(get_current
 async def get_analytics_dashboard(days: int = Query(default=30, ge=1, le=365), _user: dict = Depends(get_current_user)):
     """Get analytics dashboard data."""
     since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    uid = _user["id"]
 
     with get_conn() as conn:
         events_by_type = conn.execute("""
             SELECT event_type, COUNT(*) as count FROM usage_events
-            WHERE created_at >= ? GROUP BY event_type
-        """, (since,)).fetchall()
+            WHERE created_at >= ? AND user_id = ? GROUP BY event_type
+        """, (since, uid)).fetchall()
 
         events_per_day = conn.execute("""
             SELECT date(created_at) as day, COUNT(*) as count FROM usage_events
-            WHERE created_at >= ? GROUP BY day ORDER BY day
-        """, (since,)).fetchall()
+            WHERE created_at >= ? AND user_id = ? GROUP BY day ORDER BY day
+        """, (since, uid)).fetchall()
 
         route_dist = conn.execute("""
             SELECT route, COUNT(*) as count FROM usage_events
-            WHERE created_at >= ? AND route IS NOT NULL GROUP BY route
-        """, (since,)).fetchall()
+            WHERE created_at >= ? AND user_id = ? AND route IS NOT NULL GROUP BY route
+        """, (since, uid)).fetchall()
 
         tool_usage = conn.execute("""
             SELECT tools_used FROM usage_events
-            WHERE created_at >= ? AND tools_used IS NOT NULL
-        """, (since,)).fetchall()
+            WHERE created_at >= ? AND user_id = ? AND tools_used IS NOT NULL
+        """, (since, uid)).fetchall()
 
         tool_counts: dict[str, int] = {}
         for row in tool_usage:
@@ -92,12 +94,12 @@ async def get_analytics_dashboard(days: int = Query(default=30, ge=1, le=365), _
 
         avg_latency = conn.execute("""
             SELECT AVG(latency_ms) as avg_ms FROM usage_events
-            WHERE created_at >= ? AND latency_ms IS NOT NULL
-        """, (since,)).fetchone()
+            WHERE created_at >= ? AND user_id = ? AND latency_ms IS NOT NULL
+        """, (since, uid)).fetchone()
 
         total = conn.execute("""
-            SELECT COUNT(*) as total FROM usage_events WHERE created_at >= ?
-        """, (since,)).fetchone()
+            SELECT COUNT(*) as total FROM usage_events WHERE created_at >= ? AND user_id = ?
+        """, (since, uid)).fetchone()
 
     return {
         "period_days": days,
