@@ -26,6 +26,16 @@ def configure(*, gemini_fn):
     _gemini_client_fn = gemini_fn
 
 
+def _check_nb_owner(nb_id: str, user_id: str) -> None:
+    """Raise 404 if notebook not found, 403 if it belongs to a different user."""
+    with get_conn() as conn:
+        nb = conn.execute("SELECT user_id FROM notebooks WHERE id=?", (nb_id,)).fetchone()
+    if nb is None:
+        raise HTTPException(404, "Notebook not found")
+    if nb["user_id"] and nb["user_id"] != user_id:
+        raise HTTPException(403, "Access denied")
+
+
 # ── Pydantic models ──────────────────────────────────────────────────────
 
 class NoteCreate(BaseModel):
@@ -48,6 +58,7 @@ class WritingAssistRequest(BaseModel):
 @router.get("/notebooks/{nb_id}/notes")
 async def list_notes(nb_id: str, _user: dict = Depends(get_current_user)):
     """List all notes in a notebook."""
+    _check_nb_owner(nb_id, _user["id"])
     with get_conn() as conn:
         rows = conn.execute("""
             SELECT id, title, created_at, updated_at FROM notes
@@ -59,6 +70,7 @@ async def list_notes(nb_id: str, _user: dict = Depends(get_current_user)):
 @router.post("/notebooks/{nb_id}/notes", status_code=201)
 async def create_note(nb_id: str, body: NoteCreate, _user: dict = Depends(get_current_user)):
     """Create a new note."""
+    _check_nb_owner(nb_id, _user["id"])
     note_id = str(uuid.uuid4())
     with get_conn() as conn:
         conn.execute("""
@@ -76,6 +88,7 @@ async def create_note(nb_id: str, body: NoteCreate, _user: dict = Depends(get_cu
 @router.get("/notebooks/{nb_id}/notes/{note_id}")
 async def get_note(nb_id: str, note_id: str, _user: dict = Depends(get_current_user)):
     """Get a note with its content."""
+    _check_nb_owner(nb_id, _user["id"])
     with get_conn() as conn:
         row = conn.execute("""
             SELECT * FROM notes WHERE id = ? AND notebook_id = ?
@@ -88,6 +101,7 @@ async def get_note(nb_id: str, note_id: str, _user: dict = Depends(get_current_u
 @router.patch("/notebooks/{nb_id}/notes/{note_id}")
 async def update_note(nb_id: str, note_id: str, body: NoteUpdate, _user: dict = Depends(get_current_user)):
     """Update a note and create a new version."""
+    _check_nb_owner(nb_id, _user["id"])
     with get_conn() as conn:
         existing = conn.execute(
             "SELECT * FROM notes WHERE id = ? AND notebook_id = ?", (note_id, nb_id)
@@ -119,6 +133,7 @@ async def update_note(nb_id: str, note_id: str, body: NoteUpdate, _user: dict = 
 @router.delete("/notebooks/{nb_id}/notes/{note_id}")
 async def delete_note(nb_id: str, note_id: str, _user: dict = Depends(get_current_user)):
     """Delete a note and all its versions."""
+    _check_nb_owner(nb_id, _user["id"])
     with get_conn() as conn:
         conn.execute("DELETE FROM notes WHERE id = ? AND notebook_id = ?", (note_id, nb_id))
     return {"deleted": note_id}
@@ -129,6 +144,7 @@ async def delete_note(nb_id: str, note_id: str, _user: dict = Depends(get_curren
 @router.get("/notebooks/{nb_id}/notes/{note_id}/versions")
 async def list_note_versions(nb_id: str, note_id: str, _user: dict = Depends(get_current_user)):
     """List all versions of a note."""
+    _check_nb_owner(nb_id, _user["id"])
     with get_conn() as conn:
         note = conn.execute(
             "SELECT id FROM notes WHERE id = ? AND notebook_id = ?", (note_id, nb_id)
@@ -147,6 +163,7 @@ async def list_note_versions(nb_id: str, note_id: str, _user: dict = Depends(get
 @router.get("/notebooks/{nb_id}/notes/{note_id}/versions/{version_num}")
 async def get_note_version(nb_id: str, note_id: str, version_num: int, _user: dict = Depends(get_current_user)):
     """Get a specific version of a note."""
+    _check_nb_owner(nb_id, _user["id"])
     with get_conn() as conn:
         row = conn.execute("""
             SELECT nv.* FROM note_versions nv
@@ -161,6 +178,7 @@ async def get_note_version(nb_id: str, note_id: str, version_num: int, _user: di
 @router.post("/notebooks/{nb_id}/notes/{note_id}/restore/{version_num}")
 async def restore_note_version(nb_id: str, note_id: str, version_num: int, _user: dict = Depends(get_current_user)):
     """Restore a note to a previous version (creates new version with old content)."""
+    _check_nb_owner(nb_id, _user["id"])
     with get_conn() as conn:
         old_ver = conn.execute("""
             SELECT nv.content FROM note_versions nv
