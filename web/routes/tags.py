@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import sqlite3
 import uuid
 from typing import Optional, List
 
@@ -57,7 +58,7 @@ async def create_tag(body: TagCreate, _user: dict = Depends(get_current_user)):
                 "INSERT INTO tags (id, name, color) VALUES (?, ?, ?)",
                 (tag_id, body.name.strip(), body.color)
             )
-        except Exception:
+        except sqlite3.IntegrityError:
             raise HTTPException(400, "Tag name already exists")
     return {"id": tag_id, "name": body.name.strip(), "color": body.color}
 
@@ -144,7 +145,7 @@ async def get_knowledge_graph(nb_id: str, _user: dict = Depends(get_current_user
             FROM document_links dl
             JOIN sources s1 ON dl.source_id = s1.id
             JOIN sources s2 ON dl.target_id = s2.id
-            WHERE s1.notebook_id = ? OR s2.notebook_id = ?
+            WHERE s1.notebook_id = ? AND s2.notebook_id = ?
         """, (nb_id, nb_id)).fetchall()
 
         tags_by_source: dict[str, list] = {}
