@@ -146,6 +146,7 @@ from routes.analytics import router as analytics_router
 from routes.planning import router as planning_router
 from routes.notes import router as notes_router, configure as configure_notes
 from routes.collaboration import router as collaboration_router
+from routes.export import router as export_router
 
 app.include_router(notebooks_router)
 app.include_router(query_router)
@@ -157,6 +158,7 @@ app.include_router(analytics_router)
 app.include_router(planning_router)
 app.include_router(notes_router)
 app.include_router(collaboration_router)
+app.include_router(export_router)
 
 
 # ── CORS ──────────────────────────────────────────────────────────────────
