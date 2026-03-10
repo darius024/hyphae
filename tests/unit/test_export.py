@@ -256,7 +256,7 @@ class TestExportEndpoint:
             json={"format": "bibtex"},
             headers=headers,
         )
-        assert "@misc{" in resp.text or "@online{" in resp.text
+        assert "@misc{" in resp.text
 
     def test_bibtex_title_field_present(self, client):
         user_id, headers = _signup(client)
@@ -271,7 +271,8 @@ class TestExportEndpoint:
         )
         assert "Battery Cycling Notes" in resp.text
 
-    def test_bibtex_url_source_uses_online_type(self, client):
+    def test_bibtex_url_source_uses_misc_type(self, client):
+        """URL sources must use @misc, not @online (BibLaTeX-only)."""
         user_id, headers = _signup(client)
         nb_id = _create_notebook(client, headers)
         import notebook.db as db_mod
@@ -282,7 +283,8 @@ class TestExportEndpoint:
             json={"format": "bibtex"},
             headers=headers,
         )
-        assert "@online{" in resp.text
+        assert "@misc{" in resp.text
+        assert "@online{" not in resp.text
 
     def test_bibtex_empty_notebook_returns_comment(self, client):
         _, headers = _signup(client)
@@ -294,3 +296,63 @@ class TestExportEndpoint:
         )
         assert resp.status_code == 200
         assert "%" in resp.text  # At minimum the header comment lines
+
+    def test_bibtex_special_chars_in_title_are_escaped(self, client):
+        """BibTeX special characters in source titles must be escaped."""
+        user_id, headers = _signup(client)
+        nb_id = _create_notebook(client, headers)
+        import notebook.db as db_mod
+        with db_mod.get_conn() as conn:
+            _add_source(conn, nb_id, title="Self-Healing & Conductive_Hydrogels 100%")
+        resp = client.post(
+            f"/api/notebooks/{nb_id}/export",
+            json={"format": "bibtex"},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        # Raw special chars must not appear unescaped in field values
+        assert r"\&" in resp.text
+        assert r"\%" in resp.text
+        assert r"\_" in resp.text
+
+    def test_non_ascii_notebook_name_produces_ascii_filename(self, client):
+        """Non-ASCII notebook names must not leak into Content-Disposition headers."""
+        _, headers = _signup(client)
+        nb_id = _create_notebook(client, headers, "Café Résearch Nötebook")
+        resp = client.post(
+            f"/api/notebooks/{nb_id}/export",
+            json={"format": "markdown"},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        cd = resp.headers.get("Content-Disposition", "")
+        # The filename in Content-Disposition must be ASCII-safe
+        cd.encode("ascii")  # raises UnicodeEncodeError if non-ASCII present
+        assert ".md" in cd
+
+    def test_markdown_malformed_citations_json_does_not_crash(self, client):
+        """A message with malformed citations JSON must not cause a 500 error."""
+        user_id, headers = _signup(client)
+        nb_id = _create_notebook(client, headers, "Malformed Cits NB")
+        import notebook.db as db_mod
+        import uuid as _uuid
+        with db_mod.get_conn() as conn:
+            _add_source(conn, nb_id)
+            conv_id = str(_uuid.uuid4())
+            conn.execute(
+                "INSERT INTO conversations (id, notebook_id, title) VALUES (?, ?, ?)",
+                (conv_id, nb_id, "Broken conv"),
+            )
+            msg_id = str(_uuid.uuid4())
+            conn.execute(
+                "INSERT INTO messages (id, conversation_id, notebook_id, role, content, citations) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (msg_id, conv_id, nb_id, "assistant", "Answer.", "not-valid-json{{{"),
+            )
+        resp = client.post(
+            f"/api/notebooks/{nb_id}/export",
+            json={"format": "markdown"},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert "Answer." in resp.text

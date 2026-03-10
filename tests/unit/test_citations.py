@@ -268,3 +268,14 @@ class TestGetChunkEndpoint:
         client, _, nb_id, _, chunk_id = client_with_chunk
         resp = client.get(f"/api/notebooks/{nb_id}/chunks/{chunk_id}")
         assert resp.status_code == 401
+
+    def test_chunk_from_different_notebook_returns_404(self, client_with_chunk):
+        """Chunk must not be accessible via a notebook it does not belong to."""
+        client, headers, nb_id, src_id, chunk_id = client_with_chunk
+        # Create a second notebook owned by the same user
+        other_nb_resp = client.post("/api/notebooks", json={"name": "Other NB"}, headers=headers)
+        assert other_nb_resp.status_code in (200, 201)
+        other_nb_id = other_nb_resp.json()["id"]
+        # Try to fetch the chunk using the wrong notebook ID in the URL
+        resp = client.get(f"/api/notebooks/{other_nb_id}/chunks/{chunk_id}", headers=headers)
+        assert resp.status_code == 404

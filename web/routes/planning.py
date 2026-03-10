@@ -273,10 +273,20 @@ async def sync_calendar(conn_id: str, _user: dict = Depends(get_current_user)):
 
 
 @router.delete("/calendar/disconnect/{conn_id}")
-async def disconnect_calendar(conn_id: str, _user: dict = Depends(get_current_user)):
-    """Disconnect a calendar provider."""
+async def disconnect_calendar(conn_id: str, user: dict = Depends(get_current_user)):
+    """Disconnect a calendar provider.
+
+    Only the owning user may remove a connection (prevents IDOR).
+    Returns the disconnected connection id on success, or 404 if the
+    connection does not exist or does not belong to the caller.
+    """
     with get_conn() as conn:
-        conn.execute("DELETE FROM calendar_connections WHERE id=?", (conn_id,))
+        result = conn.execute(
+            "DELETE FROM calendar_connections WHERE id=? AND user_id=?",
+            (conn_id, user["id"]),
+        )
+        if result.rowcount == 0:
+            raise HTTPException(404, "Calendar connection not found")
     return {"disconnected": conn_id}
 
 
@@ -286,13 +296,15 @@ async def disconnect_calendar(conn_id: str, _user: dict = Depends(get_current_us
 async def get_planning_digest(
     days: int = Query(default=7, ge=1, le=90),
     notebook_id: Optional[str] = None,
-    _user: dict = Depends(get_current_user),
+    user: dict = Depends(get_current_user),
 ):
     """Return upcoming deadlines (within *days* days) with the latest conversation
     per linked notebook.
 
     Excludes completed and cancelled deadlines.  Results are ordered by
     ``due_date`` ascending so the most urgent item appears first.
+    At most 20 results are returned; when the window contains more,
+    ``truncated`` is ``true`` in the response.
 
     Args:
         days: Look-ahead window in days (1–90).  Default is 7.
@@ -300,7 +312,7 @@ async def get_planning_digest(
             notebook are returned.
 
     Returns:
-        ``{"deadlines": [...], "days": <int>}``
+        ``{"deadlines": [...], "days": <int>, "truncated": <bool>}``
         Each deadline includes all deadline columns plus:
         - ``notebook_name``: human-readable notebook title (if linked)
         - ``latest_conversation``: ``{id, title, updated_at}`` of the most
@@ -310,7 +322,7 @@ async def get_planning_digest(
     until = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
 
     nb_filter = " AND d.notebook_id = ?" if notebook_id else ""
-    params: list = [now, until, _user["id"]]
+    params: list = [now, until, user["id"]]
     if notebook_id:
         params.append(notebook_id)
 
@@ -325,9 +337,13 @@ async def get_planning_digest(
                  AND d.status NOT IN ('completed', 'cancelled')
                  {nb_filter}
                ORDER BY d.due_date ASC
-               LIMIT 20""",
+               LIMIT 21""",
             params,
         ).fetchall()
+
+        # Use a limit of 21 to detect truncation without fetching all rows.
+        truncated = len(rows) > 20
+        rows = rows[:20]
 
         items = []
         for row in rows:
@@ -345,4 +361,4 @@ async def get_planning_digest(
                     item["latest_conversation"] = dict(conv)
             items.append(item)
 
-    return {"deadlines": items, "days": days}
+    return {"deadlines": items, "days": days, "truncated": truncated}

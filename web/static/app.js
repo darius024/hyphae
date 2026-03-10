@@ -604,7 +604,7 @@ async function loadDigestBanner(nbId) {
                           : diffDay === 1 ? "tomorrow"
                           : `in ${diffDay}d`;
             const cls = diffDay <= 1 ? "urgent" : diffDay <= 3 ? "soon" : "";
-            return `<span class="digest-banner-pill${cls ? " " + cls : ""}" title="${dl.due_date}">${_escHtml(dl.title)} &mdash; ${label}</span>`;
+            return `<span class="digest-banner-pill${cls ? " " + cls : ""}" title="${escapeHtml(dl.due_date)}">${escapeHtml(dl.title)} &mdash; ${label}</span>`;
         }).join(" ");
 
         content.innerHTML =
@@ -622,14 +622,11 @@ document.getElementById("digest-dismiss-btn")?.addEventListener("click", () => {
     if (currentNbId) _digestDismissed.add(currentNbId);
 });
 
-/** HTML-escape a string for safe insertion into innerHTML. */
-function _escHtml(str) {
-    return String(str)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
-}
+/** HTML-escape a string for safe insertion into innerHTML.
+ * @deprecated Use the existing escapeHtml() helper instead.
+ * Kept temporarily; callers have been migrated.
+ */
+// _escHtml was removed — use escapeHtml() throughout.
 // ── End digest banner ────────────────────────────────────────────────────────
 
 // ── Notebook list ────────────────────────────────────────────────────
@@ -949,20 +946,12 @@ async function openSourcePreview(nbId, srcId) {
         const meta = await fetch(`/api/notebooks/${nbId}/sources/${srcId}`);
         if (!meta.ok) return;
         const src = await meta.json();
-        const el = Object.assign(document.createElement("span"), {
-            dataset: {
-                nbId, srcId,
-                filename: src.filename || "",
-                url: src.url || "",
-                title: src.title || src.filename || src.url || "Source",
-            }
-        });
-        // Assign dataset properly (Object.assign won't work on DOMStringMap nested assignment)
-        el.dataset.nbId = nbId;
-        el.dataset.srcId = srcId;
+        const el = document.createElement("span");
+        el.dataset.nbId     = nbId;
+        el.dataset.srcId    = srcId;
         el.dataset.filename = src.filename || "";
-        el.dataset.url = src.url || "";
-        el.dataset.title = src.title || src.filename || src.url || "Source";
+        el.dataset.url      = src.url || "";
+        el.dataset.title    = src.title || src.filename || src.url || "Source";
         await previewNbSource(el);
     } catch { /* silently ignore */ }
 }
@@ -1839,7 +1828,7 @@ async function showChunkPreview(nbId, chunkId) {
             <div class="chunk-popup-header">
                 <div class="chunk-popup-meta">
                     <span class="chunk-popup-title">${escapeHtml(chunk.source_title || chunk.filename || 'Source')}</span>
-                    ${chunk.page_number ? `<span class="chunk-popup-page">Page ${chunk.page_number}${chunk.chunk_index != null ? ` · chunk ${chunk.chunk_index}` : ''}</span>` : ''}
+                    ${chunk.page_number ? `<span class="chunk-popup-page">Page ${escapeHtml(String(chunk.page_number))}${chunk.chunk_index != null ? ` &middot; chunk ${escapeHtml(String(chunk.chunk_index))}` : ''}</span>` : ''}
                 </div>
                 <button class="chunk-popup-close" aria-label="Close">&times;</button>
             </div>

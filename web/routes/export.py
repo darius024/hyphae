@@ -59,6 +59,9 @@ async def export_notebook(
         404: If the notebook does not exist.
         403: If the notebook belongs to a different user.
     """
+    conversations: list[dict] = []
+    conv_messages: dict[str, list[dict]] = {}
+
     with get_conn() as conn:
         nb_row = conn.execute("SELECT * FROM notebooks WHERE id=?", (nb_id,)).fetchone()
         if nb_row is None:
@@ -81,7 +84,6 @@ async def export_notebook(
                     (nb_id,),
                 ).fetchall()
             ]
-            conv_messages: dict[str, list[dict]] = {}
             for conv in conversations:
                 rows = conn.execute(
                     "SELECT role, content, citations FROM messages "
@@ -213,16 +215,16 @@ def _render_bibtex(nb: dict, sources: list[dict]) -> str:
         key     = _bibtex_key(title, src_id)
         year    = _year_from_iso(src.get("created_at", ""))
 
-        fields: list[tuple[str, str]] = [("title", f"{{{title}}}")]
+        fields: list[tuple[str, str]] = [("title", f"{{{_escape_bibtex(title)}}}")]
         if src.get("url"):
             fields.append(("howpublished", f"{{\\url{{{src['url']}}}}}"))
         elif src.get("filename"):
-            fields.append(("howpublished", f"{{Local file: {src['filename']}}}"))
+            fields.append(("howpublished", f"{{Local file: {_escape_bibtex(src['filename'])}}}"))
         if year:
             fields.append(("year", year))
-        fields.append(("note", f"{{Exported from Hyphae notebook \\textit{{{nb['name']}}}}}"))
+        fields.append(("note", f"{{Exported from Hyphae notebook \\textit{{{_escape_bibtex(nb['name'])}}}}}"))
 
-        entry_type = "misc" if not src.get("url") else "online"
+        entry_type = "misc"  # @online is BibLaTeX-only; @misc is universally supported
         field_lines = ",\n  ".join(f"{k} = {v}" for k, v in fields)
         lines.append(f"@{entry_type}{{{key},\n  {field_lines}\n}}\n")
 
@@ -231,8 +233,29 @@ def _render_bibtex(nb: dict, sources: list[dict]) -> str:
 
 # ── Utilities ────────────────────────────────────────────────────────────
 
+_BIBTEX_SPECIAL = str.maketrans({
+    "\\": r"\textbackslash{}",
+    "{": r"\{",
+    "}": r"\}",
+    "&": r"\&",
+    "%": r"\%",
+    "#": r"\#",
+    "_": r"\_",
+})
+
+
+def _escape_bibtex(s: str) -> str:
+    """Escape BibTeX special characters in user-supplied strings."""
+    return str(s).translate(_BIBTEX_SPECIAL)
+
+
 def _slugify(text: str) -> str:
-    """Convert *text* to a filesystem-safe ASCII slug."""
+    """Convert *text* to a filesystem-safe ASCII slug.
+
+    Non-ASCII characters are stripped first so they don't appear verbatim
+    in ``Content-Disposition`` headers, which must be ASCII-safe.
+    """
+    text = text.encode("ascii", "ignore").decode()  # strip non-ASCII
     text = re.sub(r"[^\w\s-]", "", text.lower())
     return re.sub(r"[\s-]+", "-", text).strip("-") or "notebook"
 

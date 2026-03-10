@@ -28,14 +28,14 @@ def build_citations(chunk_results: List[dict]) -> List[Citation]:
     citations: List[Citation] = []
     num = 1
     for r in chunk_results:
-        key = (r["source_id"], r.get("page_number"))
+        key = (r.get("source_id"), r.get("page_number"))
         if key in seen:
             continue
         seen.add(key)
         citations.append(
             Citation(
                 number=num,
-                source_id=r["source_id"],
+                source_id=r.get("source_id", ""),
                 source_title=r.get("source_title", "Untitled"),
                 page_number=r.get("page_number"),
                 snippet=r.get("snippet", "")[:200],
