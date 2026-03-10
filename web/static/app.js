@@ -1424,6 +1424,90 @@ document.getElementById("nb-url-btn").addEventListener("click", async () => {
     }
 });
 
+// ── Export dropdown ──────────────────────────────────────────────────────────
+(function () {
+    const exportBtn  = document.getElementById("nb-export-btn");
+    const exportMenu = document.getElementById("nb-export-menu");
+
+    if (!exportBtn || !exportMenu) return;
+
+    // Toggle menu open/closed
+    exportBtn.addEventListener("click", e => {
+        e.stopPropagation();
+        const isOpen = exportMenu.style.display !== "none";
+        exportMenu.style.display = isOpen ? "none" : "";
+        exportBtn.setAttribute("aria-expanded", String(!isOpen));
+    });
+
+    // Close on outside click
+    document.addEventListener("click", e => {
+        if (!exportMenu.contains(e.target) && e.target !== exportBtn) {
+            exportMenu.style.display = "none";
+            exportBtn.setAttribute("aria-expanded", "false");
+        }
+    });
+
+    // Close on Escape
+    document.addEventListener("keydown", e => {
+        if (e.key === "Escape") {
+            exportMenu.style.display = "none";
+            exportBtn.setAttribute("aria-expanded", "false");
+        }
+    });
+
+    // Handle menu item clicks
+    exportMenu.addEventListener("click", async e => {
+        const item = e.target.closest(".nb-export-item[data-fmt]");
+        if (!item) return;
+        const fmt = item.dataset.fmt;
+        exportMenu.style.display = "none";
+        exportBtn.setAttribute("aria-expanded", "false");
+        await triggerNotebookExport(fmt);
+    });
+})();
+
+/**
+ * POST to the export endpoint and trigger a browser download.
+ *
+ * @param {"markdown"|"bibtex"} fmt - The export format.
+ */
+async function triggerNotebookExport(fmt) {
+    if (!currentNbId) {
+        showToast("No notebook selected", "error");
+        return;
+    }
+    try {
+        const resp = await fetch(`/api/notebooks/${currentNbId}/export`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ format: fmt }),
+        });
+        if (!resp.ok) {
+            showToast(`Export failed (${resp.status})`, "error");
+            return;
+        }
+        // Derive filename from Content-Disposition or fall back to a default
+        const disposition = resp.headers.get("Content-Disposition") || "";
+        const match = disposition.match(/filename="([^"]+)"/);
+        const filename = match ? match[1] : `notebook.${fmt === "bibtex" ? "bib" : "md"}`;
+
+        const blob = await resp.blob();
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement("a");
+        a.href     = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        showToast(`Exported as ${filename}`, "success");
+    } catch (err) {
+        console.error("Export error", err);
+        showToast("Export failed — check your connection", "error");
+    }
+}
+// ── End export dropdown ───────────────────────────────────────────────────────
+
 // ── Conversations ─────────────────────────────────────────────────────
 
 function relativeTime(dateStr) {

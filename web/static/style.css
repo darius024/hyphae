@@ -6308,6 +6308,52 @@ body.resizing textarea {
   padding: 4px 8px !important;
 }
 
+/* ── Export dropdown ────────────────────────────────────────────────── */
+.nb-export-wrap {
+  position: relative;
+}
+
+.nb-export-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 200;
+  min-width: 180px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.12);
+  padding: 4px;
+  animation: export-menu-in 0.12s ease;
+}
+
+@keyframes export-menu-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0);     }
+}
+
+.nb-export-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: var(--sans);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.nb-export-item:hover {
+  background: var(--bg-secondary);
+}
+/* ── End export dropdown ─────────────────────────────────────────────── */
+
 /* ── Sidebar footer additional button ──────────────────────────────── */
 .sidebar-footer-btn {
   display: flex;
