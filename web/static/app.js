@@ -856,6 +856,33 @@ async function previewNbSource(el) {
     }
 }
 
+/**
+ * Open the source preview modal directly from a notebook+source ID pair.
+ * Used by the chunk-preview popup's "View source" button.
+ */
+async function openSourcePreview(nbId, srcId) {
+    try {
+        const meta = await fetch(`/api/notebooks/${nbId}/sources/${srcId}`);
+        if (!meta.ok) return;
+        const src = await meta.json();
+        const el = Object.assign(document.createElement("span"), {
+            dataset: {
+                nbId, srcId,
+                filename: src.filename || "",
+                url: src.url || "",
+                title: src.title || src.filename || src.url || "Source",
+            }
+        });
+        // Assign dataset properly (Object.assign won't work on DOMStringMap nested assignment)
+        el.dataset.nbId = nbId;
+        el.dataset.srcId = srcId;
+        el.dataset.filename = src.filename || "";
+        el.dataset.url = src.url || "";
+        el.dataset.title = src.title || src.filename || src.url || "Source";
+        await previewNbSource(el);
+    } catch { /* silently ignore */ }
+}
+
 async function deleteSource(nbId, srcId) {
     await fetch(`/api/notebooks/${nbId}/sources/${srcId}`, { method: "DELETE" });
     loadSources(nbId);
@@ -1417,7 +1444,10 @@ async function selectConversation(nbId, convId, title) {
                 if (m.role === "user") {
                     nbAddMessage("user", m.content);
                 } else {
-                    nbAddMessage("assistant", m.content, m.citations || []);
+                    const cits = m.citations || [];
+                    nbAddMessage("assistant", m.content, cits);
+                    // Keep the last assistant message's citations available for [N] clicks
+                    if (cits.length) window._lastCitations = cits;
                 }
             }
         }
@@ -1577,9 +1607,9 @@ function nbAddError(text, retryFn) {
 }
 
 function nbRenderAnswer(text) {
-    // render [N] inline citation refs
+    // render [N] inline citation refs as clickable superscript buttons
     let html = renderMarkdown(text);
-    html = html.replace(/\[(\d+)\]/g, '<span class="cite-ref">$1</span>');
+    html = html.replace(/\[(\d+)\]/g, '<button class="cite-ref" data-num="$1" title="Click to preview source">$1</button>');
     return html;
 }
 
@@ -1590,12 +1620,78 @@ function renderCitationsBar(citations) {
     }
     nbCitationsBar.style.display = "";
     nbCitationsList.innerHTML = citations.map(c => `
-        <span class="citation-chip" title="${escapeHtml(c.snippet || '')}">
+        <button class="citation-chip"
+                data-chunk-id="${escapeHtml(c.chunk_id || '')}"
+                data-nb-id="${escapeHtml(currentNbId || '')}"
+                title="${escapeHtml(c.snippet || '')}">
             <span class="citation-num">[${c.number}]</span>
             <span class="citation-title">${escapeHtml(c.source_title || 'Source')}</span>
             ${c.page_number ? `<span class="citation-page">p.${c.page_number}</span>` : ''}
-        </span>
+        </button>
     `).join("");
+
+    // Wire click handlers on the newly-inserted chips
+    nbCitationsList.querySelectorAll(".citation-chip[data-chunk-id]").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const cid = btn.dataset.chunkId;
+            const nbId = btn.dataset.nbId;
+            if (cid && nbId) showChunkPreview(nbId, cid);
+        });
+    });
+}
+
+// ── Citation inline-ref click delegation ─────────────────────────────────
+document.addEventListener("click", e => {
+    const btn = e.target.closest(".cite-ref[data-num]");
+    if (!btn || !currentNbId) return;
+    const num = parseInt(btn.dataset.num, 10);
+    // lastCitations is maintained in the streaming handlers below
+    const cit = (window._lastCitations || []).find(c => c.number === num);
+    if (cit && cit.chunk_id) showChunkPreview(currentNbId, cit.chunk_id);
+});
+
+/**
+ * Fetch a chunk from the server and display its text in a small popup modal.
+ * @param {string} nbId     - notebook UUID
+ * @param {string} chunkId  - chunk UUID
+ */
+async function showChunkPreview(nbId, chunkId) {
+    let chunk;
+    try {
+        const resp = await fetch(`/api/notebooks/${nbId}/chunks/${chunkId}`);
+        if (!resp.ok) return;
+        chunk = await resp.json();
+    } catch { return; }
+
+    const overlay = document.createElement("div");
+    overlay.className = "chunk-popup-overlay";
+    overlay.innerHTML = `
+        <div class="chunk-popup" role="dialog" aria-modal="true">
+            <div class="chunk-popup-header">
+                <div class="chunk-popup-meta">
+                    <span class="chunk-popup-title">${escapeHtml(chunk.source_title || chunk.filename || 'Source')}</span>
+                    ${chunk.page_number ? `<span class="chunk-popup-page">Page ${chunk.page_number}${chunk.chunk_index != null ? ` · chunk ${chunk.chunk_index}` : ''}</span>` : ''}
+                </div>
+                <button class="chunk-popup-close" aria-label="Close">&times;</button>
+            </div>
+            <div class="chunk-popup-body">${escapeHtml(chunk.clean_text || chunk.raw_text || '')}</div>
+            <div class="chunk-popup-actions">
+                <button class="chunk-popup-view-btn" data-src-id="${escapeHtml(chunk.source_id || '')}">View source</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const close = () => overlay.remove();
+    overlay.querySelector(".chunk-popup-close").addEventListener("click", close);
+    overlay.addEventListener("click", e => { if (e.target === overlay) close(); });
+    overlay.querySelector(".chunk-popup-view-btn").addEventListener("click", () => {
+        close();
+        if (chunk.source_id && currentNbId) openSourcePreview(currentNbId, chunk.source_id);
+    });
+    document.addEventListener("keydown", function esc(e) {
+        if (e.key === "Escape") { close(); document.removeEventListener("keydown", esc); }
+    });
 }
 
 function nbSetBusy(busy) {
@@ -1672,6 +1768,7 @@ async function nbSendMessage(text) {
                     const evt = JSON.parse(line.slice(6));
                     if (evt.type === "citations") {
                         lastCitations = evt.citations;
+                        window._lastCitations = lastCitations;
                         renderCitationsBar(lastCitations);
                     } else if (evt.type === "delta") {
                         accumulated += evt.text;

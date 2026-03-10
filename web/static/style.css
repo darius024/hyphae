@@ -2131,12 +2131,14 @@ body.nb-closed .nb-open-btn {
     border-radius: 20px;
     padding: 3px 12px;
     font-size: 12px;
-    cursor: default;
+    cursor: pointer;
     white-space: nowrap;
     max-width: 220px;
     overflow: hidden;
     text-overflow: ellipsis;
     transition: border-color var(--transition), background var(--transition);
+    font-family: var(--sans);
+    color: inherit;
 }
 
 .citation-chip:hover {
@@ -2171,7 +2173,97 @@ body.nb-closed .nb-open-btn {
     vertical-align: super;
     line-height: 1.2;
     font-family: var(--sans);
+    cursor: pointer;
+    border: none;
+    transition: background var(--transition);
 }
+.cite-ref:hover {
+    background: var(--accent);
+    color: #fff;
+}
+
+/* ── Citation chunk-preview popup ──────────────────────────────────── */
+.chunk-popup-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.45);
+    animation: overlayIn 0.15s ease;
+}
+.chunk-popup {
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    max-width: 560px;
+    width: 90%;
+    max-height: 70vh;
+    overflow-y: auto;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.25);
+    animation: modalIn 0.15s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.chunk-popup-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+.chunk-popup-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+.chunk-popup-title {
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--text-primary);
+}
+.chunk-popup-page {
+    font-size: 12px;
+    color: var(--text-tertiary);
+}
+.chunk-popup-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-tertiary);
+    font-size: 18px;
+    padding: 0 4px;
+    line-height: 1;
+    flex-shrink: 0;
+}
+.chunk-popup-close:hover { color: var(--text-primary); }
+.chunk-popup-body {
+    font-size: 13px;
+    line-height: 1.65;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+    word-break: break-word;
+    border-left: 3px solid var(--accent-border);
+    padding-left: 12px;
+}
+.chunk-popup-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+.chunk-popup-view-btn {
+    font-size: 12px;
+    padding: 6px 14px;
+    border-radius: 6px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    transition: opacity var(--transition);
+}
+.chunk-popup-view-btn:hover { opacity: 0.85; }
 
 /* ── Notebook creation modal ─────────────────────────────────────── */
 
