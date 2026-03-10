@@ -195,6 +195,12 @@
                         </button>
                         <span class="nb-chat-title" id="nb-chat-title"></span>
                     </div>
+                    <!-- Upcoming-deadline digest banner, hidden until populated by JS -->
+                    <div id="digest-banner" class="digest-banner" style="display:none" role="status" aria-live="polite">
+                        <span class="digest-banner-icon" aria-hidden="true">📅</span>
+                        <div id="digest-banner-content" class="digest-banner-content"></div>
+                        <button class="digest-dismiss-btn" id="digest-dismiss-btn" aria-label="Dismiss deadlines banner">&times;</button>
+                    </div>
                     <div class="messages" id="nb-messages"></div>
                     <div id="nb-citations-bar" class="nb-citations-bar" style="display:none">
                         <span class="citations-label">Sources:</span>

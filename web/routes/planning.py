@@ -285,6 +285,7 @@ async def disconnect_calendar(conn_id: str, _user: dict = Depends(get_current_us
 @router.get("/planning/digest")
 async def get_planning_digest(
     days: int = Query(default=7, ge=1, le=90),
+    notebook_id: Optional[str] = None,
     _user: dict = Depends(get_current_user),
 ):
     """Return upcoming deadlines (within *days* days) with the latest conversation
@@ -295,6 +296,8 @@ async def get_planning_digest(
 
     Args:
         days: Look-ahead window in days (1–90).  Default is 7.
+        notebook_id: Optional. When provided, only deadlines linked to this
+            notebook are returned.
 
     Returns:
         ``{"deadlines": [...], "days": <int>}``
@@ -306,18 +309,24 @@ async def get_planning_digest(
     now = datetime.now(timezone.utc).isoformat()
     until = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
 
+    nb_filter = " AND d.notebook_id = ?" if notebook_id else ""
+    params: list = [now, until, _user["id"]]
+    if notebook_id:
+        params.append(notebook_id)
+
     with get_conn() as conn:
         rows = conn.execute(
-            """SELECT d.*, nb.name AS notebook_name
+            f"""SELECT d.*, nb.name AS notebook_name
                FROM deadlines d
                LEFT JOIN notebooks nb ON d.notebook_id = nb.id
                WHERE d.due_date >= ?
                  AND d.due_date <= ?
                  AND d.user_id = ?
                  AND d.status NOT IN ('completed', 'cancelled')
+                 {nb_filter}
                ORDER BY d.due_date ASC
                LIMIT 20""",
-            (now, until, _user["id"]),
+            params,
         ).fetchall()
 
         items = []

@@ -546,7 +546,91 @@ function exitNotebookChat() {
     nbConvList.querySelectorAll(".nb-conv-item").forEach(el => el.classList.remove("active"));
 }
 
+function enterNotebookChat(nbName, convTitle) {
+    if (chatWelcome) chatWelcome.style.display = "none";
+    nbChatWrap.style.display = "";
+    document.getElementById("nb-chat-title").textContent = nbName + " \u2014 " + convTitle;
+}
+
+function exitNotebookChat() {
+    nbChatWrap.style.display = "none";
+    if (chatWelcome) chatWelcome.style.display = "";
+    currentConvId = null;
+    nbMessagesEl.innerHTML = "";
+    nbCitationsBar.style.display = "none";
+    nbConvList.querySelectorAll(".nb-conv-item").forEach(el => el.classList.remove("active"));
+    // Hide digest banner when leaving chat
+    const digestBanner = document.getElementById("digest-banner");
+    if (digestBanner) digestBanner.style.display = "none";
+}
+
 document.getElementById("nb-chat-back").addEventListener("click", exitNotebookChat);
+
+// ── Deadline digest banner ───────────────────────────────────────────────────
+// Tracks which notebooks had the banner dismissed this session so we don't
+// re-show it after switching conversations within the same notebook.
+const _digestDismissed = new Set();
+
+/**
+ * Fetch the upcoming-deadline digest for *nbId* and render a dismissible
+ * banner above the chat messages.  Silently does nothing on network errors
+ * or when there are no upcoming deadlines.
+ *
+ * @param {string} nbId - The current notebook ID.
+ */
+async function loadDigestBanner(nbId) {
+    const banner  = document.getElementById("digest-banner");
+    const content = document.getElementById("digest-banner-content");
+    if (!banner || !content) return;
+
+    // Don't re-show a banner that was already dismissed for this notebook.
+    if (_digestDismissed.has(nbId)) return;
+
+    // Hide stale content while fetching.
+    banner.style.display = "none";
+
+    try {
+        const resp = await fetch(`/api/planning/digest?days=7&notebook_id=${encodeURIComponent(nbId)}`);
+        if (!resp.ok) return;
+        const { deadlines } = await resp.json();
+        if (!deadlines || deadlines.length === 0) return;
+
+        const now = Date.now();
+        const pills = deadlines.map(dl => {
+            const due     = new Date(dl.due_date);
+            const diffMs  = due.getTime() - now;
+            const diffDay = Math.ceil(diffMs / 86_400_000);
+            const label   = diffDay <= 0  ? "today"
+                          : diffDay === 1 ? "tomorrow"
+                          : `in ${diffDay}d`;
+            const cls = diffDay <= 1 ? "urgent" : diffDay <= 3 ? "soon" : "";
+            return `<span class="digest-banner-pill${cls ? " " + cls : ""}" title="${dl.due_date}">${_escHtml(dl.title)} &mdash; ${label}</span>`;
+        }).join(" ");
+
+        content.innerHTML =
+            `<strong>${deadlines.length} deadline${deadlines.length > 1 ? "s" : ""} this week:</strong> ${pills}`;
+        banner.style.display = "";
+    } catch {
+        // Non-critical feature — swallow errors silently.
+    }
+}
+
+// Wire dismiss button
+document.getElementById("digest-dismiss-btn")?.addEventListener("click", () => {
+    const banner = document.getElementById("digest-banner");
+    if (banner) banner.style.display = "none";
+    if (currentNbId) _digestDismissed.add(currentNbId);
+});
+
+/** HTML-escape a string for safe insertion into innerHTML. */
+function _escHtml(str) {
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+}
+// ── End digest banner ────────────────────────────────────────────────────────
 
 // ── Notebook list ────────────────────────────────────────────────────
 
@@ -1420,6 +1504,7 @@ function renderConversations(nbId, convs) {
 async function selectConversation(nbId, convId, title) {
     currentConvId = convId;
     enterNotebookChat(nbNameDisplay.textContent, title);
+    loadDigestBanner(nbId);
 
     switchNbTab("chats");
 
