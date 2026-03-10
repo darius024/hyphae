@@ -278,3 +278,62 @@ async def disconnect_calendar(conn_id: str, _user: dict = Depends(get_current_us
     with get_conn() as conn:
         conn.execute("DELETE FROM calendar_connections WHERE id=?", (conn_id,))
     return {"disconnected": conn_id}
+
+
+# ── Digest ────────────────────────────────────────────────────────────────
+
+@router.get("/planning/digest")
+async def get_planning_digest(
+    days: int = Query(default=7, ge=1, le=90),
+    _user: dict = Depends(get_current_user),
+):
+    """Return upcoming deadlines (within *days* days) with the latest conversation
+    per linked notebook.
+
+    Excludes completed and cancelled deadlines.  Results are ordered by
+    ``due_date`` ascending so the most urgent item appears first.
+
+    Args:
+        days: Look-ahead window in days (1–90).  Default is 7.
+
+    Returns:
+        ``{"deadlines": [...], "days": <int>}``
+        Each deadline includes all deadline columns plus:
+        - ``notebook_name``: human-readable notebook title (if linked)
+        - ``latest_conversation``: ``{id, title, updated_at}`` of the most
+          recently updated conversation in the linked notebook, or ``null``.
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    until = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT d.*, nb.name AS notebook_name
+               FROM deadlines d
+               LEFT JOIN notebooks nb ON d.notebook_id = nb.id
+               WHERE d.due_date >= ?
+                 AND d.due_date <= ?
+                 AND d.user_id = ?
+                 AND d.status NOT IN ('completed', 'cancelled')
+               ORDER BY d.due_date ASC
+               LIMIT 20""",
+            (now, until, _user["id"]),
+        ).fetchall()
+
+        items = []
+        for row in rows:
+            item = dict(row)
+            item["latest_conversation"] = None
+            if item.get("notebook_id"):
+                conv = conn.execute(
+                    """SELECT id, title, updated_at FROM conversations
+                       WHERE notebook_id = ?
+                       ORDER BY updated_at DESC
+                       LIMIT 1""",
+                    (item["notebook_id"],),
+                ).fetchone()
+                if conv:
+                    item["latest_conversation"] = dict(conv)
+            items.append(item)
+
+    return {"deadlines": items, "days": days}
