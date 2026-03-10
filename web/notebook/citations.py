@@ -20,6 +20,9 @@ def build_citations(chunk_results: List[dict]) -> List[Citation]:
     """
     Deduplicate retrieved chunks by (source_id, page_number) and
     return a numbered list of Citation objects.
+
+    Each Citation includes the originating *chunk_id* so the UI can
+    request the full chunk text for the inline-preview popup.
     """
     seen: set = set()
     citations: List[Citation] = []
@@ -36,6 +39,8 @@ def build_citations(chunk_results: List[dict]) -> List[Citation]:
                 source_title=r.get("source_title", "Untitled"),
                 page_number=r.get("page_number"),
                 snippet=r.get("snippet", "")[:200],
+                chunk_id=r.get("chunk_id"),
+                score=r.get("score"),
             )
         )
         num += 1

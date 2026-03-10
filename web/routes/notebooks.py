@@ -322,6 +322,30 @@ async def raw_source(nb_id: str, src_id: str, user: dict = Depends(get_current_u
     )
 
 
+@router.get("/notebooks/{nb_id}/chunks/{chunk_id}")
+async def get_chunk(nb_id: str, chunk_id: str, user: dict = Depends(get_current_user)):
+    """Return the full text and metadata for a single retrieved chunk.
+
+    Used by the citation-preview popup in the UI: when a user clicks a
+    [N] inline reference the browser fetches this endpoint and displays the
+    chunk content alongside its source title and page number.
+    """
+    _nb_or_404(nb_id, user_id=user["id"])
+    with get_conn() as conn:
+        row = conn.execute(
+            """SELECT c.id, c.source_id, c.page_number, c.chunk_index,
+                      c.raw_text, c.clean_text, c.token_count,
+                      s.title AS source_title, s.filename
+               FROM chunks c
+               LEFT JOIN sources s ON c.source_id = s.id
+               WHERE c.id = ? AND c.notebook_id = ?""",
+            (chunk_id, nb_id),
+        ).fetchone()
+    if row is None:
+        raise HTTPException(404, "Chunk not found")
+    return dict(row)
+
+
 @router.get("/notebooks/{nb_id}/sources/{src_id}/preview")
 async def preview_source(nb_id: str, src_id: str, user: dict = Depends(get_current_user)):
     """Return a text preview (first 3000 chars) of a notebook source file."""
