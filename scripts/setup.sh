@@ -19,15 +19,15 @@ echo ""
 
 # Step 1: Initialize cactus submodule
 if [ ! -f "cactus/README.md" ]; then
-    echo -e "${BLUE}[1/6] Initializing cactus submodule...${NC}"
+    echo -e "${BLUE}[1/8] Initializing cactus submodule...${NC}"
     git submodule update --init --recursive
     echo -e "${GREEN}  Done.${NC}"
 else
-    echo -e "${GREEN}[1/6] cactus/ already initialized, skipping.${NC}"
+    echo -e "${GREEN}[1/8] cactus/ already initialized, skipping.${NC}"
 fi
 
 # Step 2: Run cactus setup
-echo -e "${BLUE}[2/6] Setting up cactus (venv + deps)...${NC}"
+echo -e "${BLUE}[2/8] Setting up cactus (venv + deps)...${NC}"
 cd cactus
 if [ ! -d "venv" ]; then
     python3.12 -m venv venv
@@ -39,12 +39,12 @@ pip install -e python --quiet
 echo -e "${GREEN}  Done.${NC}"
 
 # Step 3: Build python shared library
-echo -e "${BLUE}[3/6] Building cactus (libcactus)...${NC}"
+echo -e "${BLUE}[3/8] Building cactus (libcactus)...${NC}"
 cactus build --python
 echo -e "${GREEN}  Done.${NC}"
 
 # Step 4: Download model
-echo -e "${BLUE}[4/6] Downloading FunctionGemma model...${NC}"
+echo -e "${BLUE}[4/8] Downloading FunctionGemma model...${NC}"
 if [ -f "weights/functiongemma-270m-it/config.txt" ]; then
     echo -e "${GREEN}  Model already downloaded, skipping.${NC}"
 else
@@ -65,12 +65,11 @@ else
     echo -e "${GREEN}  Done.${NC}"
 fi
 
-# Step 6: Install google-genai
-echo -e "${BLUE}[6/8] Installing google-genai...${NC}"
-pip install google-genai -q
-echo -e "${GREEN}  Done.${NC}"
-
+# Step 6: Install hyphae app dependencies
+echo -e "${BLUE}[6/8] Installing hyphae dependencies...${NC}"
 cd "$PROJECT_ROOT"
+pip install -r requirements.txt -q
+echo -e "${GREEN}  Done.${NC}"
 
 # Step 7: Install sox for voice recording (optional)
 echo -e "${BLUE}[7/8] Checking voice recording tools...${NC}"
