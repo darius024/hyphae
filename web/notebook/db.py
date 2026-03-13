@@ -184,6 +184,7 @@ CREATE TABLE IF NOT EXISTS deadlines (
     id          TEXT PRIMARY KEY,
     notebook_id TEXT REFERENCES notebooks(id) ON DELETE CASCADE,
     source_id   TEXT REFERENCES sources(id) ON DELETE CASCADE,
+    user_id     TEXT REFERENCES users(id) ON DELETE CASCADE,
     title       TEXT NOT NULL,
     due_date    TEXT NOT NULL,
     priority    TEXT DEFAULT 'medium',
@@ -192,8 +193,9 @@ CREATE TABLE IF NOT EXISTS deadlines (
     created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_deadlines_due ON deadlines(due_date);
-CREATE INDEX IF NOT EXISTS idx_deadlines_nb ON deadlines(notebook_id);
+CREATE INDEX IF NOT EXISTS idx_deadlines_due  ON deadlines(due_date);
+CREATE INDEX IF NOT EXISTS idx_deadlines_nb   ON deadlines(notebook_id);
+CREATE INDEX IF NOT EXISTS idx_deadlines_user ON deadlines(user_id);
 CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conversation_id);
 
 CREATE TABLE IF NOT EXISTS reminders (
@@ -422,14 +424,6 @@ def init_db() -> None:
         except sqlite3.OperationalError:
             pass
 
-        # Add user_id to deadlines (for ownership checks)
-        try:
-            conn.execute("ALTER TABLE deadlines ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE CASCADE")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_deadlines_user ON deadlines(user_id)")
-            conn.commit()
-        except sqlite3.OperationalError:
-            pass
-        
         _seed_defaults(conn)
         conn.commit()
         log.info("Notebook DB ready at %s", DB_PATH)
