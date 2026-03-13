@@ -22,6 +22,7 @@ from typing import List
 from core.config import GEMINI_MODEL
 from routes.auth import get_current_user
 
+log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["query"])
 
 
@@ -33,7 +34,6 @@ class _MessageBody(BaseModel):
 class _QueryBody(BaseModel):
     message: str = Field(..., min_length=1)
     tools: Optional[List[dict]] = None
-log = logging.getLogger(__name__)
 
 # Injected at startup from app.py
 generate_hybrid = None

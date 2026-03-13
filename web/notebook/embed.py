@@ -20,8 +20,6 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 EMBED_MODEL = "all-MiniLM-L6-v2"
 EMBED_DIM   = 384
 
-_model = None
-
 
 class _DummyEmbedder:
     """Lightweight fallback when sentence-transformers cannot load (offline/env issues).
