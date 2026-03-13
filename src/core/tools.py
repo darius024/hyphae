@@ -206,14 +206,24 @@ _genai_client_lock = threading.Lock()
 
 
 def _get_cloud_client():
-    """Return a cached google.genai.Client, initialised once per process."""
+    """Return a cached google.genai.Client, initialised once per process.
+
+    Returns None if GEMINI_API_KEY is unset or google-genai is unavailable.
+    Callers must check for None before using the client.
+    """
     global _genai_client
     if _genai_client is not None:
         return _genai_client
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    if not api_key:
+        return None
     with _genai_client_lock:
         if _genai_client is None:
-            from google import genai
-            _genai_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+            try:
+                from google import genai
+                _genai_client = genai.Client(api_key=api_key)
+            except Exception:
+                return None
     return _genai_client
 
 
@@ -314,31 +324,35 @@ def _exec_search_text(query, max_snippets=5):
     query_low = query.lower()
     matches = []
 
-    for pattern in ["**/*.txt", "**/*.md"]:
-        for path in Path(CORPUS_DIR).glob(pattern):
-            try:
-                text = path.read_text(errors="replace")
-            except Exception:
-                continue
+    # Collect all candidate paths up front so hitting the quota in .txt files
+    # does not silently skip .md files.
+    all_paths = sorted(
+        path
+        for pattern in ["**/*.txt", "**/*.md"]
+        for path in Path(CORPUS_DIR).glob(pattern)
+    )
 
-            if query_low not in text.lower():
-                continue
-
-            paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
-            for para in paragraphs:
-                if query_low in para.lower():
-                    snippet = para[:600]
-                    matches.append({
-                        "name": path.name,
-                        "paragraph": snippet,
-                        "source": "local",
-                    })
-                    if len(matches) >= max_snippets:
-                        break
-            if len(matches) >= max_snippets:
-                break
+    for path in all_paths:
         if len(matches) >= max_snippets:
             break
+        try:
+            text = path.read_text(errors="replace")
+        except Exception:
+            continue
+
+        if query_low not in text.lower():
+            continue
+
+        paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+        for para in paragraphs:
+            if query_low in para.lower():
+                matches.append({
+                    "name": path.name,
+                    "paragraph": para[:600],
+                    "source": "local",
+                })
+                if len(matches) >= max_snippets:
+                    break
 
     return {"matches": matches, "count": len(matches), "source": "local"}
 
@@ -362,8 +376,10 @@ def _exec_list_documents():
     if not os.path.isdir(CORPUS_DIR):
         return {"documents": [], "count": 0}
 
+    # Use top-level glob only (matching the web corpus route) so that
+    # sub-directories like notes/ are not inadvertently included.
     docs = []
-    for pattern in ["**/*.txt", "**/*.md", "**/*.pdf"]:
+    for pattern in ["*.txt", "*.md", "*.pdf"]:
         for path in Path(CORPUS_DIR).glob(pattern):
             docs.append({
                 "path": str(path),
@@ -377,6 +393,8 @@ def _exec_list_documents():
 
 def _exec_generate_hypothesis(context, field="general science"):
     client = _get_cloud_client()
+    if client is None:
+        return {"error": "Cloud client unavailable: GEMINI_API_KEY not set", "source": "cloud"}
     prompt = (
         f"You are a research scientist in {field}. "
         f"Based on the following abstract observation, propose 2-3 testable hypotheses.\n\n"
@@ -397,6 +415,8 @@ def _exec_generate_hypothesis(context, field="general science"):
 
 def _exec_search_literature(query):
     client = _get_cloud_client()
+    if client is None:
+        return {"error": "Cloud client unavailable: GEMINI_API_KEY not set", "source": "cloud"}
     prompt = (
         f"You are a scientific literature search assistant. "
         f"For the query below, list 3-5 relevant published papers or known research findings "
