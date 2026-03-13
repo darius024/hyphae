@@ -169,9 +169,16 @@ async def delete_organization(org_id: str, user: dict = Depends(get_current_user
 # ── Members ───────────────────────────────────────────────────────────────
 
 @router.get("/organizations/{org_id}/members")
-async def list_org_members(org_id: str, _user: dict = Depends(get_current_user)):
-    """List organization members."""
+async def list_org_members(org_id: str, user: dict = Depends(get_current_user)):
+    """List organization members. Only accessible to current members."""
     with get_conn() as conn:
+        member = conn.execute(
+            "SELECT role FROM org_members WHERE org_id=? AND user_id=?",
+            (org_id, user["id"]),
+        ).fetchone()
+        if not member:
+            raise HTTPException(403, "You are not a member of this organization")
+
         rows = conn.execute("""
             SELECT om.*, u.name, u.email, u.avatar_url
             FROM org_members om
