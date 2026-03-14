@@ -509,7 +509,8 @@ async def _stream_nb_chat(nb_id: str, cid: str, question: str) -> AsyncIterator[
 
     citations = build_citations(results)
     context = build_context_prompt(results, max_chunks=6)
-    system = build_system_prompt(context, nb["name"])
+    safe_context, _ = sanitise_text(context)
+    system = build_system_prompt(safe_context, nb["name"])
     safe_q, _ = sanitise_text(question)
 
     yield f"data: {json.dumps({'type': 'citations', 'citations': [c.model_dump() for c in citations]})}\n\n"
