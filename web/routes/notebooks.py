@@ -570,6 +570,9 @@ async def get_settings(_user: dict = Depends(get_current_user)):
 
 @router.patch("/nb-settings/{key}")
 async def update_setting(key: str, body: _SettingBody, _user: dict = Depends(get_current_user)):
+    _ALLOWED_SETTINGS = {"embed_model", "retrieval_top_k", "chunk_size", "chunk_overlap"}
+    if key not in _ALLOWED_SETTINGS:
+        raise HTTPException(400, f"Unknown setting key '{key}'. Allowed: {sorted(_ALLOWED_SETTINGS)}")
     with get_conn() as conn:
         conn.execute(
             "INSERT INTO nb_settings (key, value) VALUES (?,?) "
