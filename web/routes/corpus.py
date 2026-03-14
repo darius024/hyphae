@@ -151,7 +151,8 @@ async def upload_documents(
         try:
             success = add_file_fn(tmp_path, dest_name=Path(f.filename).stem + ".txt")
             if success and suffix == ".pdf":
-                (originals_dir / f.filename).write_bytes(raw_bytes)
+                safe_pdf_name = _safe_name(f.filename)
+                (originals_dir / safe_pdf_name).write_bytes(raw_bytes)
             results.append({"filename": f.filename, "added": bool(success)})
         finally:
             os.unlink(tmp_path)
