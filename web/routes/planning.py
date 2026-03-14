@@ -172,7 +172,9 @@ async def delete_deadline(dl_id: str, _user: dict = Depends(get_current_user)):
     """Delete a deadline."""
     with get_conn() as conn:
         existing = conn.execute("SELECT user_id FROM deadlines WHERE id=?", (dl_id,)).fetchone()
-        if existing and existing["user_id"] and existing["user_id"] != _user["id"]:
+        if not existing:
+            raise HTTPException(404, "Deadline not found")
+        if existing["user_id"] and existing["user_id"] != _user["id"]:
             raise HTTPException(403, "Access denied")
         conn.execute("DELETE FROM deadlines WHERE id=?", (dl_id,))
     return {"deleted": dl_id}
@@ -254,7 +256,8 @@ async def sync_calendar(conn_id: str, _user: dict = Depends(get_current_user)):
     """Sync events from connected calendar (placeholder for OAuth integration)."""
     with get_conn() as conn:
         connection = conn.execute(
-            "SELECT * FROM calendar_connections WHERE id=?", (conn_id,)
+            "SELECT * FROM calendar_connections WHERE id=? AND user_id=?",
+            (conn_id, _user["id"]),
         ).fetchone()
         if not connection:
             raise HTTPException(404, "Calendar connection not found")
