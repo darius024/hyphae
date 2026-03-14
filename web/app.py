@@ -196,14 +196,25 @@ app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(NoCacheStatic)
 
 
-# ── Gemini client factory ─────────────────────────────────────────────────
+# ── Gemini client factory (singleton) ───────────────────────────────────────
+
+_gemini_client_instance = None
+_gemini_client_lock = __import__("threading").Lock()
+
 
 def _gemini_client():
-    api_key = os.environ.get("GEMINI_API_KEY", "")
-    if not api_key:
-        return None
-    from google import genai
-    return genai.Client(api_key=api_key)
+    global _gemini_client_instance
+    if _gemini_client_instance is not None:
+        return _gemini_client_instance
+    with _gemini_client_lock:
+        if _gemini_client_instance is not None:  # re-check after acquiring lock
+            return _gemini_client_instance
+        api_key = os.environ.get("GEMINI_API_KEY", "")
+        if not api_key:
+            return None
+        from google import genai  # type: ignore
+        _gemini_client_instance = genai.Client(api_key=api_key)
+        return _gemini_client_instance
 
 
 # ── Wire dependencies into routers ───────────────────────────────────────
