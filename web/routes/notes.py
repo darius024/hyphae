@@ -276,9 +276,9 @@ async def save_writing_session(
     session_id = str(uuid.uuid4())
     with get_conn() as conn:
         conn.execute("""
-            INSERT INTO writing_sessions (id, notebook_id, note_id, content, ai_suggestions)
-            VALUES (?, ?, ?, ?, ?)
-        """, (session_id, notebook_id, note_id, content, ai_suggestions))
+            INSERT INTO writing_sessions (id, user_id, notebook_id, note_id, content, ai_suggestions)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (session_id, _user["id"], notebook_id, note_id, content, ai_suggestions))
     return {"id": session_id}
 
 
@@ -287,7 +287,8 @@ async def get_writing_session(session_id: str, _user: dict = Depends(get_current
     """Get a saved writing session."""
     with get_conn() as conn:
         row = conn.execute(
-            "SELECT * FROM writing_sessions WHERE id=?", (session_id,)
+            "SELECT * FROM writing_sessions WHERE id=? AND user_id=?",
+            (session_id, _user["id"]),
         ).fetchone()
         if not row:
             raise HTTPException(404, "Session not found")

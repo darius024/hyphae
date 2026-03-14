@@ -253,6 +253,7 @@ CREATE INDEX IF NOT EXISTS idx_notever_note ON note_versions(note_id);
 
 CREATE TABLE IF NOT EXISTS writing_sessions (
     id          TEXT PRIMARY KEY,
+    user_id     TEXT REFERENCES users(id) ON DELETE CASCADE,
     notebook_id TEXT REFERENCES notebooks(id) ON DELETE CASCADE,
     note_id     TEXT REFERENCES notes(id) ON DELETE CASCADE,
     content     TEXT,
@@ -420,6 +421,14 @@ def init_db() -> None:
         try:
             conn.execute("ALTER TABLE notebooks ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE CASCADE")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_nb_user ON notebooks(user_id)")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
+
+        # Add user_id to writing_sessions (ownership enforcement)
+        try:
+            conn.execute("ALTER TABLE writing_sessions ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE CASCADE")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_wsessions_user ON writing_sessions(user_id)")
             conn.commit()
         except sqlite3.OperationalError:
             pass
