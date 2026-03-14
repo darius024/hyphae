@@ -471,7 +471,8 @@ async def _nb_chat_core(nb_id: str, cid: str, question: str) -> dict:
 
     citations = build_citations(results)
     context = build_context_prompt(results, max_chunks=6)
-    system = build_system_prompt(context, nb["name"])
+    safe_context, _ = sanitise_text(context)
+    system = build_system_prompt(safe_context, nb["name"])
     safe_q, _ = sanitise_text(question)
 
     client = _gemini_client()
