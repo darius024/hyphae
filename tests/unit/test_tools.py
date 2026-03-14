@@ -118,7 +118,57 @@ class TestSearchText:
     def test_absent_keyword_returns_empty(self, tmp_corpus):
         result = execute_tool("search_text", {"query": "xyzzy_not_in_corpus_9999"})
         assert result["count"] == 0
-        assert result["matches"] == []
+
+    def test_md_files_searched_even_when_txt_fills_quota(self, tmp_corpus):
+        """Regression: early-exit bug caused .md files to be skipped when .txt
+        files already filled max_snippets. Ensure .md content is reachable."""
+        # Write enough .txt matches to fill the default quota of 5
+        for i in range(5):
+            (tmp_corpus / f"filler_{i}.txt").write_text(
+                f"unique_keyword_xyz paragraph {i}"
+            )
+        # Add a .md file with the same keyword
+        (tmp_corpus / "notes.md").write_text("unique_keyword_xyz markdown content")
+
+        from core.tools import _exec_search_text
+        result = _exec_search_text("unique_keyword_xyz", max_snippets=6)
+        names = {m["name"] for m in result["matches"]}
+        assert any(n.endswith(".md") for n in names), \
+            ".md files must be searched even when .txt files fill earlier quota slots"
+
+
+class TestListDocuments:
+    def test_returns_top_level_files_only(self, tmp_corpus):
+        """Regression: previous recursive glob returned files from notes/ subdir."""
+        notes_dir = tmp_corpus / "notes"
+        notes_dir.mkdir()
+        (notes_dir / "hidden_note.txt").write_text("should not appear")
+        (notes_dir / "hidden_note.md").write_text("should not appear either")
+
+        result = execute_tool("list_documents", {})
+        names = [d["name"] for d in result["documents"]]
+        assert "hidden_note.txt" not in names, "notes/ subdir files must not appear in list_documents"
+        assert "hidden_note.md" not in names
+
+    def test_top_level_files_are_returned(self, tmp_corpus):
+        result = execute_tool("list_documents", {})
+        names = [d["name"] for d in result["documents"]]
+        assert "battery_notes.txt" in names
+        assert "polymer_log.txt" in names
+
+    def test_cloud_tool_unavailable_without_key(self, monkeypatch):
+        """Regression: _get_cloud_client should return None without GEMINI_API_KEY,
+        and cloud-dependent tools should surface a clean error instead of raising."""
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        # Reset the cached client so the monkeypatched env takes effect
+        import core.tools as tools_mod
+        original = tools_mod._genai_client
+        tools_mod._genai_client = None
+        try:
+            result = execute_tool("generate_hypothesis", {"context": "test"})
+            assert "error" in result
+        finally:
+            tools_mod._genai_client = original
 
     def test_max_snippets_limit(self, tmp_corpus):
         result = execute_tool("search_text", {"query": "a", "max_snippets": 1})
