@@ -65,6 +65,11 @@ def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
+# Pre-computed hash used to equalise login timing when the email is not found,
+# preventing user enumeration via response-time side-channel.
+_DUMMY_HASH: str = hash_password("hyphae-timing-guard")
+
+
 def verify_password(stored_hash: str, password: str) -> bool:
     """Verify password against stored bcrypt hash."""
     try:
@@ -166,6 +171,7 @@ async def login(req: LoginRequest):
         row = cursor.fetchone()
         
         if not row:
+            verify_password(_DUMMY_HASH, req.password)  # equalise timing
             raise HTTPException(401, "Invalid email or password")
         
         user_id, email, password_hash, name, avatar_url, created_at = row
