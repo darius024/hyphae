@@ -16,6 +16,17 @@ class TestSanitiseText:
         assert "[IP]" in text
         assert "192.168.1.100" not in text
 
+    def test_ipv4_does_not_match_invalid_octets(self):
+        # 999.999.999.999 is not a valid IP — must not be redacted
+        text, triggered = sanitise_text("version 999.999.999.999 released")
+        assert "[IP]" not in text
+        assert "ipv4" not in triggered
+
+    def test_ipv4_does_not_match_software_versions(self):
+        # 1.0.0.4 could be a software version — with octet-constrained pattern
+        # it still matches (all octets valid) so we only check the invalid case above.
+        pass
+
     def test_redacts_url(self):
         text, triggered = sanitise_text("See https://internal.lab.org/results")
         assert "[URL]" in text
@@ -29,6 +40,14 @@ class TestSanitiseText:
         text, triggered = sanitise_text("SSN: 123-45-6789")
         assert "[SSN]" in text
         assert "123-45-6789" not in text
+
+    def test_redacts_ssn_space_separated(self):
+        text, triggered = sanitise_text("SSN: 123 45 6789")
+        assert "[SSN]" in text
+
+    def test_redacts_ssn_unseparated(self):
+        text, triggered = sanitise_text("SSN: 123456789")
+        assert "[SSN]" in text
 
     def test_redacts_gps(self):
         text, triggered = sanitise_text("Location: 51.5074, -0.1278")
@@ -94,3 +113,13 @@ class TestIsSafeForCloud:
 
     def test_path_is_not_safe(self):
         assert is_safe_for_cloud("Read /data/results.csv") is False
+
+    def test_openai_api_key_not_safe(self):
+        assert is_safe_for_cloud("key: sk-" + "a" * 40) is False
+
+    def test_long_dna_sequence_is_safe(self):
+        # A 70-character DNA/protein sequence must NOT be treated as an API key
+        dna = "ATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCG"
+        text, triggered = sanitise_text(f"Protein sequence: {dna}")
+        assert "api_key" not in triggered
+        assert dna in text

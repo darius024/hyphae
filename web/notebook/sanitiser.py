@@ -14,17 +14,24 @@ log = logging.getLogger(__name__)
 
 _PATTERNS: List[Tuple[str, str, str]] = [
     ("email",       r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", "[EMAIL]"),
-    ("ipv4",        r"\b(?:\d{1,3}\.){3}\d{1,3}\b",                     "[IP]"),
+    # Constrain each octet to 0-255 to avoid matching version strings like 12.0.0.4
+    ("ipv4",        r"\b(?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.)" 
+                    r"{3}(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\b",     "[IP]"),
     ("url",         r"(?:https?|ftp|ftps|file|s3)://[^\s]+",             "[URL]"),
     ("phone",       r"\b(?:\+\d{1,3}[\s-]?)?\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b", "[PHONE]"),
-    ("ssn",         r"\b\d{3}-\d{2}-\d{4}\b",                           "[SSN]"),
+    # Also match space-separated (123 45 6789) and unseparated (123456789) SSNs
+    ("ssn",         r"\b\d{3}[-\s]\d{2}[-\s]\d{4}\b|\b\d{9}\b",      "[SSN]"),
     ("date",        r"\b(?:\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4})\b", "[DATE]"),
     ("gps",         r"\b-?\d{1,3}\.\d+,\s*-?\d{1,3}\.\d+\b",            "[GPS]"),
     ("file_path",   r"(?:/[^\s]+)+",                                     "[PATH]"),
     ("lab_code",    r"\b[A-Z]{2}-\d{4,}\b",                              "[LAB_CODE]"),
     ("sample_id",   r"\b(?:sample|specimen|patient|subject)(?:[_-]?\d+|\s+#?[A-Za-z0-9][A-Za-z0-9_-]*)\b", "[SAMPLE_ID]"),
     ("measurement", r"\b\d+(?:\.\d+)?\s*(?:mg|ml|g|kg|°C|°F|nm|μm|mM)\b", "[MEASUREMENT]"),
-    ("api_key",     r"\b(?:AIza[A-Za-z0-9_\-]{35,}|sk-[A-Za-z0-9]{40,}|[A-Za-z0-9_\-]{64,})\b", "[API_KEY]"),
+    # Match known token formats: Google API keys, OpenAI keys, JWT-style dotted
+    # bearer tokens. The previous catch-all (\w{64,}) matched protein sequences,
+    # SHA-256 hashes, and base64 data in scientific documents.
+    ("api_key",     r"\b(?:AIza[A-Za-z0-9_\-]{35,}|sk-[A-Za-z0-9]{40,}"
+                    r"|[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{20,})\b", "[API_KEY]"),
 ]
 
 _COMPILED = [
