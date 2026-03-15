@@ -325,9 +325,15 @@ async def update_member_role(
 # ── Org notebooks ─────────────────────────────────────────────────────────
 
 @router.get("/organizations/{org_id}/notebooks")
-async def list_org_notebooks(org_id: str, _user: dict = Depends(get_current_user)):
+async def list_org_notebooks(org_id: str, user: dict = Depends(get_current_user)):
     """List all notebooks in an organization."""
     with get_conn() as conn:
+        member = conn.execute(
+            "SELECT 1 FROM org_members WHERE org_id=? AND user_id=?",
+            (org_id, user["id"]),
+        ).fetchone()
+        if not member:
+            raise HTTPException(403, "Not a member of this organization")
         rows = conn.execute("""
             SELECT n.*,
                    (SELECT COUNT(*) FROM sources WHERE notebook_id=n.id) as source_count,
@@ -350,7 +356,10 @@ async def add_notebook_to_org(org_id: str, nb_id: str, user: dict = Depends(get_
         if not member:
             raise HTTPException(403, "Not a member of this organization")
 
-        conn.execute("UPDATE notebooks SET org_id=? WHERE id=?", (org_id, nb_id))
+        conn.execute(
+            "UPDATE notebooks SET org_id=? WHERE id=? AND user_id=?",
+            (org_id, nb_id, user["id"]),
+        )
 
         nb = conn.execute("SELECT name FROM notebooks WHERE id=?", (nb_id,)).fetchone()
         activity_id = str(uuid.uuid4())
@@ -407,7 +416,10 @@ async def list_comments(
             conditions.append("c.note_id = ?")
             params.append(note_id)
 
-        where_clause = " AND ".join(conditions) if conditions else "1=1"
+        if not conditions:
+            raise HTTPException(400, "At least one filter (notebook_id, source_id, or note_id) is required")
+
+        where_clause = " AND ".join(conditions)
 
         rows = conn.execute(f"""
             SELECT c.*, u.name as user_name, u.avatar_url as user_avatar,
@@ -521,7 +533,10 @@ async def get_activity_feed(
             conditions.append("a.notebook_id = ?")
             params.append(notebook_id)
 
-        where_clause = " AND ".join(conditions) if conditions else "1=1"
+        if not conditions:
+            raise HTTPException(400, "At least one filter (org_id or notebook_id) is required")
+
+        where_clause = " AND ".join(conditions)
         params.append(limit)
 
         rows = conn.execute(f"""
