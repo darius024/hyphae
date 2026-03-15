@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import time
-import threading
 from collections import defaultdict, deque
 from typing import Sequence
 
@@ -48,7 +48,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self._cleanup_interval = cleanup_interval
 
         self._hits: dict[str, deque[float]] = defaultdict(deque)
-        self._lock = threading.Lock()
+        self._lock = asyncio.Lock()
         self._last_cleanup = time.monotonic()
 
     # Only trust X-Forwarded-For when the direct peer is a known private/loopback
@@ -96,7 +96,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         limit = self._strict_rpm if is_strict else self._global_rpm
         key = f"{ip}:{path}" if is_strict else ip
 
-        with self._lock:
+        async with self._lock:
             self._maybe_cleanup()
             timestamps = self._hits[key]
             self._prune(timestamps, cutoff)
