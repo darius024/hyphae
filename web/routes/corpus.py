@@ -84,6 +84,7 @@ def _sensitivity_path(corpus_dir: str) -> Path:
 
 
 def _load_sensitivity(corpus_dir: str) -> dict:
+    """Read sensitivity tags; must be called while holding _sensitivity_lock."""
     p = _sensitivity_path(corpus_dir)
     if p.exists():
         try:
@@ -94,9 +95,20 @@ def _load_sensitivity(corpus_dir: str) -> dict:
 
 
 def _save_sensitivity(corpus_dir: str, data: dict):
+    """Write sensitivity tags atomically; must be called while holding _sensitivity_lock."""
     p = _sensitivity_path(corpus_dir)
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(data, indent=2))
+    payload = json.dumps(data, indent=2)
+    fd, tmp = tempfile.mkstemp(dir=p.parent, prefix=".sensitivity-")
+    try:
+        os.write(fd, payload.encode())
+        os.fsync(fd)
+        os.close(fd)
+        os.replace(tmp, p)
+    except Exception:
+        os.close(fd)
+        os.unlink(tmp)
+        raise
 
 
 @router.get("/documents")
@@ -217,7 +229,8 @@ async def remove_document(name: str, corpus_dir: _CorpusDirDep, _user: dict = De
 
 @router.get("/sensitivity")
 async def get_sensitivity(corpus_dir: _CorpusDirDep, _user: dict = Depends(get_current_user)):
-    return {"tags": _load_sensitivity(corpus_dir)}
+    with _sensitivity_lock:
+        return {"tags": _load_sensitivity(corpus_dir)}
 
 
 @router.put("/sensitivity/{name}")
