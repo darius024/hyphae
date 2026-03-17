@@ -65,7 +65,7 @@ async def list_user_organizations(user: dict = Depends(get_current_user)):
             ORDER BY o.name
         """, (user["id"],)).fetchall()
 
-    return {"organizations": [dict(r) for r in rows]}
+    return {"organizations": [dict(r) for r in rows][:200]}
 
 
 @router.post("/organizations", status_code=201)
@@ -112,11 +112,13 @@ async def get_organization(org_id: str, user: dict = Depends(get_current_user)):
             JOIN users u ON om.user_id = u.id
             WHERE om.org_id = ?
             ORDER BY om.role, u.name
+            LIMIT 500
         """, (org_id,)).fetchall()
 
         notebooks = conn.execute("""
             SELECT id, name, description, created_at FROM notebooks
             WHERE org_id = ? ORDER BY updated_at DESC
+            LIMIT 200
         """, (org_id,)).fetchall()
 
     return {
@@ -185,6 +187,7 @@ async def list_org_members(org_id: str, user: dict = Depends(get_current_user)):
             JOIN users u ON om.user_id = u.id
             WHERE om.org_id = ?
             ORDER BY om.role DESC, u.name
+            LIMIT 500
         """, (org_id,)).fetchall()
     return {"members": [dict(r) for r in rows]}
 
