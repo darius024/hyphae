@@ -38,10 +38,13 @@ def _get_fernet():
         raw_key = os.environ.get("TOKEN_ENCRYPTION_KEY")
         if not raw_key:
             log.warning(
-                "TOKEN_ENCRYPTION_KEY is not set — OAuth tokens will be stored in plaintext. "
-                "Set this variable in production."
+                "TOKEN_ENCRYPTION_KEY is not set — generating a random ephemeral key. "
+                "OAuth tokens will become invalid on process restart. "
+                "Set TOKEN_ENCRYPTION_KEY in production."
             )
-            return None
+            from cryptography.fernet import Fernet  # type: ignore
+            _fernet = Fernet(Fernet.generate_key())
+            return _fernet
         try:
             from cryptography.fernet import Fernet  # type: ignore
             _fernet = Fernet(raw_key.encode())
@@ -52,7 +55,7 @@ def _get_fernet():
 
 
 def _encrypt_token(value: Optional[str]) -> Optional[str]:
-    """Encrypt *value* with Fernet; return it unchanged if encryption is unavailable."""
+    """Encrypt *value* with Fernet; always encrypted (ephemeral key if not configured)."""
     if value is None:
         return None
     fernet = _get_fernet()
