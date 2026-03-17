@@ -164,12 +164,12 @@ async def list_notebooks(limit: int = Query(50, ge=1, le=200), offset: int = Que
     uid = user["id"]
     with get_conn() as conn:
         total = conn.execute(
-            "SELECT COUNT(*) FROM notebooks WHERE user_id=? OR user_id IS NULL", (uid,)
+            "SELECT COUNT(*) FROM notebooks WHERE user_id=?", (uid,)
         ).fetchone()[0]
         rows = conn.execute(
             "SELECT n.*, COUNT(s.id) AS source_count FROM notebooks n "
             "LEFT JOIN sources s ON s.notebook_id=n.id "
-            "WHERE n.user_id=? OR n.user_id IS NULL "
+            "WHERE n.user_id=? "
             "GROUP BY n.id ORDER BY n.updated_at DESC LIMIT ? OFFSET ?",
             (uid, limit, offset),
         ).fetchall()
