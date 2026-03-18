@@ -86,7 +86,7 @@ def _repo_name_from_url(url: str) -> str:
 def _safe_path(rel: str) -> Path:
     root = _repo_root()
     resolved = (root / rel).resolve()
-    if not str(resolved).startswith(str(root)):
+    if not resolved.is_relative_to(root):
         raise HTTPException(403, "Path traversal not allowed")
     return resolved
 
@@ -320,7 +320,7 @@ async def code_search(q: str = Query(...), _user: dict = Depends(get_current_use
     """Search for text across the repository using grep."""
     if not q.strip():
         return {"results": []}
-    result = _git("grep", "-n", "-i", "--max-count=5", "-r", q, "--", ".")
+    result = _git("grep", "-n", "-i", "--max-count=5", "-r", "-e", q, "--", ".")
     if not result.stdout:
         return {"results": []}
     # Parse grep output: file:line:text
