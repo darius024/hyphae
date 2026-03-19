@@ -38,6 +38,15 @@ class LinkCreate(BaseModel):
 
 # ── Tag CRUD ──────────────────────────────────────────────────────────────
 
+
+def _check_nb_owner(nb_id: str, user_id: str, conn) -> None:
+    """Raise 404 if notebook not found, 403 if it belongs to a different user."""
+    nb = conn.execute("SELECT user_id FROM notebooks WHERE id=?", (nb_id,)).fetchone()
+    if not nb:
+        raise HTTPException(404, "Notebook not found")
+    if nb["user_id"] and nb["user_id"] != user_id:
+        raise HTTPException(403, "Access denied")
+
 @router.get("/tags")
 async def list_tags(_user: dict = Depends(get_current_user)):
     """List all available tags."""
@@ -96,6 +105,7 @@ async def delete_tag(tag_id: str, _user: dict = Depends(get_current_user)):
 async def get_source_tags(nb_id: str, src_id: str, _user: dict = Depends(get_current_user)):
     """Get all tags for a source."""
     with get_conn() as conn:
+        _check_nb_owner(nb_id, _user["id"], conn)
         rows = conn.execute("""
             SELECT t.id, t.name, t.color FROM tags t
             JOIN source_tags st ON st.tag_id = t.id
@@ -109,6 +119,7 @@ async def get_source_tags(nb_id: str, src_id: str, _user: dict = Depends(get_cur
 async def set_source_tags(nb_id: str, src_id: str, body: SourceTagBody, _user: dict = Depends(get_current_user)):
     """Set tags for a source (replaces existing)."""
     with get_conn() as conn:
+        _check_nb_owner(nb_id, _user["id"], conn)
         src = conn.execute(
             "SELECT id FROM sources WHERE id=? AND notebook_id=?", (src_id, nb_id)
         ).fetchone()
@@ -135,6 +146,7 @@ async def set_source_tags(nb_id: str, src_id: str, body: SourceTagBody, _user: d
 async def get_knowledge_graph(nb_id: str, _user: dict = Depends(get_current_user)):
     """Get the knowledge graph for a notebook (nodes = sources, edges = links)."""
     with get_conn() as conn:
+        _check_nb_owner(nb_id, _user["id"], conn)
         sources = conn.execute("""
             SELECT id, title, filename, type, created_at FROM sources
             WHERE notebook_id = ?
@@ -183,8 +195,9 @@ async def create_document_link(nb_id: str, src_id: str, body: LinkCreate, _user:
     """Create a link between two documents."""
     link_id = str(uuid.uuid4())
     with get_conn() as conn:
-        src = conn.execute("SELECT id FROM sources WHERE id=?", (src_id,)).fetchone()
-        tgt = conn.execute("SELECT id FROM sources WHERE id=?", (body.target_id,)).fetchone()
+        _check_nb_owner(nb_id, _user["id"], conn)
+        src = conn.execute("SELECT id FROM sources WHERE id=? AND notebook_id=?", (src_id, nb_id)).fetchone()
+        tgt = conn.execute("SELECT id FROM sources WHERE id=? AND notebook_id=?", (body.target_id, nb_id)).fetchone()
         if not src or not tgt:
             raise HTTPException(404, "Source or target not found")
         if src_id == body.target_id:
@@ -205,5 +218,10 @@ async def create_document_link(nb_id: str, src_id: str, body: LinkCreate, _user:
 async def delete_document_link(nb_id: str, link_id: str, _user: dict = Depends(get_current_user)):
     """Delete a document link."""
     with get_conn() as conn:
-        conn.execute("DELETE FROM document_links WHERE id=?", (link_id,))
+        _check_nb_owner(nb_id, _user["id"], conn)
+        conn.execute(
+            "DELETE FROM document_links WHERE id=? AND source_id IN "
+            "(SELECT id FROM sources WHERE notebook_id=?)",
+            (link_id, nb_id),
+        )
     return {"deleted": link_id}
