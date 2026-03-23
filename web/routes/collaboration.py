@@ -9,7 +9,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+import re as _re
 
 from notebook.db import get_conn, safe_update
 from routes.auth import get_current_user
@@ -31,8 +32,15 @@ class OrgUpdate(BaseModel):
     avatar_url: Optional[str] = None
 
 class OrgInvite(BaseModel):
-    email: str
+    email: str = Field(..., min_length=3, max_length=254)
     role: str = Field(default="member", pattern=r"^(admin|member|viewer)$")
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        if not _re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", v):
+            raise ValueError("Invalid email address")
+        return v.lower()
 
 class CommentCreate(BaseModel):
     content: str = Field(..., min_length=1, max_length=5000)
