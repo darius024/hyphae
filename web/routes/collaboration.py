@@ -287,7 +287,9 @@ async def remove_org_member(org_id: str, user_id: str, user: dict = Depends(get_
             "SELECT role FROM org_members WHERE org_id=? AND user_id=?",
             (org_id, user_id),
         ).fetchone()
-        if target and target["role"] == "owner":
+        if not target:
+            raise HTTPException(404, "User is not a member of this organization")
+        if target["role"] == "owner":
             raise HTTPException(400, "Cannot remove organization owner")
 
         conn.execute(
@@ -322,7 +324,9 @@ async def update_member_role(
             "SELECT role FROM org_members WHERE org_id=? AND user_id=?",
             (org_id, user_id),
         ).fetchone()
-        if target and target["role"] == "owner":
+        if not target:
+            raise HTTPException(404, "User is not a member of this organization")
+        if target["role"] == "owner":
             raise HTTPException(400, "Cannot change owner role")
 
         conn.execute(
