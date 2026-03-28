@@ -6,7 +6,7 @@ import logging
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from core.config import GEMINI_MODEL
@@ -56,15 +56,24 @@ class WritingAssistRequest(BaseModel):
 # ── Note CRUD ─────────────────────────────────────────────────────────────
 
 @router.get("/notebooks/{nb_id}/notes")
-async def list_notes(nb_id: str, _user: dict = Depends(get_current_user)):
+async def list_notes(
+    nb_id: str,
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    _user: dict = Depends(get_current_user),
+):
     """List all notes in a notebook."""
     _check_nb_owner(nb_id, _user["id"])
     with get_conn() as conn:
+        total = conn.execute(
+            "SELECT COUNT(*) FROM notes WHERE notebook_id=?", (nb_id,)
+        ).fetchone()[0]
         rows = conn.execute("""
             SELECT id, title, created_at, updated_at FROM notes
             WHERE notebook_id = ? ORDER BY updated_at DESC
-        """, (nb_id,)).fetchall()
-    return {"notes": [dict(r) for r in rows]}
+            LIMIT ? OFFSET ?
+        """, (nb_id, limit, offset)).fetchall()
+    return {"notes": [dict(r) for r in rows], "total": total}
 
 
 @router.post("/notebooks/{nb_id}/notes", status_code=201)
@@ -155,6 +164,7 @@ async def list_note_versions(nb_id: str, note_id: str, _user: dict = Depends(get
         rows = conn.execute("""
             SELECT id, version_num, created_at, LENGTH(content) as content_length
             FROM note_versions WHERE note_id = ? ORDER BY version_num DESC
+            LIMIT 200
         """, (note_id,)).fetchall()
 
     return {"versions": [dict(r) for r in rows]}
