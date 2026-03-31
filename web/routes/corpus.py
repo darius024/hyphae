@@ -100,14 +100,20 @@ def _save_sensitivity(corpus_dir: str, data: dict):
     p.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(data, indent=2)
     fd, tmp = tempfile.mkstemp(dir=p.parent, prefix=".sensitivity-")
+    _fd_closed = False
     try:
         os.write(fd, payload.encode())
         os.fsync(fd)
         os.close(fd)
+        _fd_closed = True
         os.replace(tmp, p)
     except Exception:
-        os.close(fd)
-        os.unlink(tmp)
+        if not _fd_closed:
+            os.close(fd)
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
         raise
 
 
