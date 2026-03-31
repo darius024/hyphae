@@ -81,16 +81,18 @@ async def get_analytics_dashboard(days: int = Query(default=30, ge=1, le=365), _
             WHERE created_at >= ? AND user_id = ? AND route IS NOT NULL GROUP BY route
         """, (since, uid)).fetchall()
 
-        tool_usage = conn.execute("""
-            SELECT tools_used FROM usage_events
+        # Aggregate tool counts in SQL via json_each to avoid loading all raw
+        # event rows into Python (which is unbounded for large date windows).
+        tool_rows = conn.execute("""
+            SELECT t.value as tool, COUNT(*) as count
+            FROM usage_events, json_each(tools_used) t
             WHERE created_at >= ? AND user_id = ? AND tools_used IS NOT NULL
+            GROUP BY t.value
+            ORDER BY count DESC
+            LIMIT 100
         """, (since, uid)).fetchall()
 
-        tool_counts: dict[str, int] = {}
-        for row in tool_usage:
-            tools = json.loads(row["tools_used"]) if row["tools_used"] else []
-            for t in tools:
-                tool_counts[t] = tool_counts.get(t, 0) + 1
+        tool_counts: dict[str, int] = {r["tool"]: r["count"] for r in tool_rows}
 
         avg_latency = conn.execute("""
             SELECT AVG(latency_ms) as avg_ms FROM usage_events
