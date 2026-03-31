@@ -215,6 +215,7 @@ async def get_pending_reminders(_user: dict = Depends(get_current_user)):
             JOIN deadlines d ON r.deadline_id = d.id
             WHERE r.sent = 0 AND r.remind_at <= ? AND r.user_id = ?
             ORDER BY r.remind_at
+            LIMIT 200
         """, (now, _user["id"])).fetchall()
 
     return {"reminders": [dict(r) for r in rows]}
