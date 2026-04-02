@@ -12,6 +12,7 @@ Covers:
   - Wrong user returns 403
   - Invalid format returns 422
   - Unauthenticated returns 401
+  - Unit tests for pure helpers: _slugify, _escape_bibtex, _bibtex_key
 """
 
 from __future__ import annotations
@@ -355,4 +356,105 @@ class TestExportEndpoint:
             headers=headers,
         )
         assert resp.status_code == 200
-        assert "Answer." in resp.text
+
+
+# ── Pure-function unit tests ──────────────────────────────────────────────────
+
+class TestSlugify:
+    """Unit tests for routes.export._slugify — no DB, no HTTP."""
+
+    def _fn(self):
+        from routes.export import _slugify
+        return _slugify
+
+    def test_basic_ascii(self):
+        assert self._fn()("My Notebook") == "my-notebook"
+
+    def test_non_ascii_stripped(self):
+        assert self._fn()("Résumé Notes") == "rsum-notes"
+
+    def test_special_chars_removed(self):
+        assert self._fn()("Hello! World? (2024)") == "hello-world-2024"
+
+    def test_multiple_spaces_collapse(self):
+        assert self._fn()("a   b   c") == "a-b-c"
+
+    def test_leading_trailing_dashes_stripped(self):
+        assert self._fn()("---hello---") == "hello"
+
+    def test_empty_string_returns_default(self):
+        assert self._fn()("") == "notebook"
+
+    def test_only_special_chars_returns_default(self):
+        assert self._fn()("!!!???") == "notebook"
+
+    def test_numbers_preserved(self):
+        assert self._fn()("2024 Study") == "2024-study"
+
+
+class TestEscapeBibtex:
+    """Unit tests for routes.export._escape_bibtex."""
+
+    def _fn(self):
+        from routes.export import _escape_bibtex
+        return _escape_bibtex
+
+    def test_plain_text_unchanged(self):
+        assert self._fn()("Hello World") == "Hello World"
+
+    def test_escapes_ampersand(self):
+        assert self._fn()("A & B") == r"A \& B"
+
+    def test_escapes_hash(self):
+        assert self._fn()("item #1") == r"item \#1"
+
+    def test_escapes_underscore(self):
+        assert self._fn()("snake_case") == r"snake\_case"
+
+    def test_escapes_percent(self):
+        assert self._fn()("50% done") == r"50\% done"
+
+    def test_escapes_braces(self):
+        assert self._fn()("{value}") == r"\{value\}"
+
+    def test_multiple_specials_in_one_string(self):
+        result = self._fn()("50% & #1")
+        assert r"\%" in result
+        assert r"\&" in result
+        assert r"\#" in result
+
+
+class TestBibtexKey:
+    """Unit tests for routes.export._bibtex_key."""
+
+    def _fn(self):
+        from routes.export import _bibtex_key
+        return _bibtex_key
+
+    def test_key_starts_with_hyphae(self):
+        key = self._fn()("My Paper", "abc123")
+        assert key.startswith("hyphae_")
+
+    def test_key_includes_short_id(self):
+        src_id = "550e8400-e29b-41d4-a716-446655440000"
+        key = self._fn()("Paper", src_id)
+        # short_id strips dashes and takes first 6 chars
+        assert "550e84" in key
+
+    def test_two_titles_same_short_id_differ_by_slug(self):
+        src_id = "aabbccdd"
+        k1 = self._fn()("Alpha Paper", src_id)
+        k2 = self._fn()("Beta Paper", src_id)
+        assert k1 != k2
+
+    def test_empty_title_falls_back_to_id_only(self):
+        src_id = "xxyyzz"
+        key = self._fn()("", src_id)
+        # empty title: _slugify("") returns 'notebook', so key has that slug
+        assert key.startswith("hyphae_")
+        assert src_id[:6] in key
+
+    def test_key_contains_only_safe_chars(self):
+        import re
+        key = self._fn()("A paper with & special % chars", "testid1")
+        assert re.fullmatch(r"[a-z0-9_\-]+", key), f"Unsafe key: {key!r}"

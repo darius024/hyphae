@@ -268,3 +268,91 @@ class TestMigrationIdempotency:
             }
         assert "calendar_events" in tables
 
+
+class TestSafeUpdate:
+    """Tests for db.safe_update — the SQL-injection-safe dynamic UPDATE helper."""
+
+    def test_no_op_when_assignments_empty(self, _use_temp_db):
+        """Calling safe_update with an empty dict must not execute any SQL."""
+        from notebook.db import safe_update
+        with get_conn() as conn:
+            # Capture the rowcount; empty assignments must leave it at -1 (no-op)
+            before = conn.execute(
+                "SELECT name FROM notebooks WHERE id=?", (_DEMO_NOTEBOOK_ID,)
+            ).fetchone()["name"]
+            safe_update(conn, "notebooks", {}, "id", _DEMO_NOTEBOOK_ID)
+            after = conn.execute(
+                "SELECT name FROM notebooks WHERE id=?", (_DEMO_NOTEBOOK_ID,)
+            ).fetchone()["name"]
+        assert before == after
+
+    def test_updates_single_field(self, _use_temp_db):
+        from notebook.db import safe_update
+        with get_conn() as conn:
+            safe_update(conn, "notebooks", {"name": "Renamed"}, "id", _DEMO_NOTEBOOK_ID)
+            row = conn.execute(
+                "SELECT name FROM notebooks WHERE id=?", (_DEMO_NOTEBOOK_ID,)
+            ).fetchone()
+        assert row["name"] == "Renamed"
+
+    def test_updates_multiple_fields(self, _use_temp_db):
+        from notebook.db import safe_update
+        with get_conn() as conn:
+            safe_update(
+                conn, "notebooks",
+                {"name": "Multi", "description": "desc text"},
+                "id", _DEMO_NOTEBOOK_ID,
+            )
+            row = conn.execute(
+                "SELECT name, description FROM notebooks WHERE id=?",
+                (_DEMO_NOTEBOOK_ID,),
+            ).fetchone()
+        assert row["name"] == "Multi"
+        assert row["description"] == "desc text"
+
+    def test_auto_timestamp_updates_updated_at(self, _use_temp_db):
+        from notebook.db import safe_update
+        with get_conn() as conn:
+            safe_update(
+                conn, "notebooks", {"name": "Ts Test"}, "id", _DEMO_NOTEBOOK_ID,
+                auto_timestamp=True,
+            )
+            row = conn.execute(
+                "SELECT updated_at FROM notebooks WHERE id=?", (_DEMO_NOTEBOOK_ID,)
+            ).fetchone()
+        assert row["updated_at"] is not None
+
+    def test_no_timestamp_when_disabled(self, _use_temp_db):
+        """With auto_timestamp=False the query must not touch updated_at."""
+        from notebook.db import safe_update
+        with get_conn() as conn:
+            ts_before = conn.execute(
+                "SELECT updated_at FROM notebooks WHERE id=?", (_DEMO_NOTEBOOK_ID,)
+            ).fetchone()["updated_at"]
+            safe_update(
+                conn, "notebooks", {"name": "No Ts"},
+                "id", _DEMO_NOTEBOOK_ID, auto_timestamp=False,
+            )
+            ts_after = conn.execute(
+                "SELECT updated_at FROM notebooks WHERE id=?", (_DEMO_NOTEBOOK_ID,)
+            ).fetchone()["updated_at"]
+        assert ts_before == ts_after
+
+    def test_rejects_unsafe_table_name(self, _use_temp_db):
+        from notebook.db import safe_update
+        with get_conn() as conn:
+            with pytest.raises(ValueError, match="Unsafe table name"):
+                safe_update(conn, "notebooks; DROP TABLE notebooks", {"name": "x"}, "id", "y")
+
+    def test_rejects_unsafe_column_name(self, _use_temp_db):
+        from notebook.db import safe_update
+        with get_conn() as conn:
+            with pytest.raises(ValueError, match="Unsafe column name"):
+                safe_update(conn, "notebooks", {"name=1; --": "x"}, "id", "y")
+
+    def test_rejects_unsafe_where_col(self, _use_temp_db):
+        from notebook.db import safe_update
+        with get_conn() as conn:
+            with pytest.raises(ValueError, match="Unsafe WHERE column"):
+                safe_update(conn, "notebooks", {"name": "x"}, "id=1 OR 1=1 --", "y")
+
