@@ -175,12 +175,15 @@ async def api_classify(body: _MessageBody, _user: dict = Depends(get_current_use
 
 @router.get("/privacy-log")
 async def api_privacy_log(_user: dict = Depends(get_current_user)):
-    return {"entries": list(_privacy_log)[-100:]}
+    uid = _user["id"]
+    entries = [e for e in _privacy_log if e.get("user_id") == uid]
+    return {"entries": entries[-100:]}
 
 
-def _log_privacy_event(query: str, tools_used: list, data_local: bool, routing_ms: float):
+def _log_privacy_event(user_id: str, query: str, tools_used: list, data_local: bool, routing_ms: float):
     _privacy_log.append({
         "ts": datetime.now(timezone.utc).isoformat(),
+        "user_id": user_id,
         "query": query[:120],
         "tools": [t["tool"] for t in tools_used],
         "data_local": data_local,
@@ -248,7 +251,7 @@ async def api_query(body: _QueryBody, _user: dict = Depends(get_current_user)):
         answer = _synthesise_cloud_answer(user_message, tool_results)
         data_stayed_local = False
 
-    _log_privacy_event(user_message, tool_results, data_stayed_local, routing_ms)
+    _log_privacy_event(_user["id"], user_message, tool_results, data_stayed_local, routing_ms)
 
     return {
         "source": result.get("source", "unknown"),
@@ -324,6 +327,7 @@ async def api_voice(audio: UploadFile = File(...), _user: dict = Depends(get_cur
 
     all_local = _is_all_local(tool_results)
     answer = _format_local_answer(transcript, tool_results) if all_local else _synthesise_cloud_answer(transcript, tool_results)
+    _log_privacy_event(_user["id"], transcript, tool_results, all_local, routing_ms)
 
     return {
         "transcript": transcript,
