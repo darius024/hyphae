@@ -197,7 +197,7 @@ class ConnectRequest(BaseModel):
 async def code_connect(req: ConnectRequest, _user: dict = Depends(get_current_user)):
     """Re-connect to a previously cloned repo."""
     p = Path(req.path).resolve()
-    if not str(p).startswith(str(WORKSPACE_DIR)):
+    if not p.is_relative_to(WORKSPACE_DIR):
         raise HTTPException(403, "Cannot connect to paths outside workspace")
     if not p.exists():
         raise HTTPException(404, "Repository folder not found. It may have been deleted.")
@@ -223,8 +223,8 @@ class DeleteRepoRequest(BaseModel):
 @router.post("/api/code/delete-repo")
 async def code_delete_repo(req: DeleteRepoRequest, _user: dict = Depends(get_current_user)):
     """Delete a cloned repo from disk."""
-    p = Path(req.path)
-    if not str(p.resolve()).startswith(str(WORKSPACE_DIR)):
+    p = Path(req.path).resolve()
+    if not p.is_relative_to(WORKSPACE_DIR):
         raise HTTPException(403, "Cannot delete paths outside workspace")
     if p.exists():
         shutil.rmtree(p, ignore_errors=True)
