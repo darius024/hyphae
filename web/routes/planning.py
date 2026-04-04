@@ -84,7 +84,7 @@ router = APIRouter(prefix="/api", tags=["planning"])
 
 class DeadlineCreate(BaseModel):
     title: str = Field(..., min_length=1)
-    due_date: str
+    due_date: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
     notebook_id: Optional[str] = None
     source_id: Optional[str] = None
     priority: str = Field(default="medium", pattern=r"^(low|medium|high|urgent)$")
@@ -92,14 +92,14 @@ class DeadlineCreate(BaseModel):
 
 class DeadlineUpdate(BaseModel):
     title: Optional[str] = None
-    due_date: Optional[str] = None
+    due_date: Optional[str] = Field(None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     priority: Optional[str] = None
     status: Optional[str] = Field(None, pattern=r"^(pending|in_progress|completed|cancelled)$")
     note: Optional[str] = None
 
 class ReminderCreate(BaseModel):
     deadline_id: str
-    remind_at: str
+    remind_at: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}")
 
 class CalendarConnect(BaseModel):
     provider: str = Field(..., pattern=r"^(google|outlook)$")
