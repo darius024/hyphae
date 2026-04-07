@@ -20,6 +20,7 @@ from core.config import GEMINI_MODEL
 from routes.auth import get_current_user
 
 router = APIRouter(prefix="/api", tags=["notebooks"])
+log = logging.getLogger(__name__)
 
 
 # ── Request models ────────────────────────────────────────────────────
@@ -48,11 +49,12 @@ class _SettingBody(BaseModel):
 
 class _EventBody(BaseModel):
     title: str = Field(..., min_length=1)
-    date: str = Field(..., min_length=1)
-    end_date: Optional[str] = None
+    date: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
+    end_date: Optional[str] = Field(None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     type: str = "event"
     note: Optional[str] = None
-log = logging.getLogger(__name__)
+
+_ALLOWED_SETTINGS: frozenset[str] = frozenset({"embed_model", "retrieval_top_k", "chunk_size", "chunk_overlap"})
 
 # Injected at startup from app.py
 get_conn = None
@@ -570,7 +572,6 @@ async def get_settings(_user: dict = Depends(get_current_user)):
 
 @router.patch("/nb-settings/{key}")
 async def update_setting(key: str, body: _SettingBody, _user: dict = Depends(get_current_user)):
-    _ALLOWED_SETTINGS = {"embed_model", "retrieval_top_k", "chunk_size", "chunk_overlap"}
     if key not in _ALLOWED_SETTINGS:
         raise HTTPException(400, f"Unknown setting key '{key}'. Allowed: {sorted(_ALLOWED_SETTINGS)}")
     with get_conn() as conn:
