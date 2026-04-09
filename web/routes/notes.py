@@ -239,10 +239,12 @@ async def writing_assist(body: WritingAssistRequest, _user: dict = Depends(get_c
     if body.notebook_id:
         with get_conn() as conn:
             nb = conn.execute(
-                "SELECT allow_cloud FROM notebooks WHERE id=?", (body.notebook_id,)
+                "SELECT allow_cloud, user_id FROM notebooks WHERE id=?", (body.notebook_id,)
             ).fetchone()
         if nb is None:
             raise HTTPException(404, "Notebook not found")
+        if nb["user_id"] and nb["user_id"] != _user["id"]:
+            raise HTTPException(403, "Access denied")
         if not nb["allow_cloud"]:
             raise HTTPException(
                 403,
