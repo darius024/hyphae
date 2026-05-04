@@ -30,9 +30,11 @@ def bootstrap() -> None:
         if p not in sys.path:
             sys.path.insert(0, p)
 
-    os.environ.setdefault("USE_DUMMY_EMBED", "1")
-    os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
-    os.environ.setdefault("HF_HUB_OFFLINE", "1")
+    # Suppress the noisy HuggingFace tokenizer fork warning.  Other env
+    # toggles (USE_DUMMY_EMBED, TRANSFORMERS_OFFLINE, HF_HUB_OFFLINE) are
+    # **not** set here: they would silently force the dummy embedder for
+    # every process and degrade FAISS retrieval to noise.  Tests opt in to
+    # the dummy embedder explicitly via tests/conftest.py.
     os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 

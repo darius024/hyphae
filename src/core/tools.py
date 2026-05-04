@@ -6,7 +6,7 @@ from pathlib import Path
 
 # Import .config first — it side-effect-loads the cactus FFI bindings into
 # sys.modules so the subsequent ``from cactus import ...`` resolves.
-from .config import CORPUS_DIR, GEMINI_MODEL, RAG_MODEL_PATH  # noqa: I001
+from .config import CORPUS_DIR, GEMINI_MODEL, RAG_MODEL_PATH
 
 try:
     from cactus import cactus_complete, cactus_init, cactus_rag_query, cactus_reset

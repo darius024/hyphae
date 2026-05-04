@@ -14,11 +14,19 @@ import numpy as np
 
 log = logging.getLogger(__name__)
 
-os.environ.setdefault("USE_DUMMY_EMBED", "1")
+# NOTE: USE_DUMMY_EMBED is intentionally NOT defaulted here.  Setting it on
+# import would silently force the deterministic hash-based fallback for every
+# process, neutering FAISS semantic search.  Callers (tests, offline demos)
+# opt in by exporting USE_DUMMY_EMBED=1 themselves.
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 EMBED_MODEL = "all-MiniLM-L6-v2"
 EMBED_DIM   = 384
+
+# Tracks whether the active model is the real sentence-transformer or the
+# deterministic fallback.  Surfaced via ``is_using_real_embedder()`` so the
+# /ready probe and operators can detect a silently-degraded retrieval stack.
+_USING_DUMMY: bool = True
 
 
 class _DummyEmbedder:
@@ -44,20 +52,48 @@ class _DummyEmbedder:
 
 @lru_cache(maxsize=1)
 def _get_model():
-    if os.environ.get("USE_DUMMY_EMBED", "1") == "1":
+    """Return the embedding model, real if possible and dummy as a last resort.
+
+    Resolution order:
+    1. If ``USE_DUMMY_EMBED=1`` is explicitly set, use the dummy embedder.
+       This is the deterministic offline path used by tests and CI.
+    2. Otherwise attempt to load ``SentenceTransformer(EMBED_MODEL)``.
+    3. On any failure, log a clear warning and fall back to the dummy
+       embedder so ingestion does not break — but record that retrieval
+       quality is degraded for ``is_using_real_embedder()``.
+    """
+    global _USING_DUMMY
+    if os.environ.get("USE_DUMMY_EMBED") == "1":
         os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
         os.environ.setdefault("HF_HUB_OFFLINE", "1")
         log.info("Using dummy embedder (USE_DUMMY_EMBED=1)")
+        _USING_DUMMY = True
         return _DummyEmbedder()
 
     try:
         from sentence_transformers import SentenceTransformer
-        return SentenceTransformer(EMBED_MODEL)
+        model = SentenceTransformer(EMBED_MODEL)
+        log.info("Loaded sentence-transformer %s for embeddings", EMBED_MODEL)
+        _USING_DUMMY = False
+        return model
     except Exception as exc:
-        os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
-        os.environ.setdefault("HF_HUB_OFFLINE", "1")
-        log.warning("Falling back to dummy embedder: %s", exc)
+        log.warning(
+            "Falling back to deterministic dummy embedder — semantic search "
+            "will be DEGRADED.  Cause: %s",
+            exc,
+        )
+        _USING_DUMMY = True
         return _DummyEmbedder()
+
+
+def is_using_real_embedder() -> bool:
+    """Return True if the loaded model is a real sentence-transformer.
+
+    Forces lazy initialisation so the answer reflects the actual model
+    that ``embed()`` would use, not whatever flag was set at import time.
+    """
+    _get_model()
+    return not _USING_DUMMY
 
 
 def embed(texts: list[str]) -> list[list[float]]:

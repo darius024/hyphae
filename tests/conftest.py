@@ -3,6 +3,12 @@
 import os
 import sys
 
+# Tests run offline against the deterministic dummy embedder for speed and
+# reproducibility.  This MUST be set before any code under test imports
+# ``web.notebook.embed`` so the cached model selection picks the dummy.
+os.environ.setdefault("USE_DUMMY_EMBED", "1")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
 os.environ.setdefault("RATE_LIMIT_RPM", "0")
 
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

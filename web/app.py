@@ -276,6 +276,15 @@ async def ready():
     checks["engine"] = "ok" if generate_hybrid is not None else "unavailable"
     checks["tools"] = "ok" if execute_tool is not None else "unavailable"
 
+    # Embedding backend — distinguishes the real sentence-transformer from
+    # the deterministic hash-based fallback so operators can spot a silently
+    # degraded retrieval stack without grep-ing logs.
+    try:
+        from notebook.embed import is_using_real_embedder
+        checks["embedder"] = "ok" if is_using_real_embedder() else "dummy"
+    except Exception as exc:
+        checks["embedder"] = f"fail: {exc}"
+
     all_ok = checks["db"] == "ok"
     status_code = 200 if all_ok else 503
     return JSONResponse({"status": "ready" if all_ok else "not_ready", "checks": checks},
