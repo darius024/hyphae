@@ -44,7 +44,7 @@ def extract_pdf_text(pdf_path: str) -> str:
     return "\n\n".join(pages)
 
 
-def add_file(filepath: str, dest_name: str = None) -> bool:
+def add_file(filepath: str, dest_name: str | None = None) -> bool:
     """Add a single file to the corpus. Returns True on success."""
     path = Path(filepath)
     if not path.exists():

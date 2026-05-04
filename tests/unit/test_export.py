@@ -37,6 +37,7 @@ def _temp_db(tmp_path, monkeypatch):
 @pytest.fixture()
 def client():
     from fastapi.testclient import TestClient
+
     from web.app import app
 
     with TestClient(app) as c:
@@ -116,7 +117,7 @@ class TestExportEndpoint:
         assert resp.status_code == 404
 
     def test_invalid_format_returns_422(self, client):
-        user_id, headers = _signup(client)
+        _user_id, headers = _signup(client)
         nb_id = _create_notebook(client, headers)
         resp = client.post(
             f"/api/notebooks/{nb_id}/export",
@@ -126,7 +127,7 @@ class TestExportEndpoint:
         assert resp.status_code == 422
 
     def test_wrong_user_returns_403(self, client):
-        user1_id, headers1 = _signup(client, "u1")
+        _user1_id, headers1 = _signup(client, "u1")
         _, headers2 = _signup(client, "u2")
         nb_id = _create_notebook(client, headers1, "Private NB")
         resp = client.post(
@@ -171,7 +172,7 @@ class TestExportEndpoint:
         assert "Battery Research" in resp.text
 
     def test_markdown_lists_sources(self, client):
-        user_id, headers = _signup(client)
+        _user_id, headers = _signup(client)
         nb_id = _create_notebook(client, headers, "Physics NB")
         import notebook.db as db_mod
         with db_mod.get_conn() as conn:
@@ -184,7 +185,7 @@ class TestExportEndpoint:
         assert "Quantum Paper" in resp.text
 
     def test_markdown_includes_conversation_history(self, client):
-        user_id, headers = _signup(client)
+        _user_id, headers = _signup(client)
         nb_id = _create_notebook(client, headers, "Conv NB")
         import notebook.db as db_mod
         with db_mod.get_conn() as conn:
@@ -199,7 +200,7 @@ class TestExportEndpoint:
         assert "The main thesis is X" in resp.text
 
     def test_markdown_includes_citation_footnotes(self, client):
-        user_id, headers = _signup(client)
+        _user_id, headers = _signup(client)
         nb_id = _create_notebook(client, headers, "Cit NB")
         import notebook.db as db_mod
         with db_mod.get_conn() as conn:
@@ -247,7 +248,7 @@ class TestExportEndpoint:
         assert ".bib" in cd
 
     def test_bibtex_contains_at_misc_entry(self, client):
-        user_id, headers = _signup(client)
+        _user_id, headers = _signup(client)
         nb_id = _create_notebook(client, headers)
         import notebook.db as db_mod
         with db_mod.get_conn() as conn:
@@ -260,7 +261,7 @@ class TestExportEndpoint:
         assert "@misc{" in resp.text
 
     def test_bibtex_title_field_present(self, client):
-        user_id, headers = _signup(client)
+        _user_id, headers = _signup(client)
         nb_id = _create_notebook(client, headers)
         import notebook.db as db_mod
         with db_mod.get_conn() as conn:
@@ -274,7 +275,7 @@ class TestExportEndpoint:
 
     def test_bibtex_url_source_uses_misc_type(self, client):
         """URL sources must use @misc, not @online (BibLaTeX-only)."""
-        user_id, headers = _signup(client)
+        _user_id, headers = _signup(client)
         nb_id = _create_notebook(client, headers)
         import notebook.db as db_mod
         with db_mod.get_conn() as conn:
@@ -300,7 +301,7 @@ class TestExportEndpoint:
 
     def test_bibtex_special_chars_in_title_are_escaped(self, client):
         """BibTeX special characters in source titles must be escaped."""
-        user_id, headers = _signup(client)
+        _user_id, headers = _signup(client)
         nb_id = _create_notebook(client, headers)
         import notebook.db as db_mod
         with db_mod.get_conn() as conn:
@@ -333,10 +334,11 @@ class TestExportEndpoint:
 
     def test_markdown_malformed_citations_json_does_not_crash(self, client):
         """A message with malformed citations JSON must not cause a 500 error."""
-        user_id, headers = _signup(client)
+        _user_id, headers = _signup(client)
         nb_id = _create_notebook(client, headers, "Malformed Cits NB")
-        import notebook.db as db_mod
         import uuid as _uuid
+
+        import notebook.db as db_mod
         with db_mod.get_conn() as conn:
             _add_source(conn, nb_id)
             conv_id = str(_uuid.uuid4())

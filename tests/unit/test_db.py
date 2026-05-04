@@ -1,11 +1,7 @@
 """Unit tests for the database layer (web/notebook/db.py)."""
 
-import sqlite3
-import sys
-import os
 import pytest
-
-from notebook.db import init_db, get_conn, DB_PATH, _DEMO_NOTEBOOK_ID, _DEMO_CONV_ID
+from notebook.db import _DEMO_CONV_ID, _DEMO_NOTEBOOK_ID, get_conn, init_db
 
 
 @pytest.fixture(autouse=True)
@@ -115,7 +111,8 @@ class TestGetConn:
         assert row is None
 
     def test_foreign_keys_enforced(self, _use_temp_db):
-        with pytest.raises(Exception):
+        import sqlite3
+        with pytest.raises(sqlite3.IntegrityError):
             with get_conn() as conn:
                 conn.execute(
                     "INSERT INTO sources (id, notebook_id, type, status) "

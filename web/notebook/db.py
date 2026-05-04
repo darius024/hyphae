@@ -5,12 +5,12 @@ Tables: notebooks, sources, chunks, conversations, messages, settings
 FTS5 virtual table chunks_fts for BM25 full-text search.
 """
 
+import logging
 import re
 import sqlite3
-import logging
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Generator
 
 log = logging.getLogger(__name__)
 

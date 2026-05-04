@@ -5,12 +5,12 @@ Lazy-loaded so startup stays instant.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
-import hashlib
-import numpy as np
 from functools import lru_cache
-from typing import List, Optional
+
+import numpy as np
 
 log = logging.getLogger(__name__)
 
@@ -60,7 +60,7 @@ def _get_model():
         return _DummyEmbedder()
 
 
-def embed(texts: List[str]) -> List[List[float]]:
+def embed(texts: list[str]) -> list[list[float]]:
     if not texts:
         return []
     try:
@@ -73,5 +73,5 @@ def embed(texts: List[str]) -> List[List[float]]:
     return [v.tolist() for v in vecs]
 
 
-def embed_one(text: str) -> List[float]:
+def embed_one(text: str) -> list[float]:
     return embed([text])[0]

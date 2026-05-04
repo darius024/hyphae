@@ -4,11 +4,13 @@ Provides generate_hybrid() as the primary entry point for function calling.
 Three-tier routing: rule-based → FunctionGemma (on-device) → Gemini (cloud).
 """
 
-import os, logging
-import json, time
-import threading as _threading
 import concurrent.futures as _futures
+import json
+import logging
+import os
 import re
+import threading as _threading
+import time
 
 from .config import GEMINI_MODEL, PROJECT_ROOT
 from .tools import TOOL_DESCRIPTION_HINTS as _TOOL_DESCRIPTION_HINTS
@@ -18,7 +20,7 @@ _CACTUS_SRC = os.path.join(PROJECT_ROOT, "cactus", "python", "src")
 log = logging.getLogger(__name__)
 
 try:
-    from cactus import cactus_init, cactus_complete, cactus_destroy
+    from cactus import cactus_complete, cactus_init
     CACTUS_AVAILABLE = True
 except ImportError:
     CACTUS_AVAILABLE = False
@@ -263,7 +265,7 @@ def generate_cactus(messages, tools):
     def _do_complete():
         return cactus_complete(
             _model,
-            [{"role": "system", "content": _system}] + _msgs,
+            [{"role": "system", "content": _system}, *_msgs],
             tools=_tools,
             force_tools=True,
             max_tokens=300,

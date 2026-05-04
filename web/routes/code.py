@@ -9,17 +9,14 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
-
 from routes.auth import get_current_user
 
 log = logging.getLogger(__name__)
@@ -33,7 +30,7 @@ WORKSPACE_DIR.mkdir(exist_ok=True)
 STATE_FILE = WORKSPACE_DIR / ".code_state.json"
 
 # Currently active repo root (set after clone or reconnect)
-_active_repo: Optional[Path] = None
+_active_repo: Path | None = None
 
 
 def _load_state() -> dict:
@@ -93,7 +90,7 @@ def _safe_path(rel: str) -> Path:
 
 def _git(*args: str) -> subprocess.CompletedProcess:
     root = _repo_root()
-    cmd = ["git", "-C", str(root)] + list(args)
+    cmd = ["git", "-C", str(root), *list(args)]
     log.info("git %s", " ".join(args))
     return subprocess.run(cmd, capture_output=True, text=True, timeout=60, check=False)
 

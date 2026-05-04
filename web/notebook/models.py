@@ -6,8 +6,7 @@ Gemini + Cactus only — no OpenAI references.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
-from typing import Any, List, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -20,20 +19,20 @@ def _uid() -> str:
 
 class NotebookCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
-    description: Optional[str] = None
+    description: str | None = None
     allow_cloud: bool = False
 
 
 class NotebookUpdate(BaseModel):
-    name: Optional[str] = Field(None, min_length=1, max_length=200)
-    description: Optional[str] = None
-    allow_cloud: Optional[bool] = None
+    name: str | None = Field(None, min_length=1, max_length=200)
+    description: str | None = None
+    allow_cloud: bool | None = None
 
 
 class Notebook(BaseModel):
     id: str
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     allow_cloud: bool
     created_at: str
     updated_at: str
@@ -50,13 +49,13 @@ SourceType   = Literal["pdf", "txt", "md", "url"]
 class SourceResponse(BaseModel):
     id: str
     notebook_id: str
-    title: Optional[str] = None
+    title: str | None = None
     type: str
-    filename: Optional[str] = None
-    url: Optional[str] = None
-    page_count: Optional[int] = None
+    filename: str | None = None
+    url: str | None = None
+    page_count: int | None = None
     status: SourceStatus
-    error: Optional[str] = None
+    error: str | None = None
     created_at: str
     updated_at: str
 
@@ -74,23 +73,23 @@ class UploadResponse(BaseModel):
 class Citation(BaseModel):
     number: int
     source_id: str
-    source_title: Optional[str] = None
-    page_number: Optional[int] = None
+    source_title: str | None = None
+    page_number: int | None = None
     snippet: str
-    chunk_id: Optional[str] = None
-    score: Optional[float] = None
+    chunk_id: str | None = None
+    score: float | None = None
 
 
 # ── Conversations ─────────────────────────────────────────────────────────
 
 class ConversationCreate(BaseModel):
-    title: Optional[str] = None
+    title: str | None = None
 
 
 class Conversation(BaseModel):
     id: str
     notebook_id: str
-    title: Optional[str] = None
+    title: str | None = None
     created_at: str
     updated_at: str
 
@@ -105,9 +104,9 @@ class Message(BaseModel):
     notebook_id: str
     role: Literal["user", "assistant", "system"]
     content: str
-    citations: Optional[List[Citation]] = None
-    source: Optional[str] = None
-    latency_ms: Optional[float] = None
+    citations: list[Citation] | None = None
+    source: str | None = None
+    latency_ms: float | None = None
     created_at: str
 
     model_config = {"from_attributes": True}
@@ -121,8 +120,8 @@ class ChatMsg(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    messages: List[ChatMsg]
-    conversation_id: Optional[str] = None
+    messages: list[ChatMsg]
+    conversation_id: str | None = None
     stream: bool = False
 
 

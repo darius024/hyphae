@@ -8,16 +8,15 @@ import logging
 import re
 import shutil
 import uuid
+from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import AsyncIterator
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from typing import Optional
+from routes.auth import get_current_user
 
 from core.config import GEMINI_MODEL
-from routes.auth import get_current_user
 
 router = APIRouter(prefix="/api", tags=["notebooks"])
 log = logging.getLogger(__name__)
@@ -30,7 +29,7 @@ class _NotebookBody(BaseModel):
 
 class _UrlBody(BaseModel):
     url: str = Field(..., min_length=1)
-    title: Optional[str] = None
+    title: str | None = None
 
 class _SensitivityBody(BaseModel):
     level: str = Field(..., pattern=r"^(confidential|shareable)$")
@@ -50,9 +49,9 @@ class _SettingBody(BaseModel):
 class _EventBody(BaseModel):
     title: str = Field(..., min_length=1)
     date: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
-    end_date: Optional[str] = Field(None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    end_date: str | None = Field(None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     type: str = "event"
-    note: Optional[str] = None
+    note: str | None = None
 
 _ALLOWED_SETTINGS: frozenset[str] = frozenset({"embed_model", "retrieval_top_k", "chunk_size", "chunk_overlap"})
 

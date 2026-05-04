@@ -1,9 +1,8 @@
 import os
+
 os.environ["CACTUS_NO_CLOUD_TELE"] = "1"
 
-import json
 from main import generate_hybrid  # also bootstraps sys.path
-
 
 ############## Tool definitions ##############
 
@@ -422,7 +421,7 @@ def run_benchmark(benchmarks=None):
     for i, r in enumerate(results, 1):
         print(f"  {i:>2} | {r['difficulty']:<10} | {r['name']:<28} | {r['total_time_ms']:>10.2f} | {r['f1']:>5.2f} | {r['source']}")
 
-    print(f"\n--- Summary ---")
+    print("\n--- Summary ---")
     for difficulty in ["easy", "medium", "hard"]:
         group = [r for r in results if r["difficulty"] == difficulty]
         if not group:

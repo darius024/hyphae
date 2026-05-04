@@ -5,13 +5,11 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import datetime, timedelta, timezone
-from typing import Optional, List
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, Field
-
 from notebook.db import get_conn
+from pydantic import BaseModel, Field
 from routes.auth import get_current_user
 
 log = logging.getLogger(__name__)
@@ -20,19 +18,19 @@ router = APIRouter(prefix="/api", tags=["analytics"])
 
 class UsageEvent(BaseModel):
     event_type: str = Field(..., pattern=r"^(query|tool_use|upload|chat|export)$")
-    event_data: Optional[dict] = None
-    route: Optional[str] = None
-    tools_used: Optional[List[str]] = None
-    latency_ms: Optional[float] = None
+    event_data: dict | None = None
+    route: str | None = None
+    tools_used: list[str] | None = None
+    latency_ms: float | None = None
 
 
 def log_usage_event(
     event_type: str,
-    event_data: dict = None,
-    route: str = None,
-    tools_used: List[str] = None,
-    latency_ms: float = None,
-    user_id: str = None,
+    event_data: dict | None = None,
+    route: str | None = None,
+    tools_used: list[str] | None = None,
+    latency_ms: float | None = None,
+    user_id: str | None = None,
 ) -> str:
     """Helper to log a usage event from anywhere in the app."""
     event_id = str(uuid.uuid4())
@@ -62,7 +60,7 @@ async def record_usage_event(body: UsageEvent, _user: dict = Depends(get_current
 @router.get("/analytics/dashboard")
 async def get_analytics_dashboard(days: int = Query(default=30, ge=1, le=365), _user: dict = Depends(get_current_user)):
     """Get analytics dashboard data."""
-    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    since = (datetime.now(UTC) - timedelta(days=days)).isoformat()
     uid = _user["id"]
 
     with get_conn() as conn:

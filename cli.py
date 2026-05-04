@@ -5,9 +5,8 @@ import argparse
 import json
 import time
 
+from core.tools import ALL_TOOLS, LOCAL_ONLY_TOOLS, execute_tool
 from main import generate_hybrid  # also bootstraps sys.path
-from core.tools import ALL_TOOLS, execute_tool, LOCAL_ONLY_TOOLS
-from core.privacy import sanitise_for_cloud
 
 
 def _format_source(source):

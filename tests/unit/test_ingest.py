@@ -1,9 +1,6 @@
 """Unit tests for corpus ingestion."""
 
-import os
-import pytest
-from pathlib import Path
-from ingestion.corpus import add_file, add_directory, list_documents, remove_document
+from ingestion.corpus import add_directory, add_file, list_documents, remove_document
 
 
 class TestAddFile:

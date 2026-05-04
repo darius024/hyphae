@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from notebook.db import get_conn, safe_update
 from pydantic import BaseModel, Field
+from routes.auth import get_current_user
 
 from core.config import GEMINI_MODEL
-from notebook.db import get_conn, safe_update
-from routes.auth import get_current_user
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["notes"])
@@ -43,14 +42,14 @@ class NoteCreate(BaseModel):
     content: str = ""
 
 class NoteUpdate(BaseModel):
-    title: Optional[str] = None
-    content: Optional[str] = None
+    title: str | None = None
+    content: str | None = None
 
 class WritingAssistRequest(BaseModel):
     content: str = Field(..., min_length=1)
     action: str = Field(..., pattern=r"^(autocomplete|grammar|style|summarize|expand|simplify)$")
-    context: Optional[str] = None
-    notebook_id: Optional[str] = None  # when set, cloud use is gated on allow_cloud
+    context: str | None = None
+    notebook_id: str | None = None  # when set, cloud use is gated on allow_cloud
 
 
 # ── Note CRUD ─────────────────────────────────────────────────────────────
@@ -273,15 +272,15 @@ async def writing_assist(body: WritingAssistRequest, _user: dict = Depends(get_c
         }
     except Exception as e:
         log.error("Writing assist failed: %s", e)
-        raise HTTPException(500, f"AI request failed: {str(e)}")
+        raise HTTPException(500, f"AI request failed: {e!s}")
 
 
 @router.post("/writing/session")
 async def save_writing_session(
-    notebook_id: Optional[str] = None,
-    note_id: Optional[str] = None,
+    notebook_id: str | None = None,
+    note_id: str | None = None,
     content: str = "",
-    ai_suggestions: Optional[str] = None,
+    ai_suggestions: str | None = None,
     _user: dict = Depends(get_current_user),
 ):
     """Save a writing session state."""

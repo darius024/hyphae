@@ -1,11 +1,22 @@
 import json
 import os
 import threading
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
-from .config import CACTUS_SRC, GEMINI_MODEL, RAG_MODEL_PATH, CORPUS_DIR
-from cactus import cactus_init, cactus_rag_query, cactus_complete, cactus_reset
+# Import .config first — it side-effect-loads the cactus FFI bindings into
+# sys.modules so the subsequent ``from cactus import ...`` resolves.
+from .config import CORPUS_DIR, GEMINI_MODEL, RAG_MODEL_PATH  # noqa: I001
+
+try:
+    from cactus import cactus_complete, cactus_init, cactus_rag_query, cactus_reset
+    CACTUS_AVAILABLE = True
+except ImportError:
+    # FFI not built (libcactus.dylib missing) or symbols absent.  Tools that
+    # need on-device inference will fail at call time; the rest of the module
+    # remains importable so tests, schemas and CLI utilities still work.
+    CACTUS_AVAILABLE = False
+    cactus_complete = cactus_init = cactus_rag_query = cactus_reset = None  # type: ignore[assignment]
 
 NOTES_DIR = os.path.join(CORPUS_DIR, "notes")
 

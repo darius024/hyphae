@@ -1,9 +1,8 @@
 """Integration tests for authentication endpoints."""
 
 import pytest
-
 from notebook import db as db_mod
-from notebook.db import init_db, get_conn
+from notebook.db import init_db
 
 
 @pytest.fixture(autouse=True)
@@ -15,8 +14,9 @@ def _temp_db(tmp_path, monkeypatch):
 
 @pytest.fixture()
 def client():
-    from web.app import app
     from fastapi.testclient import TestClient
+
+    from web.app import app
     return TestClient(app)
 
 
@@ -56,7 +56,7 @@ class TestSignup:
         assert r.status_code == 422
 
     def test_duplicate_email_rejected(self, client, registered_user):
-        email, password, _ = registered_user
+        email, _password, _ = registered_user
         r = client.post("/api/auth/signup", json={
             "email": email,
             "password": "anotherpassword",

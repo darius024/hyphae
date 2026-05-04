@@ -9,14 +9,11 @@ Takes raw retrieval results and produces:
 
 from __future__ import annotations
 
-from typing import List
-
 from .models import Citation
-
 
 # ── Public API ────────────────────────────────────────────────────────────
 
-def build_citations(chunk_results: List[dict]) -> List[Citation]:
+def build_citations(chunk_results: list[dict]) -> list[Citation]:
     """
     Deduplicate retrieved chunks by (source_id, page_number) and
     return a numbered list of Citation objects.
@@ -25,7 +22,7 @@ def build_citations(chunk_results: List[dict]) -> List[Citation]:
     request the full chunk text for the inline-preview popup.
     """
     seen: set = set()
-    citations: List[Citation] = []
+    citations: list[Citation] = []
     num = 1
     for r in chunk_results:
         key = (r.get("source_id"), r.get("page_number"))
@@ -47,7 +44,7 @@ def build_citations(chunk_results: List[dict]) -> List[Citation]:
     return citations
 
 
-def build_context_prompt(chunk_results: List[dict], max_chunks: int = 6) -> str:
+def build_context_prompt(chunk_results: list[dict], max_chunks: int = 6) -> str:
     """
     Format retrieved chunks into a numbered context block for the LLM.
 
@@ -58,7 +55,7 @@ def build_context_prompt(chunk_results: List[dict], max_chunks: int = 6) -> str:
         [2] (Source: "Paper B")
         "Energy production in cells..."
     """
-    lines: List[str] = []
+    lines: list[str] = []
     for idx, r in enumerate(chunk_results[:max_chunks], start=1):
         title = r.get("source_title", "Untitled")
         page  = r.get("page_number")

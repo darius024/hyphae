@@ -13,7 +13,7 @@ import re
 import threading
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from .db import get_conn
 from .embed import EMBED_DIM
@@ -28,13 +28,13 @@ FAISS_DIR.mkdir(exist_ok=True)
 _INDEX_TTL = int(os.environ.get("FAISS_INDEX_TTL", "300"))
 _EVICT_INTERVAL = max(30, _INDEX_TTL // 2) if _INDEX_TTL else 0
 
-_indexes: Dict[str, Any] = {}
-_id_maps: Dict[str, List[str]] = {}
-_last_access: Dict[str, float] = {}  # notebook_id -> monotonic timestamp of last use
+_indexes: dict[str, Any] = {}
+_id_maps: dict[str, list[str]] = {}
+_last_access: dict[str, float] = {}  # notebook_id -> monotonic timestamp of last use
 
 # Per-notebook RLocks prevent two concurrent requests from simultaneously
 # creating duplicate index objects or corrupting FAISS .index files on disk.
-_nb_locks: Dict[str, threading.RLock] = {}
+_nb_locks: dict[str, threading.RLock] = {}
 _nb_locks_mu = threading.Lock()  # protects the _nb_locks dict itself
 
 
@@ -148,7 +148,7 @@ def _save_index(notebook_id: str) -> None:
         _idmap_path(notebook_id).write_text("\n".join(id_map))
 
 
-def add_chunks(notebook_id: str, chunk_ids: List[str], vectors: List[List[float]]) -> List[int]:
+def add_chunks(notebook_id: str, chunk_ids: list[str], vectors: list[list[float]]) -> list[int]:
     """Add vectors to the notebook FAISS index. Returns list of assigned FAISS IDs."""
     np = _np()
     with _get_nb_lock(notebook_id):
@@ -167,7 +167,7 @@ def add_chunks(notebook_id: str, chunk_ids: List[str], vectors: List[List[float]
         return list(range(start, start + len(chunk_ids)))
 
 
-def vector_search(notebook_id: str, query_vec: List[float], top_k: int = 6) -> List[Tuple[str, float]]:
+def vector_search(notebook_id: str, query_vec: list[float], top_k: int = 6) -> list[tuple[str, float]]:
     """Return [(chunk_id, cosine_score)] sorted descending."""
     np = _np()
     with _get_nb_lock(notebook_id):
@@ -183,13 +183,13 @@ def vector_search(notebook_id: str, query_vec: List[float], top_k: int = 6) -> L
         k = min(top_k, index.ntotal)
         scores, indices = index.search(q, k)
         results = []
-        for score, idx in zip(scores[0], indices[0]):
+        for score, idx in zip(scores[0], indices[0], strict=False):
             if 0 <= idx < len(id_map):
                 results.append((id_map[idx], float(score)))
         return results
 
 
-def bm25_search(notebook_id: str, query: str, top_k: int = 6) -> List[Tuple[str, float]]:
+def bm25_search(notebook_id: str, query: str, top_k: int = 6) -> list[tuple[str, float]]:
     """Full-text BM25 search via FTS5. Returns [(chunk_id, rank_score)]."""
     safe_query = re.sub(r'[^\w\s]', ' ', query).strip()
     if not safe_query:
@@ -210,7 +210,7 @@ def bm25_search(notebook_id: str, query: str, top_k: int = 6) -> List[Tuple[str,
     return results
 
 
-def hybrid_search(notebook_id: str, query: str, query_vec: List[float], top_k: int = 6) -> List[dict]:
+def hybrid_search(notebook_id: str, query: str, query_vec: list[float], top_k: int = 6) -> list[dict]:
     """
     Merge vector + BM25 results via Reciprocal Rank Fusion (k=60).
     Returns list of dicts with chunk_id, source_id, source_title, page_number, snippet, score.
@@ -219,7 +219,7 @@ def hybrid_search(notebook_id: str, query: str, query_vec: List[float], top_k: i
     bm25_hits = bm25_search(notebook_id, query, top_k * 2)
 
     K = 60
-    rrf: Dict[str, float] = {}
+    rrf: dict[str, float] = {}
     for rank, (cid, _) in enumerate(vec_hits):
         rrf[cid] = rrf.get(cid, 0.0) + 1.0 / (K + rank + 1)
     for rank, (cid, _) in enumerate(bm25_hits):

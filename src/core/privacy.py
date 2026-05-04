@@ -8,10 +8,10 @@ This module adds engine-specific helpers for tool-level privacy filtering.
 from .tools import LOCAL_ONLY_TOOLS
 
 try:
-    from notebook.sanitiser import sanitise_text, sanitise_messages  # noqa: F401
+    from notebook.sanitiser import sanitise_messages, sanitise_text
 except ImportError:
-    from copy import deepcopy as _deepcopy
     import re as _re
+    from copy import deepcopy as _deepcopy
 
     _FALLBACK = [(_re.compile(r"https?://\S+"), "[URL]"),
                  (_re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}"), "[EMAIL]")]

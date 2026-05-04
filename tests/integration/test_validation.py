@@ -1,7 +1,6 @@
 """Integration tests for Pydantic request validation (422 responses)."""
 
 import pytest
-
 from notebook import db as db_mod
 from notebook.db import init_db
 
@@ -18,8 +17,9 @@ def client(tmp_path, monkeypatch):
     corpus = tmp_path / "corpus"
     corpus.mkdir()
 
-    from web.app import app
     from routes import corpus as corpus_mod
+
+    from web.app import app
     corpus_mod.configure(str(corpus), None)
 
     from fastapi.testclient import TestClient

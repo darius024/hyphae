@@ -1,9 +1,8 @@
 """Integration tests for tags, analytics, and planning API endpoints."""
 
 import pytest
-
 from notebook import db as db_mod
-from notebook.db import init_db, get_conn
+from notebook.db import get_conn, init_db
 
 
 @pytest.fixture(autouse=True)
@@ -18,8 +17,9 @@ def client(tmp_path, monkeypatch):
     corpus = tmp_path / "corpus"
     corpus.mkdir()
 
-    from web.app import app
     from routes import corpus as corpus_mod
+
+    from web.app import app
     corpus_mod.configure(str(corpus), None)
 
     from fastapi.testclient import TestClient

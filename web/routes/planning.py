@@ -2,18 +2,15 @@
 
 from __future__ import annotations
 
-import base64
 import logging
 import os
 import threading
 import uuid
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
-
 from notebook.db import get_conn, safe_update
+from pydantic import BaseModel, Field
 from routes.auth import get_current_user
 
 log = logging.getLogger(__name__)
@@ -54,7 +51,7 @@ def _get_fernet():
             return None
 
 
-def _encrypt_token(value: Optional[str]) -> Optional[str]:
+def _encrypt_token(value: str | None) -> str | None:
     """Encrypt *value* with Fernet; always encrypted (ephemeral key if not configured)."""
     if value is None:
         return None
@@ -64,7 +61,7 @@ def _encrypt_token(value: Optional[str]) -> Optional[str]:
     return fernet.encrypt(value.encode()).decode()
 
 
-def _decrypt_token(value: Optional[str]) -> Optional[str]:
+def _decrypt_token(value: str | None) -> str | None:
     """Decrypt a Fernet-encrypted *value*; return it unchanged if encryption is unavailable."""
     if value is None:
         return None
@@ -85,17 +82,17 @@ router = APIRouter(prefix="/api", tags=["planning"])
 class DeadlineCreate(BaseModel):
     title: str = Field(..., min_length=1)
     due_date: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
-    notebook_id: Optional[str] = None
-    source_id: Optional[str] = None
+    notebook_id: str | None = None
+    source_id: str | None = None
     priority: str = Field(default="medium", pattern=r"^(low|medium|high|urgent)$")
-    note: Optional[str] = None
+    note: str | None = None
 
 class DeadlineUpdate(BaseModel):
-    title: Optional[str] = None
-    due_date: Optional[str] = Field(None, pattern=r"^\d{4}-\d{2}-\d{2}$")
-    priority: Optional[str] = None
-    status: Optional[str] = Field(None, pattern=r"^(pending|in_progress|completed|cancelled)$")
-    note: Optional[str] = None
+    title: str | None = None
+    due_date: str | None = Field(None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    priority: str | None = None
+    status: str | None = Field(None, pattern=r"^(pending|in_progress|completed|cancelled)$")
+    note: str | None = None
 
 class ReminderCreate(BaseModel):
     deadline_id: str
@@ -104,22 +101,22 @@ class ReminderCreate(BaseModel):
 class CalendarConnect(BaseModel):
     provider: str = Field(..., pattern=r"^(google|outlook)$")
     access_token: str
-    refresh_token: Optional[str] = None
-    token_expiry: Optional[str] = None
-    calendar_id: Optional[str] = None
+    refresh_token: str | None = None
+    token_expiry: str | None = None
+    calendar_id: str | None = None
 
 
 # ── Deadlines ─────────────────────────────────────────────────────────────
 
 @router.get("/deadlines")
 async def list_deadlines(
-    notebook_id: Optional[str] = None,
-    status: Optional[str] = None,
+    notebook_id: str | None = None,
+    status: str | None = None,
     upcoming_days: int = Query(default=30, ge=1, le=365),
     _user: dict = Depends(get_current_user),
 ):
     """List deadlines, optionally filtered."""
-    until = (datetime.now(timezone.utc) + timedelta(days=upcoming_days)).isoformat()
+    until = (datetime.now(UTC) + timedelta(days=upcoming_days)).isoformat()
 
     query = "SELECT * FROM deadlines WHERE due_date <= ? AND user_id = ?"
     params: list = [until, _user["id"]]
@@ -207,7 +204,7 @@ async def create_reminder(body: ReminderCreate, _user: dict = Depends(get_curren
 @router.get("/reminders/pending")
 async def get_pending_reminders(_user: dict = Depends(get_current_user)):
     """Get all pending (unsent) reminders that are due."""
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     with get_conn() as conn:
         rows = conn.execute("""
             SELECT r.*, d.title as deadline_title, d.due_date
@@ -302,7 +299,7 @@ async def disconnect_calendar(conn_id: str, user: dict = Depends(get_current_use
 @router.get("/planning/digest")
 async def get_planning_digest(
     days: int = Query(default=7, ge=1, le=90),
-    notebook_id: Optional[str] = None,
+    notebook_id: str | None = None,
     user: dict = Depends(get_current_user),
 ):
     """Return upcoming deadlines (within *days* days) with the latest conversation
@@ -314,7 +311,7 @@ async def get_planning_digest(
     ``truncated`` is ``true`` in the response.
 
     Args:
-        days: Look-ahead window in days (1–90).  Default is 7.
+        days: Look-ahead window in days (1-90).  Default is 7.
         notebook_id: Optional. When provided, only deadlines linked to this
             notebook are returned.
 
@@ -325,8 +322,8 @@ async def get_planning_digest(
         - ``latest_conversation``: ``{id, title, updated_at}`` of the most
           recently updated conversation in the linked notebook, or ``null``.
     """
-    now = datetime.now(timezone.utc).isoformat()
-    until = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+    now = datetime.now(UTC).isoformat()
+    until = (datetime.now(UTC) + timedelta(days=days)).isoformat()
 
     nb_filter = " AND d.notebook_id = ?" if notebook_id else ""
     params: list = [now, until, user["id"]]

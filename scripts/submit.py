@@ -8,6 +8,7 @@ Usage:
 import argparse
 import os
 import time
+
 import requests
 
 SERVER_URL = "https://cactusevals.ngrok.app"
@@ -51,7 +52,7 @@ def submit(team, location):
     submission_id = data["submission_id"]
     print(f"Queued! Position: #{data['position_in_queue']}")
     print(f"Submission ID: {submission_id}")
-    print(f"\nWaiting for evaluation to complete...\n")
+    print("\nWaiting for evaluation to complete...\n")
 
     last_progress = ""
     while True:
@@ -80,7 +81,7 @@ def submit(team, location):
             print(f"  Avg F1      : {result['f1']:.4f}")
             print(f"  Avg Time    : {result['avg_time_ms']:.0f}ms")
             print(f"  On-Device   : {result['on_device_pct']:.0f}%")
-            print(f"  Leaderboard : Updated!")
+            print("  Leaderboard : Updated!")
             print(f"{'=' * 50}")
             return
 

@@ -10,17 +10,15 @@ Endpoints:
 from __future__ import annotations
 
 import logging
-import secrets
-from datetime import datetime, timedelta, timezone
-from typing import Optional
-
-import bcrypt
-from fastapi import APIRouter, HTTPException, Header, Depends
-from pydantic import BaseModel, Field
 import os
 import re as _re
+import secrets
+from datetime import UTC, datetime, timedelta
 
+import bcrypt
+from fastapi import APIRouter, Depends, Header, HTTPException
 from notebook.db import get_conn
+from pydantic import BaseModel, Field
 
 log = logging.getLogger(__name__)
 
@@ -49,7 +47,7 @@ class UserResponse(BaseModel):
     id: str
     email: str
     name: str
-    avatar_url: Optional[str] = None
+    avatar_url: str | None = None
     created_at: str
 
 
@@ -83,7 +81,7 @@ def create_session_token() -> str:
     return secrets.token_urlsafe(32)
 
 
-def _resolve_token(authorization: Optional[str]) -> Optional[dict]:
+def _resolve_token(authorization: str | None) -> dict | None:
     """Look up a Bearer token and return the user dict, or None."""
     if not authorization or not authorization.startswith("Bearer "):
         return None
@@ -101,12 +99,12 @@ def _resolve_token(authorization: Optional[str]) -> Optional[dict]:
             "avatar_url": row[3], "created_at": row[4]}
 
 
-def get_optional_user(authorization: Optional[str] = Header(None)) -> Optional[dict]:
+def get_optional_user(authorization: str | None = Header(None)) -> dict | None:
     """Return the authenticated user or None (never raises)."""
     return _resolve_token(authorization)
 
 
-def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
+def get_current_user(authorization: str | None = Header(None)) -> dict:
     """Return the authenticated user or raise 401."""
     user = _resolve_token(authorization)
     if user is None:
@@ -140,7 +138,7 @@ async def signup(req: SignupRequest):
 
         token = create_session_token()
         session_id = secrets.token_hex(16)
-        expires_at = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+        expires_at = (datetime.now(UTC) + timedelta(days=30)).isoformat()
 
         conn.execute(
             "INSERT INTO sessions (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)",
@@ -182,7 +180,7 @@ async def login(req: LoginRequest):
         # Create session
         token = create_session_token()
         session_id = secrets.token_hex(16)
-        expires_at = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+        expires_at = (datetime.now(UTC) + timedelta(days=30)).isoformat()
         
         conn.execute(
             "INSERT INTO sessions (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)",
@@ -209,7 +207,7 @@ async def login(req: LoginRequest):
 
 
 @router.post("/api/auth/logout")
-async def logout(authorization: Optional[str] = Header(None)):
+async def logout(authorization: str | None = Header(None)):
     """Logout (invalidate session)."""
     if not authorization or not authorization.startswith("Bearer "):
         return {"ok": True}

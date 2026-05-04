@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import logging
+import re as _re
 import secrets
 import uuid
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field, field_validator
-import re as _re
-
 from notebook.db import get_conn, safe_update
+from pydantic import BaseModel, Field, field_validator
 from routes.auth import get_current_user
 
 log = logging.getLogger(__name__)
@@ -24,12 +22,12 @@ router = APIRouter(prefix="/api", tags=["collaboration"])
 class OrgCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     slug: str = Field(..., min_length=2, max_length=50, pattern=r"^[a-z0-9-]+$")
-    description: Optional[str] = None
+    description: str | None = None
 
 class OrgUpdate(BaseModel):
-    name: Optional[str] = Field(None, min_length=1, max_length=100)
-    description: Optional[str] = None
-    avatar_url: Optional[str] = None
+    name: str | None = Field(None, min_length=1, max_length=100)
+    description: str | None = None
+    avatar_url: str | None = None
 
 class OrgInvite(BaseModel):
     email: str = Field(..., min_length=3, max_length=254)
@@ -44,15 +42,15 @@ class OrgInvite(BaseModel):
 
 class CommentCreate(BaseModel):
     content: str = Field(..., min_length=1, max_length=5000)
-    notebook_id: Optional[str] = None
-    source_id: Optional[str] = None
-    note_id: Optional[str] = None
-    conversation_id: Optional[str] = None
-    parent_id: Optional[str] = None
+    notebook_id: str | None = None
+    source_id: str | None = None
+    note_id: str | None = None
+    conversation_id: str | None = None
+    parent_id: str | None = None
 
 class CommentUpdate(BaseModel):
-    content: Optional[str] = Field(None, min_length=1, max_length=5000)
-    resolved: Optional[bool] = None
+    content: str | None = Field(None, min_length=1, max_length=5000)
+    resolved: bool | None = None
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -228,7 +226,7 @@ async def invite_to_org(org_id: str, body: OrgInvite, user: dict = Depends(get_c
 
         invite_id = str(uuid.uuid4())
         token = secrets.token_urlsafe(32)
-        expires = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+        expires = (datetime.now(UTC) + timedelta(days=7)).isoformat()
 
         conn.execute("""
             INSERT INTO org_invites (id, org_id, email, role, token, invited_by, expires_at)
@@ -249,7 +247,7 @@ async def accept_org_invite(token: str, user: dict = Depends(get_current_user)):
         if not invite:
             raise HTTPException(404, "Invalid or expired invite")
 
-        if datetime.fromisoformat(invite["expires_at"].replace("Z", "+00:00")) < datetime.now(timezone.utc):
+        if datetime.fromisoformat(invite["expires_at"].replace("Z", "+00:00")) < datetime.now(UTC):
             raise HTTPException(400, "Invite has expired")
 
         db_user = conn.execute("SELECT email FROM users WHERE id=?", (user["id"],)).fetchone()
@@ -411,9 +409,9 @@ async def remove_notebook_from_org(org_id: str, nb_id: str, user: dict = Depends
 
 @router.get("/comments")
 async def list_comments(
-    notebook_id: Optional[str] = None,
-    source_id: Optional[str] = None,
-    note_id: Optional[str] = None,
+    notebook_id: str | None = None,
+    source_id: str | None = None,
+    note_id: str | None = None,
     _user: dict = Depends(get_current_user),
 ):
     """List comments for a specific target."""
@@ -531,8 +529,8 @@ async def delete_comment(comment_id: str, user: dict = Depends(get_current_user)
 
 @router.get("/activity")
 async def get_activity_feed(
-    org_id: Optional[str] = None,
-    notebook_id: Optional[str] = None,
+    org_id: str | None = None,
+    notebook_id: str | None = None,
     limit: int = Query(default=50, ge=1, le=200),
     _user: dict = Depends(get_current_user),
 ):
@@ -570,10 +568,10 @@ async def get_activity_feed(
 async def log_activity(
     action: str,
     target_type: str,
-    target_id: Optional[str] = None,
-    target_title: Optional[str] = None,
-    notebook_id: Optional[str] = None,
-    metadata: Optional[str] = None,
+    target_id: str | None = None,
+    target_title: str | None = None,
+    notebook_id: str | None = None,
+    metadata: str | None = None,
     user: dict = Depends(get_current_user),
 ):
     """Log an activity event."""

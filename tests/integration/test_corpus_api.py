@@ -10,7 +10,6 @@ import shutil
 from pathlib import Path
 
 import pytest
-
 from notebook import db as db_mod
 from notebook.db import init_db
 
@@ -30,8 +29,9 @@ def corpus_dir(tmp_path):
 
 @pytest.fixture()
 def client(corpus_dir, monkeypatch):
-    from web.app import app
     from routes import corpus as corpus_mod
+
+    from web.app import app
 
     # Stub add_file: simply copy the temp file written by the router into
     # CORPUS_DIR under dest_name (mirrors what ingestion.corpus.add_file does

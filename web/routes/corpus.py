@@ -7,14 +7,13 @@ import os
 import re
 import tempfile
 import threading
+from collections.abc import Callable
 from pathlib import Path
-from typing import List
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
-from typing import Annotated, Callable, Optional
-
 from routes.auth import get_current_user
 
 router = APIRouter(prefix="/api", tags=["corpus"])
@@ -25,7 +24,7 @@ class _SensitivityBody(BaseModel):
 
 # Module-level state populated once at startup by configure().
 CORPUS_DIR: str = ""
-add_file: Optional[Callable] = None
+add_file: Callable | None = None
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 
 _HIDDEN_SUFFIXES = {".bin", ".idx", ".faiss", ".npy", ".pkl"}
@@ -149,7 +148,7 @@ async def list_documents(
 async def upload_documents(
     corpus_dir: _CorpusDirDep,
     add_file_fn: _AddFileDep,
-    file: List[UploadFile] = File(...),
+    file: list[UploadFile] = File(...),
     _user: dict = Depends(get_current_user),
 ):
     originals_dir = Path(corpus_dir) / ".originals"

@@ -1,8 +1,8 @@
 import json
 import logging
+import os
 import subprocess
 import tempfile
-import os
 
 from .config import WHISPER_PATH
 

@@ -11,7 +11,6 @@ import logging
 import re
 import uuid
 from pathlib import Path
-from typing import List, Tuple
 
 log = logging.getLogger(__name__)
 
@@ -41,7 +40,7 @@ CHUNK_OVERLAP = 80
 
 # ── Text extraction ───────────────────────────────────────────────────────
 
-def extract_pdf(file_path: str) -> Tuple[str, int]:
+def extract_pdf(file_path: str) -> tuple[str, int]:
     try:
         import fitz  # type: ignore
         with fitz.open(file_path) as doc:
@@ -67,8 +66,8 @@ def extract_url_sync(url: str) -> str:
     """
     _validate_fetch_url(url)
     try:
-        import httpx          # type: ignore
-        import trafilatura    # type: ignore
+        import httpx  # type: ignore
+        import trafilatura  # type: ignore
         with httpx.Client(timeout=30, follow_redirects=True) as client:
             with client.stream("GET", url) as resp:
                 # Validate the final URL reached after following any redirects.
@@ -108,7 +107,7 @@ def clean_text(text: str) -> str:
 
 # ── Chunking ──────────────────────────────────────────────────────────────
 
-def chunk_words(text: str, size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> List[str]:
+def chunk_words(text: str, size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> list[str]:
     words = text.split()
     if not words:
         return []
@@ -123,7 +122,7 @@ def chunk_words(text: str, size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP)
     return chunks
 
 
-def chunk_pages(pages: List[str]) -> List[dict]:
+def chunk_pages(pages: list[str]) -> list[dict]:
     result = []
     idx = 0
     for page_num, page_text in enumerate(pages, start=1):
@@ -142,7 +141,7 @@ def chunk_pages(pages: List[str]) -> List[dict]:
 
 # ── Main pipeline ─────────────────────────────────────────────────────────
 
-def _set_source_status(source_id: str, status: str, error: str = None):
+def _set_source_status(source_id: str, status: str, error: str | None = None):
     from .db import get_conn
     with get_conn() as conn:
         conn.execute(
@@ -169,7 +168,7 @@ def ingest_source(source_id: str) -> None:
 
     _set_source_status(source_id, "processing")
     try:
-        pages: List[str] = []
+        pages: list[str] = []
         page_count = 1
 
         if src_type == "pdf":
@@ -192,7 +191,7 @@ def ingest_source(source_id: str) -> None:
         vectors = embed(texts)
 
         chunk_rows = []
-        for cd, vec in zip(chunk_dicts, vectors):
+        for cd, vec in zip(chunk_dicts, vectors, strict=False):
             chunk_rows.append({
                 "id":          str(uuid.uuid4()),
                 "notebook_id": nb_id,
@@ -228,7 +227,7 @@ def ingest_source(source_id: str) -> None:
         with get_conn() as conn:
             conn.executemany(
                 "UPDATE chunks SET faiss_id=? WHERE id=?",
-                [(fid, r["id"]) for fid, r in zip(faiss_ids, chunk_rows)],
+                [(fid, r["id"]) for fid, r in zip(faiss_ids, chunk_rows, strict=False)],
             )
 
         _set_source_status(source_id, "done")

@@ -1,16 +1,20 @@
+# Runtime dependencies for Hyphae.
+# Authoritative source is pyproject.toml ([project.dependencies]).
+# This file is kept for legacy `pip install -r requirements.txt` flows.
+#
+# For development (lint/type-check/test) install the dev extras instead:
+#     pip install -e .[dev]
+
 fastapi>=0.115.0
 uvicorn[standard]>=0.30.0
 python-dotenv>=1.0.1
 python-multipart>=0.0.9
-bcrypt>=4.0
-cryptography>=42.0
 pymupdf>=1.27
 google-genai>=1.64
 numpy>=1.25
 faiss-cpu>=1.7
 pydantic>=2.0
 httpx>=0.27
+bcrypt>=4.0
 sentence-transformers>=2.2
 trafilatura>=1.6
-requests>=2.32
-pytest>=9.0

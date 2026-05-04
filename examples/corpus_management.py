@@ -9,14 +9,15 @@ Run from the project root:
     python examples/corpus_management.py
 """
 
-import sys, os
+import os
+import sys
 
 _root = os.path.join(os.path.dirname(__file__), "..")
 sys.path.insert(0, _root)
 sys.path.insert(0, os.path.join(_root, "src"))
 
-from ingestion.corpus import add_file, add_directory, list_documents, remove_document
 from core.tools import execute_tool
+from ingestion.corpus import list_documents
 
 
 def main():

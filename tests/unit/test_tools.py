@@ -1,16 +1,12 @@
 """Unit tests for tool dispatch and execution."""
 
 import os
-import pytest
+
 from core.tools import (
-    execute_tool,
     ALL_TOOLS,
-    LOCAL_ONLY_TOOLS,
     CLOUD_SAFE_TOOLS,
-    TOOL_SEARCH_PAPERS,
-    TOOL_CREATE_NOTE,
-    TOOL_LIST_DOCUMENTS,
-    TOOL_COMPARE_DOCUMENTS,
+    LOCAL_ONLY_TOOLS,
+    execute_tool,
 )
 
 

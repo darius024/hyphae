@@ -8,9 +8,11 @@ Usage:
 """
 
 import os
+
 os.environ["CACTUS_NO_CLOUD_TELE"] = "1"
 
 import sys
+
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 for _p in (_project_root, os.path.join(_project_root, "src")):
     if _p not in sys.path:
@@ -48,8 +50,8 @@ def main_tune():
         results = run_with_threshold(t)
         score = compute_total_score(results)
 
-        def avg_f1(diff):
-            g = [r["f1"] for r in results if r["difficulty"] == diff]
+        def avg_f1(diff, _results=results):
+            g = [r["f1"] for r in _results if r["difficulty"] == diff]
             return sum(g) / len(g) if g else 0
 
         on_device = sum(1 for r in results if r["source"] == "on-device")

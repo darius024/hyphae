@@ -16,14 +16,13 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import PlainTextResponse
-from pydantic import BaseModel
-
 from notebook.db import get_conn
+from pydantic import BaseModel
 from routes.auth import get_current_user
 
 router = APIRouter(prefix="/api", tags=["export"])
@@ -127,7 +126,7 @@ def _render_markdown(
     reference list at the end of that turn.
     """
     lines: list[str] = []
-    exported_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    exported_at = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
     # ── Header ───────────────────────────────────────────────────────────
     lines.append(f"# {nb['name']}\n")
@@ -200,7 +199,7 @@ def _render_bibtex(nb: dict, sources: list[dict]) -> str:
     uniqueness even when titles are similar.
     """
     lines: list[str] = []
-    exported_at = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    exported_at = datetime.now(UTC).strftime("%Y-%m-%d")
 
     lines.append(f"% BibTeX export from Hyphae notebook: {nb['name']}")
     lines.append(f"% Exported on {exported_at}\n")

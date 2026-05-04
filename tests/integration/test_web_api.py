@@ -4,13 +4,9 @@ Uses FastAPI TestClient (synchronous httpx) so no running server is needed.
 Redirects the database to a temporary file per test session.
 """
 
-import sys
-import os
-import json
 import pytest
-
 from notebook import db as db_mod
-from notebook.db import init_db, get_conn
+from notebook.db import init_db
 
 
 @pytest.fixture(autouse=True)
@@ -27,8 +23,9 @@ def client(tmp_path, monkeypatch):
     (corpus / "sample_doc.txt").write_text("Sample document content for testing.")
     (corpus / ".sensitivity.json").write_text('{"sample_doc.txt": "shareable"}')
 
-    from web.app import app
     from routes import corpus as corpus_mod
+
+    from web.app import app
     corpus_mod.configure(str(corpus), None)
 
     from fastapi.testclient import TestClient

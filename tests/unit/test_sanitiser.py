@@ -1,7 +1,6 @@
 """Unit tests for the PII sanitiser (web/notebook/sanitiser.py)."""
 
-import pytest
-from notebook.sanitiser import sanitise_text, sanitise_messages, is_safe_for_cloud
+from notebook.sanitiser import is_safe_for_cloud, sanitise_messages, sanitise_text
 
 
 class TestSanitiseText:
@@ -12,7 +11,7 @@ class TestSanitiseText:
         assert "email" in triggered
 
     def test_redacts_ipv4(self):
-        text, triggered = sanitise_text("Server at 192.168.1.100")
+        text, _triggered = sanitise_text("Server at 192.168.1.100")
         assert "[IP]" in text
         assert "192.168.1.100" not in text
 
@@ -28,45 +27,45 @@ class TestSanitiseText:
         pass
 
     def test_redacts_url(self):
-        text, triggered = sanitise_text("See https://internal.lab.org/results")
+        text, _triggered = sanitise_text("See https://internal.lab.org/results")
         assert "[URL]" in text
         assert "https://internal.lab.org" not in text
 
     def test_redacts_phone(self):
-        text, triggered = sanitise_text("Call (555) 123-4567")
+        text, _triggered = sanitise_text("Call (555) 123-4567")
         assert "[PHONE]" in text
 
     def test_redacts_ssn(self):
-        text, triggered = sanitise_text("SSN: 123-45-6789")
+        text, _triggered = sanitise_text("SSN: 123-45-6789")
         assert "[SSN]" in text
         assert "123-45-6789" not in text
 
     def test_redacts_ssn_space_separated(self):
-        text, triggered = sanitise_text("SSN: 123 45 6789")
+        text, _triggered = sanitise_text("SSN: 123 45 6789")
         assert "[SSN]" in text
 
     def test_redacts_ssn_unseparated(self):
-        text, triggered = sanitise_text("SSN: 123456789")
+        text, _triggered = sanitise_text("SSN: 123456789")
         assert "[SSN]" in text
 
     def test_redacts_gps(self):
-        text, triggered = sanitise_text("Location: 51.5074, -0.1278")
+        text, _triggered = sanitise_text("Location: 51.5074, -0.1278")
         assert "[GPS]" in text
 
     def test_redacts_file_path(self):
-        text, triggered = sanitise_text("Data in /home/user/experiments/run1.csv")
+        text, _triggered = sanitise_text("Data in /home/user/experiments/run1.csv")
         assert "[PATH]" in text
 
     def test_redacts_lab_code(self):
-        text, triggered = sanitise_text("Sample AB-1234 shows improvement")
+        text, _triggered = sanitise_text("Sample AB-1234 shows improvement")
         assert "[LAB_CODE]" in text
 
     def test_redacts_sample_id(self):
-        text, triggered = sanitise_text("specimen_42 was contaminated")
+        text, _triggered = sanitise_text("specimen_42 was contaminated")
         assert "[SAMPLE_ID]" in text
 
     def test_redacts_measurement(self):
-        text, triggered = sanitise_text("Added 5.2 mg of catalyst")
+        text, _triggered = sanitise_text("Added 5.2 mg of catalyst")
         assert "[MEASUREMENT]" in text
 
     def test_clean_text_unchanged(self):
@@ -88,7 +87,7 @@ class TestSanitiseMessages:
             {"role": "user", "content": "Check alice@lab.com"},
             {"role": "assistant", "content": "Sure, I'll check."},
         ]
-        cleaned, triggered = sanitise_messages(msgs)
+        cleaned, _triggered = sanitise_messages(msgs)
         assert "[EMAIL]" in cleaned[0]["content"]
         assert cleaned[1]["content"] == "Sure, I'll check."
 

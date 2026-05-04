@@ -5,12 +5,10 @@ from __future__ import annotations
 import logging
 import sqlite3
 import uuid
-from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
-
 from notebook.db import get_conn, safe_update
+from pydantic import BaseModel, Field
 from routes.auth import get_current_user
 
 log = logging.getLogger(__name__)
@@ -24,16 +22,16 @@ class TagCreate(BaseModel):
     color: str = Field(default="#6366f1", pattern=r"^#[0-9a-fA-F]{6}$")
 
 class TagUpdate(BaseModel):
-    name: Optional[str] = Field(None, min_length=1, max_length=50)
-    color: Optional[str] = Field(None, pattern=r"^#[0-9a-fA-F]{6}$")
+    name: str | None = Field(None, min_length=1, max_length=50)
+    color: str | None = Field(None, pattern=r"^#[0-9a-fA-F]{6}$")
 
 class SourceTagBody(BaseModel):
-    tag_ids: List[str]
+    tag_ids: list[str]
 
 class LinkCreate(BaseModel):
     target_id: str
     link_type: str = Field(default="related", pattern=r"^(related|cites|extends|contradicts|supports)$")
-    note: Optional[str] = None
+    note: str | None = None
 
 
 # ── Tag CRUD ──────────────────────────────────────────────────────────────
@@ -182,9 +180,9 @@ async def get_knowledge_graph(nb_id: str, _user: dict = Depends(get_current_user
         for s in sources
     ]
     edges = [
-        {"id": l["id"], "source": l["source_id"], "target": l["target_id"],
-         "type": l["link_type"], "note": l["note"]}
-        for l in links
+        {"id": link["id"], "source": link["source_id"], "target": link["target_id"],
+         "type": link["link_type"], "note": link["note"]}
+        for link in links
     ]
 
     return {"nodes": nodes, "edges": edges}

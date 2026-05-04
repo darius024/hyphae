@@ -13,15 +13,16 @@ Run from the project root:
     python examples/voice_demo.py
 """
 
-import sys, os
+import os
+import sys
 
 _root = os.path.join(os.path.dirname(__file__), "..")
 sys.path.insert(0, _root)
 sys.path.insert(0, os.path.join(_root, "src"))
 
+from core.tools import ALL_TOOLS, execute_tool
 from core.voice import listen_and_transcribe
 from main import generate_hybrid, print_result
-from core.tools import ALL_TOOLS, execute_tool
 
 
 def main():

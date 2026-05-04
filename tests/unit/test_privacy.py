@@ -1,8 +1,7 @@
 """Unit tests for privacy sanitisation."""
 
-import pytest
-from core.privacy import sanitise_for_cloud, is_cloud_safe, filter_tools_for_cloud, filter_tools_for_local
-from core.tools import ALL_TOOLS, LOCAL_ONLY_TOOLS, CLOUD_SAFE_TOOLS
+from core.privacy import filter_tools_for_cloud, filter_tools_for_local, is_cloud_safe, sanitise_for_cloud
+from core.tools import ALL_TOOLS, CLOUD_SAFE_TOOLS, LOCAL_ONLY_TOOLS
 
 
 class TestSanitiseForCloud:

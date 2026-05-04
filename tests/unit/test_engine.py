@@ -7,18 +7,18 @@ rule-based extraction, validation, and JSON repair helpers directly.
 import pytest
 
 from core.engine import (
-    _count_actions,
     _calls_are_valid,
+    _count_actions,
+    _extract_duration_from_text,
+    _extract_location_from_text,
+    _extract_message_from_text,
+    _extract_names_from_text,
+    _extract_reminder_title_from_text,
+    _extract_song_from_text,
+    _extract_time_from_text,
+    _postprocess_calls,
     _repair_json,
     _rule_based_extract,
-    _postprocess_calls,
-    _extract_time_from_text,
-    _extract_duration_from_text,
-    _extract_names_from_text,
-    _extract_message_from_text,
-    _extract_location_from_text,
-    _extract_song_from_text,
-    _extract_reminder_title_from_text,
 )
 
 # ── Minimal tool fixtures ────────────────────────────────────────────────
@@ -282,11 +282,11 @@ class TestExtractTimeFromText:
         assert m == 0
 
     def test_noon_12pm(self):
-        h, m = _extract_time_from_text("remind at 12:00 PM")
+        h, _m = _extract_time_from_text("remind at 12:00 PM")
         assert h == 12
 
     def test_midnight_12am(self):
-        h, m = _extract_time_from_text("alarm at 12 AM")
+        h, _m = _extract_time_from_text("alarm at 12 AM")
         assert h == 0
 
     def test_no_time_returns_none(self):

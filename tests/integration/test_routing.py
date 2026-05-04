@@ -12,24 +12,27 @@ Usage:
 """
 
 import os
+
 os.environ["CACTUS_NO_CLOUD_TELE"] = "1"
 
 import sys
+
 _project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 for _p in (os.path.join(_project_root, "src"), _project_root):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
 import json
-from core.engine import generate_hybrid
+
 from benchmark import compute_f1, compute_total_score
+from core.engine import generate_hybrid
 from core.tools import (
+    TOOL_CREATE_NOTE,
+    TOOL_GENERATE_HYPOTHESIS,
+    TOOL_LIST_DOCUMENTS,
+    TOOL_SEARCH_LITERATURE,
     TOOL_SEARCH_PAPERS,
     TOOL_SUMMARISE_NOTES,
-    TOOL_CREATE_NOTE,
-    TOOL_LIST_DOCUMENTS,
-    TOOL_GENERATE_HYPOTHESIS,
-    TOOL_SEARCH_LITERATURE,
 )
 
 RESEARCH_TESTS = [

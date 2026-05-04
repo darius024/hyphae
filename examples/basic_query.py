@@ -10,14 +10,15 @@ Run from the project root:
     python examples/basic_query.py
 """
 
-import sys, os
+import os
+import sys
 
 _root = os.path.join(os.path.dirname(__file__), "..")
 sys.path.insert(0, _root)
 sys.path.insert(0, os.path.join(_root, "src"))
 
-from main import generate_hybrid, print_result
 from core.tools import ALL_TOOLS, execute_tool
+from main import generate_hybrid, print_result
 
 
 def main():

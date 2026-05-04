@@ -6,14 +6,12 @@ independently-created objects — and subsequent mutations via add_chunks() must
 be visible to both.
 """
 
-import threading
 import concurrent.futures
-from pathlib import Path
+import threading
 
 import pytest
-
 from notebook import retrieval as retrieval_mod
-from notebook.retrieval import get_index, add_chunks, _indexes, _id_maps
+from notebook.retrieval import _id_maps, _indexes, add_chunks, get_index
 
 
 @pytest.fixture(autouse=True)
@@ -104,7 +102,7 @@ class TestGetIndexConcurrency:
             """Wait for the adder, then check the index."""
             barrier.wait()
             try:
-                index, id_map = get_index(nb_id)
+                _index, _id_map = get_index(nb_id)
             except Exception as exc:
                 errors.append(exc)
 

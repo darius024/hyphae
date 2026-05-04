@@ -14,7 +14,7 @@ Covers:
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -22,7 +22,7 @@ import pytest
 
 def _iso(offset_days: int) -> str:
     """Return an ISO-8601 UTC timestamp offset_days from now."""
-    return (datetime.now(timezone.utc) + timedelta(days=offset_days)).isoformat()
+    return (datetime.now(UTC) + timedelta(days=offset_days)).isoformat()
 
 
 # ─── Shared fixture ───────────────────────────────────────────────────────────
@@ -42,6 +42,7 @@ def _temp_db(tmp_path, monkeypatch):
 def client_with_user():
     """TestClient + a signed-up user; yields (client, headers, user_id)."""
     from fastapi.testclient import TestClient
+
     from web.app import app
 
     with TestClient(app) as client:

@@ -7,8 +7,8 @@ Also serves as the canonical sys.path bootstrap for root-level scripts.
 """
 
 import json
-import sys
 import os
+import sys
 
 _PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 for _p in (
@@ -18,7 +18,7 @@ for _p in (
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from core.engine import generate_hybrid, generate_cactus, generate_cloud  # noqa: F401
+from core.engine import generate_cactus, generate_cloud, generate_hybrid  # noqa: F401
 
 
 def print_result(label: str, result: dict) -> None:

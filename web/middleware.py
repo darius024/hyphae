@@ -7,7 +7,7 @@ import logging
 import re
 import time
 from collections import defaultdict, deque
-from typing import Sequence
+from collections.abc import Sequence
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request

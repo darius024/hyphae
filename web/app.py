@@ -22,6 +22,7 @@ from pathlib import Path
 
 # ── Centralised path bootstrap (MUST come before any Hyphae imports) ─────
 from bootstrap import bootstrap
+
 bootstrap()
 
 try:
@@ -46,10 +47,10 @@ _IS_PRODUCTION = os.environ.get("HYPHAE_ENV", "development").lower() == "product
 
 # ── Hyphae core ──────────────────────────────────────────────────────────
 try:
-    from core.engine import generate_hybrid           # type: ignore
-    from core.tools import ALL_TOOLS, execute_tool, LOCAL_ONLY_TOOLS, CLOUD_SAFE_TOOLS  # type: ignore
-    from ingestion.corpus import add_file             # type: ignore
-    from core.config import CORPUS_DIR                # type: ignore
+    from core.config import CORPUS_DIR  # type: ignore
+    from core.engine import generate_hybrid  # type: ignore
+    from core.tools import ALL_TOOLS, CLOUD_SAFE_TOOLS, LOCAL_ONLY_TOOLS, execute_tool  # type: ignore
+    from ingestion.corpus import add_file  # type: ignore
 except Exception as _e:
     if _IS_PRODUCTION:
         raise ImportError(f"Core imports failed in production: {_e}") from _e
@@ -64,11 +65,11 @@ except Exception as _e:
 
 # ── Notebook layer ───────────────────────────────────────────────────────
 try:
-    from notebook.db import init_db, get_conn                         # type: ignore
-    from notebook.ingest import ingest_source, UPLOAD_DIR             # type: ignore
-    from notebook.retrieval import hybrid_search, delete_notebook_index  # type: ignore
     from notebook.citations import build_citations, build_context_prompt, build_system_prompt  # type: ignore
-    from notebook.sanitiser import sanitise_text                      # type: ignore
+    from notebook.db import get_conn, init_db  # type: ignore
+    from notebook.ingest import UPLOAD_DIR, ingest_source  # type: ignore
+    from notebook.retrieval import delete_notebook_index, hybrid_search  # type: ignore
+    from notebook.sanitiser import sanitise_text  # type: ignore
 except Exception as _e:
     if _IS_PRODUCTION:
         raise ImportError(f"Notebook layer imports failed in production: {_e}") from _e
@@ -136,17 +137,21 @@ async def _lifespan(app: FastAPI):
 # ── App + routers ─────────────────────────────────────────────────────────
 app = FastAPI(title="Hyphae", version="2.0", lifespan=_lifespan)
 
-from routes.notebooks import router as notebooks_router, configure as configure_notebooks
-from routes.query import router as query_router, configure as configure_query
-from routes.code import router as code_router
-from routes.auth import router as auth_router
-from routes.corpus import router as corpus_router, configure as configure_corpus
-from routes.tags import router as tags_router
 from routes.analytics import router as analytics_router
-from routes.planning import router as planning_router
-from routes.notes import router as notes_router, configure as configure_notes
+from routes.auth import router as auth_router
+from routes.code import router as code_router
 from routes.collaboration import router as collaboration_router
+from routes.corpus import configure as configure_corpus
+from routes.corpus import router as corpus_router
 from routes.export import router as export_router
+from routes.notebooks import configure as configure_notebooks
+from routes.notebooks import router as notebooks_router
+from routes.notes import configure as configure_notes
+from routes.notes import router as notes_router
+from routes.planning import router as planning_router
+from routes.query import configure as configure_query
+from routes.query import router as query_router
+from routes.tags import router as tags_router
 
 app.include_router(notebooks_router)
 app.include_router(query_router)
@@ -180,7 +185,7 @@ app.add_middleware(
 _GLOBAL_RPM = int(os.environ.get("RATE_LIMIT_RPM", "120"))
 _AUTH_RPM = int(os.environ.get("RATE_LIMIT_AUTH_RPM", "10"))
 
-from middleware import RequestLoggingMiddleware, NoCacheStatic
+from middleware import NoCacheStatic, RequestLoggingMiddleware
 
 if _GLOBAL_RPM > 0:
     from middleware import RateLimitMiddleware

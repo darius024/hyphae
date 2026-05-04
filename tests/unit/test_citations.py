@@ -11,15 +11,11 @@ Covers:
 
 from __future__ import annotations
 
-import sqlite3
-import types
 import uuid
 
 import pytest
-
 from notebook.citations import build_citations, build_context_prompt, build_system_prompt
 from notebook.models import Citation
-
 
 # ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -198,6 +194,7 @@ def client_with_chunk(tmp_path):
     Uses the real auth flow: signs up a user and returns a valid Bearer token.
     """
     from fastapi.testclient import TestClient
+
     from web.app import app
 
     nb_id = str(uuid.uuid4())
@@ -271,7 +268,7 @@ class TestGetChunkEndpoint:
 
     def test_chunk_from_different_notebook_returns_404(self, client_with_chunk):
         """Chunk must not be accessible via a notebook it does not belong to."""
-        client, headers, nb_id, src_id, chunk_id = client_with_chunk
+        client, headers, _nb_id, _src_id, chunk_id = client_with_chunk
         # Create a second notebook owned by the same user
         other_nb_resp = client.post("/api/notebooks", json={"name": "Other NB"}, headers=headers)
         assert other_nb_resp.status_code in (200, 201)

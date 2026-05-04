@@ -10,17 +10,15 @@ import subprocess
 import tempfile
 import time
 from contextlib import suppress
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from typing import List
+from routes.auth import get_current_user
 
 from core.config import GEMINI_MODEL
-from routes.auth import get_current_user
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["query"])
@@ -33,7 +31,7 @@ class _MessageBody(BaseModel):
 
 class _QueryBody(BaseModel):
     message: str = Field(..., min_length=1)
-    tools: Optional[List[dict]] = None
+    tools: list[dict] | None = None
 
 # Injected at startup from app.py
 generate_hybrid = None
@@ -107,7 +105,7 @@ def _format_local_answer(user_message: str, tool_results: list) -> str:
     return "\n\n".join(parts)
 
 
-def _synthesise_cloud_answer(user_message: str, tool_results: list) -> Optional[str]:
+def _synthesise_cloud_answer(user_message: str, tool_results: list) -> str | None:
     client = _gemini_client_fn()
     if not client or not tool_results:
         return None
@@ -182,7 +180,7 @@ async def api_privacy_log(_user: dict = Depends(get_current_user)):
 
 def _log_privacy_event(user_id: str, query: str, tools_used: list, data_local: bool, routing_ms: float):
     _privacy_log.append({
-        "ts": datetime.now(timezone.utc).isoformat(),
+        "ts": datetime.now(UTC).isoformat(),
         "user_id": user_id,
         "query": query[:120],
         "tools": [t["tool"] for t in tools_used],

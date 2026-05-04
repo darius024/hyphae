@@ -1,7 +1,7 @@
 """Shared pytest fixtures for Hyphae tests."""
 
-import sys
 import os
+import sys
 
 os.environ.setdefault("RATE_LIMIT_RPM", "0")
 
@@ -14,9 +14,8 @@ for _p in (
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
+
 import pytest
-import tempfile
-import shutil
 
 
 @pytest.fixture
@@ -39,8 +38,8 @@ def tmp_corpus(tmp_path, monkeypatch):
         "Temperature: 180°C, reaction time: 4h\n"
     )
 
-    from ingestion import corpus as ingest_mod
     from core import tools as tools_mod
+    from ingestion import corpus as ingest_mod
     monkeypatch.setattr(ingest_mod, "CORPUS_DIR", str(corpus))
     monkeypatch.setattr(tools_mod, "CORPUS_DIR", str(corpus))
     monkeypatch.setattr(tools_mod, "NOTES_DIR", os.path.join(str(corpus), "notes"))

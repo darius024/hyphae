@@ -5,14 +5,13 @@ Only user-visible query text may reach Gemini, and only after sanitisation
 and only when notebook.allow_cloud is True.
 """
 
-import re
 import logging
+import re
 from copy import deepcopy
-from typing import List, Tuple
 
 log = logging.getLogger(__name__)
 
-_PATTERNS: List[Tuple[str, str, str]] = [
+_PATTERNS: list[tuple[str, str, str]] = [
     ("email",       r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", "[EMAIL]"),
     # Constrain each octet to 0-255 to avoid matching version strings like 12.0.0.4
     ("ipv4",        r"\b(?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.)" 
@@ -40,8 +39,8 @@ _COMPILED = [
 ]
 
 
-def sanitise_text(text: str) -> Tuple[str, List[str]]:
-    triggered: List[str] = []
+def sanitise_text(text: str) -> tuple[str, list[str]]:
+    triggered: list[str] = []
     for label, pattern, replacement in _COMPILED:
         new_text, n = pattern.subn(replacement, text)
         if n:
@@ -50,9 +49,9 @@ def sanitise_text(text: str) -> Tuple[str, List[str]]:
     return text, triggered
 
 
-def sanitise_messages(messages: List[dict]) -> Tuple[List[dict], List[str]]:
+def sanitise_messages(messages: list[dict]) -> tuple[list[dict], list[str]]:
     msgs = deepcopy(messages)
-    all_triggered: List[str] = []
+    all_triggered: list[str] = []
     for msg in msgs:
         if isinstance(msg.get("content"), str):
             clean, triggered = sanitise_text(msg["content"])
