@@ -1,21 +1,27 @@
-"""
-Code & Git API routes for the Hyphae Code IDE.
+"""Code & Git API routes for the Hyphae Code IDE.
 
-Users connect their own GitHub/GitLab/etc repo via HTTPS URL.
-The server clones it into a workspace folder, and all file/git
-operations target that cloned repo.
+Each authenticated user has their own private workspace.  Repositories are
+cloned under ``code_workspace/<user_id>/<safe_repo_name>`` and the active
+repo is tracked per-user in the ``code_repos`` SQLite table.  This replaces
+the previous global ``_active_repo`` variable, which leaked one user's repo
+state to every other authenticated user.
+
+A per-user :class:`asyncio.Lock` serialises git operations so concurrent
+requests from the same user cannot race on the working tree.
 """
 from __future__ import annotations
 
-import json
+import asyncio
 import logging
 import re
 import shutil
 import subprocess
+import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
+from notebook.db import get_conn
 from pydantic import BaseModel, Field
 from routes.auth import get_current_user
 
@@ -23,81 +29,159 @@ log = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# ── Workspace directory for cloned repos ──────────────────────────────────
+# ── Workspace directory ─────────────────────────────────────────────────────
+
 _WEB_DIR = Path(__file__).resolve().parents[1]            # …/hyphae/web
 WORKSPACE_DIR = _WEB_DIR.parent / "code_workspace"        # …/hyphae/code_workspace
 WORKSPACE_DIR.mkdir(exist_ok=True)
-STATE_FILE = WORKSPACE_DIR / ".code_state.json"
-
-# Currently active repo root (set after clone or reconnect)
-_active_repo: Path | None = None
 
 
-def _load_state() -> dict:
-    if STATE_FILE.exists():
-        try:
-            return json.loads(STATE_FILE.read_text())
-        except Exception:
-            pass
-    return {"repos": [], "active": None}
+def _user_workspace(user_id: str) -> Path:
+    """Return (creating if needed) the per-user workspace directory.
+
+    The user_id is validated against an allow-list of UUID/hex-style
+    characters before being joined to the workspace path.  This blocks
+    path traversal via crafted user-id values.
+    """
+    if not re.fullmatch(r"[a-zA-Z0-9_\-]+", user_id):
+        raise HTTPException(400, "Invalid user id")
+    user_dir = WORKSPACE_DIR / user_id
+    user_dir.mkdir(parents=True, exist_ok=True)
+    return user_dir
 
 
-def _save_state(state: dict):
-    STATE_FILE.write_text(json.dumps(state, indent=2))
+# ── Per-user concurrency control ────────────────────────────────────────────
+
+_user_locks: dict[str, asyncio.Lock] = {}
+_user_locks_mu = asyncio.Lock()
 
 
-def _repo_root() -> Path:
-    global _active_repo
-    if _active_repo and _active_repo.exists():
-        return _active_repo
-    # Try to restore from state
-    state = _load_state()
-    if state.get("active"):
-        p = Path(state["active"])
-        if p.exists():
-            _active_repo = p
-            return p
-    raise HTTPException(400, "No repository connected. Clone a repo first.")
+async def _get_user_lock(user_id: str) -> asyncio.Lock:
+    """Return (creating lazily) the per-user asyncio lock."""
+    if user_id in _user_locks:
+        return _user_locks[user_id]
+    async with _user_locks_mu:
+        if user_id not in _user_locks:
+            _user_locks[user_id] = asyncio.Lock()
+        return _user_locks[user_id]
 
 
-def _set_active(path: Path, url: str):
-    global _active_repo
-    _active_repo = path
-    state = _load_state()
-    state["active"] = str(path)
-    # Add/update in recents
-    repos = [r for r in state.get("repos", []) if r["url"] != url]
-    repos.insert(0, {"url": url, "path": str(path), "name": _repo_name_from_url(url)})
-    state["repos"] = repos[:10]  # Keep last 10
-    _save_state(state)
-
+# ── Repo state (DB-backed, per-user) ────────────────────────────────────────
 
 def _repo_name_from_url(url: str) -> str:
     """Extract 'owner/repo' from a git URL."""
-    m = re.search(r'[/:]([^/:]+/[^/.]+?)(?:\.git)?$', url)
-    return m.group(1) if m else url.split("/")[-1].replace(".git", "")
+    match = re.search(r"[/:]([^/:]+/[^/.]+?)(?:\.git)?$", url)
+    return match.group(1) if match else url.split("/")[-1].replace(".git", "")
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────
+def _safe_repo_dirname(url: str) -> str:
+    """Convert a repo URL to a filesystem-safe directory name."""
+    name = _repo_name_from_url(url)
+    return re.sub(r"[^a-zA-Z0-9_\-]", "_", name)
 
-def _safe_path(rel: str) -> Path:
-    root = _repo_root()
+
+def _set_active_repo(user_id: str, url: str, path: Path) -> None:
+    """Insert/update the user's repo row and mark it active.
+
+    All other repos for this user are demoted to ``is_active=0`` in a single
+    transaction so the (user_id, is_active) state stays single-valued.
+    """
+    name = _repo_name_from_url(url)
+    repo_id = str(uuid.uuid4())
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE code_repos SET is_active=0 WHERE user_id=?",
+            (user_id,),
+        )
+        conn.execute(
+            """INSERT INTO code_repos (id, user_id, url, path, name, is_active, last_active_at)
+               VALUES (?, ?, ?, ?, ?, 1, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+               ON CONFLICT(user_id, url) DO UPDATE SET
+                   path=excluded.path,
+                   name=excluded.name,
+                   is_active=1,
+                   last_active_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')""",
+            (repo_id, user_id, url, str(path), name),
+        )
+
+
+def _get_active_repo(user_id: str) -> Path:
+    """Return the path to the currently active repo for *user_id*.
+
+    Raises 400 when no repo has been connected.  Verifies the recorded
+    path still exists on disk; if not, the row is cleared and a 400 is
+    raised so the client can prompt the user to re-clone.
+    """
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT path FROM code_repos WHERE user_id=? AND is_active=1",
+            (user_id,),
+        ).fetchone()
+    if row is None:
+        raise HTTPException(400, "No repository connected. Clone a repo first.")
+    path = Path(row["path"])
+    if not path.exists():
+        with get_conn() as conn:
+            conn.execute(
+                "UPDATE code_repos SET is_active=0 WHERE user_id=? AND path=?",
+                (user_id, str(path)),
+            )
+        raise HTTPException(400, "Active repository folder is missing — please re-clone.")
+    return path
+
+
+def _list_repos(user_id: str) -> list[dict]:
+    """Return all repos this user has cloned, newest first."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT url, path, name, is_active
+               FROM code_repos WHERE user_id=?
+               ORDER BY last_active_at DESC LIMIT 20""",
+            (user_id,),
+        ).fetchall()
+    repos = []
+    for row in rows:
+        repos.append({
+            "url": row["url"],
+            "path": row["path"],
+            "name": row["name"],
+            "exists": Path(row["path"]).exists(),
+            "active": bool(row["is_active"]),
+        })
+    return repos
+
+
+def _get_active_path_or_none(user_id: str) -> str | None:
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT path FROM code_repos WHERE user_id=? AND is_active=1",
+            (user_id,),
+        ).fetchone()
+    return row["path"] if row else None
+
+
+# ── Path / argument safety ──────────────────────────────────────────────────
+
+def _safe_path(user_id: str, rel: str) -> Path:
+    """Resolve *rel* under the user's active repo, blocking path traversal."""
+    root = _get_active_repo(user_id)
     resolved = (root / rel).resolve()
     if not resolved.is_relative_to(root):
         raise HTTPException(403, "Path traversal not allowed")
     return resolved
 
 
-def _git(*args: str) -> subprocess.CompletedProcess:
-    root = _repo_root()
+def _git(user_id: str, *args: str) -> subprocess.CompletedProcess:
+    """Run ``git`` against *user_id*'s active repo."""
+    root = _get_active_repo(user_id)
     cmd = ["git", "-C", str(root), *list(args)]
-    log.info("git %s", " ".join(args))
+    log.info("user=%s git %s", user_id, " ".join(args))
     return subprocess.run(cmd, capture_output=True, text=True, timeout=60, check=False)
 
 
-_SAFE_BRANCH_RE = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9._/\-]*$')
+_SAFE_BRANCH_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._/\-]*$")
 _INTERNAL_HOST_RE = re.compile(
-    r'://(localhost|127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|0\.0\.0\.0|\[::1\])',
+    r"://(localhost|127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|0\.0\.0\.0|\[::1\])",
     re.IGNORECASE,
 )
 
@@ -139,50 +223,55 @@ class CloneRequest(BaseModel):
 
 
 @router.post("/api/code/clone")
-async def code_clone(req: CloneRequest, _user: dict = Depends(get_current_user)):
-    """Clone a git repo from HTTPS URL into the workspace."""
+async def code_clone(req: CloneRequest, user: dict = Depends(get_current_user)):
+    """Clone a git repo from HTTPS URL into the *current user's* workspace."""
     url = _validate_clone_url(req.url)
+    user_id = user["id"]
+    lock = await _get_user_lock(user_id)
 
-    repo_name = _repo_name_from_url(url)
-    safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', repo_name)
-    dest = WORKSPACE_DIR / safe_name
+    async with lock:
+        user_dir = _user_workspace(user_id)
+        dest = user_dir / _safe_repo_dirname(url)
 
-    if dest.exists():
-        # Already cloned — just pull latest
-        log.info("Repo already exists at %s, pulling...", dest)
+        if dest.exists():
+            log.info("user=%s repo already exists at %s, pulling", user_id, dest)
+            result = subprocess.run(
+                ["git", "-C", str(dest), "pull", "--ff-only"],
+                capture_output=True, text=True, timeout=60, check=False,
+            )
+            _set_active_repo(user_id, url, dest)
+            return {
+                "ok": True,
+                "path": str(dest),
+                "name": _repo_name_from_url(url),
+                "message": (
+                    "Repository updated (pull)" if result.returncode == 0
+                    else "Repository opened (pull skipped)"
+                ),
+            }
+
+        log.info("user=%s cloning %s into %s", user_id, url, dest)
         result = subprocess.run(
-            ["git", "-C", str(dest), "pull", "--ff-only"],
-            capture_output=True, text=True, timeout=60, check=False
+            ["git", "clone", "--depth", "50", url, str(dest)],
+            capture_output=True, text=True, timeout=120, check=False,
         )
-        _set_active(dest, url)
+        if result.returncode != 0:
+            raise HTTPException(400, result.stderr or "Clone failed")
+
+        _set_active_repo(user_id, url, dest)
         return {
-            "ok": True, "path": str(dest), "name": repo_name,
-            "message": "Repository updated (pull)" if result.returncode == 0
-                       else "Repository opened (pull skipped)"
+            "ok": True,
+            "path": str(dest),
+            "name": _repo_name_from_url(url),
+            "message": "Repository cloned successfully",
         }
-
-    # Clone
-    log.info("Cloning %s into %s", url, dest)
-    result = subprocess.run(
-        ["git", "clone", "--depth", "50", url, str(dest)],
-        capture_output=True, text=True, timeout=120, check=False
-    )
-    if result.returncode != 0:
-        raise HTTPException(400, result.stderr or "Clone failed")
-
-    _set_active(dest, url)
-    return {"ok": True, "path": str(dest), "name": repo_name, "message": "Repository cloned successfully"}
 
 
 @router.get("/api/code/repos")
-async def code_repos(_user: dict = Depends(get_current_user)):
-    """List recent/cloned repos."""
-    state = _load_state()
-    repos = []
-    for r in state.get("repos", []):
-        exists = Path(r["path"]).exists()
-        repos.append({**r, "exists": exists})
-    return {"repos": repos, "active": state.get("active")}
+async def code_repos(user: dict = Depends(get_current_user)):
+    """List the current user's cloned repos."""
+    user_id = user["id"]
+    return {"repos": _list_repos(user_id), "active": _get_active_path_or_none(user_id)}
 
 
 class ConnectRequest(BaseModel):
@@ -191,25 +280,26 @@ class ConnectRequest(BaseModel):
 
 
 @router.post("/api/code/connect")
-async def code_connect(req: ConnectRequest, _user: dict = Depends(get_current_user)):
-    """Re-connect to a previously cloned repo."""
-    p = Path(req.path).resolve()
-    if not p.is_relative_to(WORKSPACE_DIR):
-        raise HTTPException(403, "Cannot connect to paths outside workspace")
-    if not p.exists():
+async def code_connect(req: ConnectRequest, user: dict = Depends(get_current_user)):
+    """Re-connect to a previously cloned repo owned by *this* user."""
+    user_id = user["id"]
+    user_dir = _user_workspace(user_id)
+    target = Path(req.path).resolve()
+    # Path must live inside *this* user's workspace — never allow another
+    # user's clone, and never escape the workspace root.
+    if not target.is_relative_to(user_dir):
+        raise HTTPException(403, "Cannot connect to paths outside your workspace")
+    if not target.exists():
         raise HTTPException(404, "Repository folder not found. It may have been deleted.")
-    _set_active(p, req.url)
+    _set_active_repo(user_id, req.url, target)
     return {"ok": True, "name": _repo_name_from_url(req.url)}
 
 
 @router.post("/api/code/disconnect")
-async def code_disconnect(_user: dict = Depends(get_current_user)):
-    """Disconnect the current repo (does NOT delete files)."""
-    global _active_repo
-    _active_repo = None
-    state = _load_state()
-    state["active"] = None
-    _save_state(state)
+async def code_disconnect(user: dict = Depends(get_current_user)):
+    """Clear the active repo for this user (does NOT delete files)."""
+    with get_conn() as conn:
+        conn.execute("UPDATE code_repos SET is_active=0 WHERE user_id=?", (user["id"],))
     return {"ok": True}
 
 
@@ -218,21 +308,20 @@ class DeleteRepoRequest(BaseModel):
 
 
 @router.post("/api/code/delete-repo")
-async def code_delete_repo(req: DeleteRepoRequest, _user: dict = Depends(get_current_user)):
-    """Delete a cloned repo from disk."""
-    p = Path(req.path).resolve()
-    if not p.is_relative_to(WORKSPACE_DIR):
-        raise HTTPException(403, "Cannot delete paths outside workspace")
-    if p.exists():
-        shutil.rmtree(p, ignore_errors=True)
-    state = _load_state()
-    state["repos"] = [r for r in state.get("repos", []) if r["path"] != req.path]
-    if state.get("active") == req.path:
-        state["active"] = None
-    _save_state(state)
-    global _active_repo
-    if _active_repo and str(_active_repo) == req.path:
-        _active_repo = None
+async def code_delete_repo(req: DeleteRepoRequest, user: dict = Depends(get_current_user)):
+    """Delete a cloned repo from disk (only if it belongs to this user)."""
+    user_id = user["id"]
+    user_dir = _user_workspace(user_id)
+    target = Path(req.path).resolve()
+    if not target.is_relative_to(user_dir):
+        raise HTTPException(403, "Cannot delete paths outside your workspace")
+    if target.exists():
+        shutil.rmtree(target, ignore_errors=True)
+    with get_conn() as conn:
+        conn.execute(
+            "DELETE FROM code_repos WHERE user_id=? AND path=?",
+            (user_id, str(target)),
+        )
     return {"ok": True}
 
 
@@ -241,15 +330,16 @@ async def code_delete_repo(req: DeleteRepoRequest, _user: dict = Depends(get_cur
 # ══════════════════════════════════════════════════════════════════════════
 
 @router.get("/api/code/tree")
-async def code_tree(_user: dict = Depends(get_current_user)):
-    """Return directory tree as nested JSON."""
-    root = _repo_root()
-    def walk(p: Path, rel: str = ""):
+async def code_tree(user: dict = Depends(get_current_user)):
+    """Return the active repo's directory tree as nested JSON."""
+    root = _get_active_repo(user["id"])
+
+    def walk(directory: Path, rel: str = ""):
         children = []
         try:
-            entries = sorted(p.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower()))
+            entries = sorted(directory.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower()))
         except PermissionError:
-            return {"name": p.name, "is_dir": True, "children": []}
+            return {"name": directory.name, "is_dir": True, "children": []}
 
         for entry in entries:
             if entry.name in IGNORED_DIRS or entry.name in IGNORED_FILES:
@@ -261,25 +351,25 @@ async def code_tree(_user: dict = Depends(get_current_user)):
                 children.append(walk(entry, child_rel))
             else:
                 children.append({"name": entry.name, "is_dir": False})
-        return {"name": p.name, "is_dir": True, "children": children}
+        return {"name": directory.name, "is_dir": True, "children": children}
 
     return walk(root)
 
 
 @router.get("/api/code/read")
-async def code_read(path: str = Query(...), _user: dict = Depends(get_current_user)):
-    """Read a file's content."""
-    fp = _safe_path(path)
-    if not fp.exists():
+async def code_read(path: str = Query(...), user: dict = Depends(get_current_user)):
+    """Read a file's content from the active repo."""
+    fpath = _safe_path(user["id"], path)
+    if not fpath.exists():
         raise HTTPException(404, f"File not found: {path}")
-    if not fp.is_file():
+    if not fpath.is_file():
         raise HTTPException(400, "Not a file")
-    if fp.stat().st_size > MAX_FILE_SIZE:
+    if fpath.stat().st_size > MAX_FILE_SIZE:
         raise HTTPException(400, "File too large (>2MB)")
     try:
-        content = fp.read_text(encoding="utf-8", errors="replace")
-    except Exception as e:
-        raise HTTPException(500, str(e))
+        content = fpath.read_text(encoding="utf-8", errors="replace")
+    except Exception as error:
+        raise HTTPException(500, str(error))
     return {"path": path, "content": content}
 
 
@@ -289,14 +379,14 @@ class WriteRequest(BaseModel):
 
 
 @router.post("/api/code/write")
-async def code_write(req: WriteRequest, _user: dict = Depends(get_current_user)):
-    """Write content to a file (creates directories if needed)."""
-    fp = _safe_path(req.path)
-    fp.parent.mkdir(parents=True, exist_ok=True)
+async def code_write(req: WriteRequest, user: dict = Depends(get_current_user)):
+    """Write content to a file in the active repo (creates dirs as needed)."""
+    fpath = _safe_path(user["id"], req.path)
+    fpath.parent.mkdir(parents=True, exist_ok=True)
     try:
-        fp.write_text(req.content, encoding="utf-8")
-    except Exception as e:
-        raise HTTPException(500, str(e))
+        fpath.write_text(req.content, encoding="utf-8")
+    except Exception as error:
+        raise HTTPException(500, str(error))
     return {"ok": True, "path": req.path}
 
 
@@ -305,96 +395,88 @@ class MkdirRequest(BaseModel):
 
 
 @router.post("/api/code/mkdir")
-async def code_mkdir(req: MkdirRequest, _user: dict = Depends(get_current_user)):
-    """Create a directory."""
-    fp = _safe_path(req.path)
-    fp.mkdir(parents=True, exist_ok=True)
+async def code_mkdir(req: MkdirRequest, user: dict = Depends(get_current_user)):
+    """Create a directory inside the active repo."""
+    fpath = _safe_path(user["id"], req.path)
+    fpath.mkdir(parents=True, exist_ok=True)
     return {"ok": True, "path": req.path}
 
 
 @router.get("/api/code/search")
-async def code_search(q: str = Query(...), _user: dict = Depends(get_current_user)):
-    """Search for text across the repository using grep."""
+async def code_search(q: str = Query(...), user: dict = Depends(get_current_user)):
+    """Search for text across the active repository using ``git grep``."""
     if not q.strip():
         return {"results": []}
-    result = _git("grep", "-n", "-i", "--max-count=5", "-r", "-e", q, "--", ".")
+    result = _git(user["id"], "grep", "-n", "-i", "--max-count=5", "-r", "-e", q, "--", ".")
     if not result.stdout:
         return {"results": []}
-    # Parse grep output: file:line:text
     by_file: dict[str, list] = {}
     for line in result.stdout.strip().split("\n")[:100]:
         parts = line.split(":", 2)
         if len(parts) < 3:
             continue
         fpath, lineno, text = parts
-        # Remove leading "./" if present
         if fpath.startswith("./"):
             fpath = fpath[2:]
         if fpath not in by_file:
             by_file[fpath] = []
         by_file[fpath].append({"line": int(lineno), "text": text[:200]})
 
-    results = [{"file": f, "matches": m} for f, m in by_file.items()]
+    results = [{"file": fname, "matches": matches} for fname, matches in by_file.items()]
     return {"results": results[:20]}
 
 
-# ── File preview (binary: PDF, images, media) ────────────────────────────
+# ── Binary preview ────────────────────────────────────────────────────────
 
-# Extension → MIME mapping for preview-able files
 _PREVIEW_MIME = {
-    # PDF
     "pdf": "application/pdf",
-    # Images
     "png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
     "gif": "image/gif", "svg": "image/svg+xml", "webp": "image/webp",
     "ico": "image/x-icon", "bmp": "image/bmp",
-    # Audio
     "mp3": "audio/mpeg", "wav": "audio/wav", "ogg": "audio/ogg",
     "flac": "audio/flac", "aac": "audio/aac", "m4a": "audio/mp4",
-    # Video
     "mp4": "video/mp4", "webm": "video/webm", "mov": "video/quicktime",
     "avi": "video/x-msvideo", "mkv": "video/x-matroska",
-    # Fonts (optional preview)
     "woff": "font/woff", "woff2": "font/woff2", "ttf": "font/ttf",
 }
 
 PREVIEW_EXTENSIONS = set(_PREVIEW_MIME.keys())
-MAX_PREVIEW_SIZE = 100 * 1024 * 1024   # 100 MB cap for media
+MAX_PREVIEW_SIZE = 100 * 1024 * 1024
 
 
 @router.get("/api/code/preview")
-async def code_preview(path: str = Query(...), _user: dict = Depends(get_current_user)):
-    """Serve a binary file for preview (PDF, images, audio, video)."""
-    fp = _safe_path(path)
-    if not fp.exists():
+async def code_preview(path: str = Query(...), user: dict = Depends(get_current_user)):
+    """Serve a binary file (PDF/image/audio/video) from the active repo."""
+    fpath = _safe_path(user["id"], path)
+    if not fpath.exists():
         raise HTTPException(404, f"File not found: {path}")
-    if not fp.is_file():
+    if not fpath.is_file():
         raise HTTPException(400, "Not a file")
 
-    ext = fp.suffix.lstrip(".").lower()
+    ext = fpath.suffix.lstrip(".").lower()
     mime = _PREVIEW_MIME.get(ext)
     if not mime:
         raise HTTPException(400, f"Unsupported preview type: .{ext}")
 
-    if fp.stat().st_size > MAX_PREVIEW_SIZE:
+    if fpath.stat().st_size > MAX_PREVIEW_SIZE:
         raise HTTPException(400, "File too large for preview (>100MB)")
 
     return FileResponse(
-        path=str(fp),
+        path=str(fpath),
         media_type=mime,
-        headers={"Content-Disposition": f'inline; filename="{fp.name}"'},
+        headers={"Content-Disposition": f'inline; filename="{fpath.name}"'},
     )
 
 
 # ══════════════════════════════════════════════════════════════════════════
-#  Git routes
+#  Git routes (per-user serialised via _get_user_lock)
 # ══════════════════════════════════════════════════════════════════════════
 
 @router.get("/api/git/status")
-async def git_status(_user: dict = Depends(get_current_user)):
+async def git_status(user: dict = Depends(get_current_user)):
     """Return staged and unstaged file lists."""
-    # Staged files
-    staged_result = _git("diff", "--cached", "--name-status")
+    user_id = user["id"]
+    staged_result = _git(user_id, "diff", "--cached", "--name-status")
     staged = []
     if staged_result.stdout:
         for line in staged_result.stdout.strip().split("\n"):
@@ -404,46 +486,44 @@ async def git_status(_user: dict = Depends(get_current_user)):
             if len(parts) == 2:
                 staged.append({"status": parts[0], "path": parts[1]})
 
-    # Unstaged (modified + untracked)
-    unstaged_result = _git("status", "--porcelain", "-u")
+    unstaged_result = _git(user_id, "status", "--porcelain", "-u")
     unstaged = []
-    staged_paths = {s["path"] for s in staged}
+    staged_paths = {entry["path"] for entry in staged}
     if unstaged_result.stdout:
         for line in unstaged_result.stdout.strip().split("\n"):
             if not line.strip() or len(line) < 4:
                 continue
             xy = line[:2]
             fpath = line[3:].strip()
-            # Skip files already in staged
-            if fpath in staged_paths and xy[1] == ' ':
+            if fpath in staged_paths and xy[1] == " ":
                 continue
-            status = 'M'
-            if xy[1] == 'M' or xy[0] == 'M':
-                status = 'M'
-            elif xy == '??':
-                status = '?'
-            elif xy[1] == 'D' or xy[0] == 'D':
-                status = 'D'
-            elif xy[1] == 'A' or xy[0] == 'A':
-                status = 'A'
+            status = "M"
+            if xy[1] == "M" or xy[0] == "M":
+                status = "M"
+            elif xy == "??":
+                status = "?"
+            elif xy[1] == "D" or xy[0] == "D":
+                status = "D"
+            elif xy[1] == "A" or xy[0] == "A":
+                status = "A"
             unstaged.append({"status": status, "path": fpath})
 
     return {"staged": staged, "unstaged": unstaged}
 
 
 @router.get("/api/git/diff")
-async def git_diff(path: str = Query(""), _user: dict = Depends(get_current_user)):
+async def git_diff(path: str = Query(""), user: dict = Depends(get_current_user)):
     """Get diff for a specific file or the whole repo."""
+    user_id = user["id"]
     if path:
         _safe_git_arg(path)
-        result = _git("diff", "--cached", "--", path)
+        result = _git(user_id, "diff", "--cached", "--", path)
         if not result.stdout.strip():
-            result = _git("diff", "--", path)
+            result = _git(user_id, "diff", "--", path)
         if not result.stdout.strip():
-            # Maybe untracked — show full file content
-            result = _git("diff", "--no-index", "/dev/null", path)
+            result = _git(user_id, "diff", "--no-index", "/dev/null", path)
     else:
-        result = _git("diff")
+        result = _git(user_id, "diff")
     return {"diff": result.stdout or "(no changes)"}
 
 
@@ -452,18 +532,24 @@ class StageRequest(BaseModel):
 
 
 @router.post("/api/git/stage")
-async def git_stage(req: StageRequest, _user: dict = Depends(get_current_user)):
+async def git_stage(req: StageRequest, user: dict = Depends(get_current_user)):
     """Stage files."""
-    for p in req.paths:
-        _git("add", "--", _safe_git_arg(p))
+    user_id = user["id"]
+    lock = await _get_user_lock(user_id)
+    async with lock:
+        for path in req.paths:
+            _git(user_id, "add", "--", _safe_git_arg(path))
     return {"ok": True}
 
 
 @router.post("/api/git/unstage")
-async def git_unstage(req: StageRequest, _user: dict = Depends(get_current_user)):
+async def git_unstage(req: StageRequest, user: dict = Depends(get_current_user)):
     """Unstage files."""
-    for p in req.paths:
-        _git("reset", "HEAD", "--", _safe_git_arg(p))
+    user_id = user["id"]
+    lock = await _get_user_lock(user_id)
+    async with lock:
+        for path in req.paths:
+            _git(user_id, "reset", "HEAD", "--", _safe_git_arg(path))
     return {"ok": True}
 
 
@@ -472,40 +558,48 @@ class CommitRequest(BaseModel):
 
 
 @router.post("/api/git/commit")
-async def git_commit(req: CommitRequest, _user: dict = Depends(get_current_user)):
+async def git_commit(req: CommitRequest, user: dict = Depends(get_current_user)):
     """Commit staged changes."""
-    result = _git("commit", "-m", req.message)
+    user_id = user["id"]
+    lock = await _get_user_lock(user_id)
+    async with lock:
+        result = _git(user_id, "commit", "-m", req.message)
     if result.returncode != 0:
         raise HTTPException(400, result.stderr or "Commit failed")
     return {"ok": True, "output": result.stdout}
 
 
 @router.post("/api/git/push")
-async def git_push(_user: dict = Depends(get_current_user)):
+async def git_push(user: dict = Depends(get_current_user)):
     """Push to origin."""
-    result = _git("push", "origin", "HEAD")
-    if result.returncode != 0:
-        # Try with set-upstream
-        result2 = _git("push", "--set-upstream", "origin", "HEAD")
-        if result2.returncode != 0:
-            raise HTTPException(400, result2.stderr or "Push failed")
-        return {"ok": True, "output": result2.stdout + result2.stderr}
+    user_id = user["id"]
+    lock = await _get_user_lock(user_id)
+    async with lock:
+        result = _git(user_id, "push", "origin", "HEAD")
+        if result.returncode != 0:
+            result2 = _git(user_id, "push", "--set-upstream", "origin", "HEAD")
+            if result2.returncode != 0:
+                raise HTTPException(400, result2.stderr or "Push failed")
+            return {"ok": True, "output": result2.stdout + result2.stderr}
     return {"ok": True, "output": result.stdout + result.stderr}
 
 
 @router.post("/api/git/pull")
-async def git_pull(_user: dict = Depends(get_current_user)):
+async def git_pull(user: dict = Depends(get_current_user)):
     """Pull from origin."""
-    result = _git("pull", "--rebase")
+    user_id = user["id"]
+    lock = await _get_user_lock(user_id)
+    async with lock:
+        result = _git(user_id, "pull", "--rebase")
     if result.returncode != 0:
         raise HTTPException(400, result.stderr or "Pull failed")
     return {"ok": True, "output": result.stdout}
 
 
 @router.get("/api/git/branches")
-async def git_branches(_user: dict = Depends(get_current_user)):
+async def git_branches(user: dict = Depends(get_current_user)):
     """List all branches and the current one."""
-    result = _git("branch", "-a")
+    result = _git(user["id"], "branch", "-a")
     current = "main"
     all_branches = []
     if result.stdout:
@@ -516,12 +610,10 @@ async def git_branches(_user: dict = Depends(get_current_user)):
                 all_branches.append(current)
             elif line.startswith("remotes/origin/"):
                 name = line.replace("remotes/origin/", "")
-                if name != "HEAD" and not name.startswith("HEAD "):
-                    if name not in all_branches:
-                        all_branches.append(name)
-            else:
-                if line and line not in all_branches:
-                    all_branches.append(line)
+                if name != "HEAD" and not name.startswith("HEAD ") and name not in all_branches:
+                    all_branches.append(name)
+            elif line and line not in all_branches:
+                all_branches.append(line)
     return {"current": current, "all": all_branches}
 
 
@@ -531,23 +623,29 @@ class CheckoutRequest(BaseModel):
 
 
 @router.post("/api/git/checkout")
-async def git_checkout(req: CheckoutRequest, _user: dict = Depends(get_current_user)):
+async def git_checkout(req: CheckoutRequest, user: dict = Depends(get_current_user)):
     """Switch branch or create a new one."""
     if not _SAFE_BRANCH_RE.match(req.branch):
         raise HTTPException(400, "Invalid branch name")
-    if req.create:
-        result = _git("checkout", "-b", req.branch)
-    else:
-        result = _git("checkout", req.branch)
+    user_id = user["id"]
+    lock = await _get_user_lock(user_id)
+    async with lock:
+        if req.create:
+            result = _git(user_id, "checkout", "-b", req.branch)
+        else:
+            result = _git(user_id, "checkout", req.branch)
     if result.returncode != 0:
         raise HTTPException(400, result.stderr or "Checkout failed")
     return {"ok": True, "branch": req.branch}
 
 
 @router.get("/api/git/log")
-async def git_log(n: int = Query(20, ge=1, le=100), _user: dict = Depends(get_current_user)):
+async def git_log(
+    n: int = Query(20, ge=1, le=100),
+    user: dict = Depends(get_current_user),
+):
     """Return recent commits."""
-    result = _git("log", f"--max-count={n}", "--format=%H|%an|%ai|%s")
+    result = _git(user["id"], "log", f"--max-count={n}", "--format=%H|%an|%ai|%s")
     commits = []
     if result.stdout:
         for line in result.stdout.strip().split("\n"):

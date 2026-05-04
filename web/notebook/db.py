@@ -226,6 +226,26 @@ CREATE TABLE IF NOT EXISTS calendar_connections (
 
 CREATE INDEX IF NOT EXISTS idx_calcn_user ON calendar_connections(user_id);
 
+-- ── Code IDE: per-user repo state ───────────────────────────────────────
+-- Replaces the legacy single-user .code_state.json file.  Each row is one
+-- repository the user has cloned; ``is_active=1`` marks the repo currently
+-- selected in their IDE (only one per user at a time).
+
+CREATE TABLE IF NOT EXISTS code_repos (
+    id             TEXT PRIMARY KEY,
+    user_id        TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    url            TEXT NOT NULL,
+    path           TEXT NOT NULL,
+    name           TEXT NOT NULL,
+    is_active      INTEGER NOT NULL DEFAULT 0,
+    last_active_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    created_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    UNIQUE(user_id, url)
+);
+
+CREATE INDEX IF NOT EXISTS idx_code_repos_user   ON code_repos(user_id);
+CREATE INDEX IF NOT EXISTS idx_code_repos_active ON code_repos(user_id, is_active);
+
 -- ── Note Versions (Version History) ─────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS notes (
