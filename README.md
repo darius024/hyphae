@@ -76,7 +76,7 @@ huggingface-cli login
 bash scripts/setup.sh
 
 # 4. Activate the virtual environment
-source cactus/venv/bin/activate
+source .venv/bin/activate
 
 # 5. Set your API keys
 export GEMINI_API_KEY="your-gemini-key"
@@ -97,8 +97,8 @@ If `scripts/setup.sh` doesn't cover your platform, install manually:
 
 ```bash
 cd hyphae
-python3 -m venv cactus/venv
-source cactus/venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 pip install sentence-transformers   # for notebook embeddings
 ```
@@ -108,7 +108,7 @@ pip install sentence-transformers   # for notebook embeddings
 ### Web UI
 
 ```bash
-source cactus/venv/bin/activate
+source .venv/bin/activate
 export GEMINI_API_KEY="your-key"
 python -m uvicorn web.app:app --port 5000
 ```
@@ -249,16 +249,33 @@ Notebooks use FAISS vector search + sentence-transformer embeddings for retrieva
 ## Tests
 
 ```bash
-python -m pytest tests/ -v
+USE_DUMMY_EMBED=1 TRANSFORMERS_OFFLINE=1 HF_HUB_OFFLINE=1 RATE_LIMIT_RPM=0 \
+  python -m pytest tests/ -v \
+  --ignore=tests/unit/test_engine.py \
+  --ignore=tests/unit/test_tools.py \
+  --ignore=tests/integration/test_routing.py
+ruff check .
+mypy src web
 ```
 
-79 tests covering:
+The three ignored suites require either Cactus model weights or a live
+Gemini API key and are skipped in CI.  See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)
+for the full development workflow, [docs/OPERATIONS.md](docs/OPERATIONS.md)
+for environment variables and runbook tasks, and
+[docs/SECURITY.md](docs/SECURITY.md) for the threat model.
+
+Coverage spans:
 
 - **Tool registry & dispatch** — schema validation, execution, error handling
 - **Privacy sanitisation** — PII patterns, cloud safety, tool filtering
 - **Corpus ingestion** — file add/remove, directory import, format filtering
 - **Database layer** — schema creation, seeding, CRUD, cascade deletes, transactions, FK enforcement
-- **Web API** — all REST endpoints via FastAPI TestClient (documents, sensitivity, classify, notebooks, conversations, settings, static routes)
+- **Web API** — all REST endpoints via FastAPI TestClient
+- **Auth hardening** — hashed-token storage, lockout, logout-all, sliding expiry
+- **Per-user IDE isolation** — workspace namespacing, cross-user 403 enforcement
+- **SSRF defence** — URL ingestion + redirect re-validation
+- **FAISS persistence** — atomic writes, cache eviction with disk reload
+- **Hybrid router fast-path** — rule-based extraction and cloud fallback
 
 ## Benchmark
 

@@ -73,7 +73,7 @@ where $w_{\text{easy}} = 0.20$, $w_{\text{medium}} = 0.30$, $w_{\text{hard}} = 0
 ## Quick Reference
 
 ```bash
-source cactus/venv/bin/activate
+source .venv/bin/activate
 export GEMINI_API_KEY="your-key"
 
 python benchmark.py                    # run full benchmark

@@ -44,10 +44,15 @@ hyphae/
 │   ├── routes/
 │   │   ├── notebooks.py    # Notebook CRUD, sources, conversations, chat
 │   │   ├── query.py        # Hybrid query, classify, tools, voice
-│   │   ├── auth.py         # Authentication (bcrypt, sessions)
+│   │   ├── auth.py         # Authentication: bcrypt, hashed sessions, lockout
 │   │   ├── corpus.py       # Legacy corpus document endpoints
-│   │   ├── code.py         # Git clone, file browse, edit, commit
-│   │   └── features.py     # Tags, knowledge graph, analytics, deadlines, notes, orgs
+│   │   ├── code.py         # Per-user git workspace + file/edit/commit API
+│   │   ├── tags.py         # Tags & source labelling
+│   │   ├── analytics.py    # Usage events and aggregates
+│   │   ├── planning.py     # Deadlines, reminders, calendar sync
+│   │   ├── notes.py        # Notes, versions, knowledge-graph links
+│   │   ├── collaboration.py# Sharing, comments, activity feed
+│   │   └── export.py       # Notebook export (PDF, JSON, etc.)
 │   ├── notebook/
 │   │   ├── db.py           # SQLite schema, connection manager
 │   │   ├── models.py       # Pydantic v2 schemas
@@ -72,11 +77,18 @@ hyphae/
 │   │   ├── test_db.py
 │   │   ├── test_sanitiser.py
 │   │   ├── test_privacy.py
+│   │   ├── test_router.py        # Hybrid routing fast-path coverage
+│   │   ├── test_extractors.py    # Rule-based argument extraction
+│   │   ├── test_json_repair.py   # Cactus JSON post-processing
+│   │   ├── test_faiss_persistence.py
 │   │   ├── test_tools.py
 │   │   └── test_ingest.py
 │   ├── integration/        # Tests requiring FastAPI TestClient
 │   │   ├── test_web_api.py
 │   │   ├── test_auth_api.py
+│   │   ├── test_auth_hardening.py   # Lockout, hashed tokens, logout-all
+│   │   ├── test_code_isolation.py   # Per-user IDE workspace isolation
+│   │   ├── test_ssrf_redirects.py   # SSRF defence on URL ingest
 │   │   └── test_validation.py
 │   └── conftest.py         # Shared fixtures
 ├── scripts/                # All scripts and dev utilities
@@ -117,8 +129,18 @@ Each notebook is an isolated workspace:
 ### Authentication
 
 - bcrypt password hashing (adaptive cost, timing-safe)
-- Session tokens stored in SQLite with 30-day expiry
-- Bearer token auth via `Authorization` header
+- Session tokens are SHA-256 hashed before storage; the database never
+  contains a usable bearer token
+- Sliding 30-day expiry with a 7-day refresh window
+- Failed-login lockout (10 fails → 15 min) with counter reset on success
+- ``POST /api/auth/logout-all`` for one-shot revocation across devices
+
+### Per-User IDE Workspace
+
+Each user's repos live under ``code_workspace/<user_id>/<repo>``.  Active
+repo state is tracked in the ``code_repos`` SQLite table, keyed by
+``user_id``.  A per-user :class:`asyncio.Lock` serialises concurrent git
+mutations so two requests from the same user never race.
 
 ### Frontend
 
@@ -136,10 +158,23 @@ cp .env.example ../.env   # fill in GEMINI_API_KEY
 ./scripts/start_server.sh  # starts on http://localhost:5000
 ```
 
+See [OPERATIONS.md](./OPERATIONS.md) for environment variables, health
+checks, log format, and rate-limit knobs.  See [SECURITY.md](./SECURITY.md)
+for the threat model and security-relevant defences.
+
 ## Testing
 
 ```bash
 cd hyphae
-source cactus/venv/bin/activate  # or your venv
-pytest tests/ -v
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+USE_DUMMY_EMBED=1 TRANSFORMERS_OFFLINE=1 HF_HUB_OFFLINE=1 RATE_LIMIT_RPM=0 \
+  pytest tests/ -v \
+  --ignore=tests/unit/test_engine.py \
+  --ignore=tests/unit/test_tools.py \
+  --ignore=tests/integration/test_routing.py
+ruff check .
 ```
+
+The three ignored suites require either the Cactus model weights or a
+live Gemini API key and are skipped in CI.
