@@ -453,6 +453,18 @@ def init_db() -> None:
         except sqlite3.OperationalError:
             pass
 
+        # Auth hardening: lockout + hashed session tokens.
+        for stmt in (
+            "ALTER TABLE users ADD COLUMN failed_login_count INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE users ADD COLUMN locked_until TEXT",
+            "ALTER TABLE users ADD COLUMN last_login_at TEXT",
+        ):
+            try:
+                conn.execute(stmt)
+                conn.commit()
+            except sqlite3.OperationalError:
+                pass
+
         _seed_defaults(conn)
         conn.commit()
         log.info("Notebook DB ready at %s", DB_PATH)
