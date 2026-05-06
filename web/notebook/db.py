@@ -419,6 +419,11 @@ _DEMO_CONV_ID = "demo-conversation-001"
 
 def init_db() -> None:
     conn = sqlite3.connect(DB_PATH)
+    # Mirror runtime semantics: get_conn() always enforces foreign keys,
+    # so DDL, migrations and seed inserts must run under the same regime
+    # to surface invariant violations at schema-build time rather than
+    # silently corrupting the database.
+    conn.execute("PRAGMA foreign_keys=ON")
     try:
         conn.executescript(_DDL)
         conn.executescript(_FTS_TRIGGERS)
