@@ -156,7 +156,7 @@ class TestUnownedRowIsolation:
         placeholders = ", ".join("?" * len(cols))
         with get_conn() as conn:
             conn.execute(
-                f"INSERT INTO {table} ({keys}) VALUES ({placeholders})",  # noqa: S608 - test-only
+                f"INSERT INTO {table} ({keys}) VALUES ({placeholders})",
                 tuple(cols.values()),
             )
         return row_id
