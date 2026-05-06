@@ -534,7 +534,13 @@ async def get_activity_feed(
     limit: int = Query(default=50, ge=1, le=200),
     _user: dict = Depends(get_current_user),
 ):
-    """Get activity feed for org or notebook."""
+    """Get activity feed for an org, a notebook, or the caller themselves.
+
+    Without a filter the feed is scoped to the authenticated user, so
+    clients can render "my activity" without first picking a notebook.
+    Org and notebook filters are still verified against the caller's
+    membership/ownership inside the SQL via ``a.user_id`` joins.
+    """
     with get_conn() as conn:
         conditions = []
         params: list = []
@@ -547,7 +553,12 @@ async def get_activity_feed(
             params.append(notebook_id)
 
         if not conditions:
-            raise HTTPException(400, "At least one filter (org_id or notebook_id) is required")
+            # Default scope: show the caller's own activity.  This is the
+            # behaviour clients expect for a generic "recent activity"
+            # widget and avoids cross-tenant disclosure since we filter
+            # explicitly on the user_id.
+            conditions.append("a.user_id = ?")
+            params.append(_user["id"])
 
         where_clause = " AND ".join(conditions)
         params.append(limit)

@@ -79,9 +79,19 @@ router = APIRouter(prefix="/api", tags=["planning"])
 
 # ── Pydantic models ──────────────────────────────────────────────────────
 
+# Accept either a plain calendar date (``YYYY-MM-DD``) or an ISO-8601
+# timestamp (``YYYY-MM-DDTHH:MM[:SS][.ffffff][Z|±HH:MM]``).  The frontend
+# emits full timestamps via ``Date.prototype.toISOString()``, so the previous
+# date-only pattern silently 422-rejected every UI submission.
+_DATE_OR_DATETIME_RE = (
+    r"^\d{4}-\d{2}-\d{2}"
+    r"(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+\-]\d{2}:?\d{2})?)?$"
+)
+
+
 class DeadlineCreate(BaseModel):
     title: str = Field(..., min_length=1)
-    due_date: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
+    due_date: str = Field(..., pattern=_DATE_OR_DATETIME_RE)
     notebook_id: str | None = None
     source_id: str | None = None
     priority: str = Field(default="medium", pattern=r"^(low|medium|high|urgent)$")
@@ -89,14 +99,14 @@ class DeadlineCreate(BaseModel):
 
 class DeadlineUpdate(BaseModel):
     title: str | None = None
-    due_date: str | None = Field(None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    due_date: str | None = Field(None, pattern=_DATE_OR_DATETIME_RE)
     priority: str | None = None
     status: str | None = Field(None, pattern=r"^(pending|in_progress|completed|cancelled)$")
     note: str | None = None
 
 class ReminderCreate(BaseModel):
     deadline_id: str
-    remind_at: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}")
+    remind_at: str = Field(..., pattern=_DATE_OR_DATETIME_RE)
 
 class CalendarConnect(BaseModel):
     provider: str = Field(..., pattern=r"^(google|outlook)$")
