@@ -175,3 +175,36 @@ class TestUnownedRowIsolation:
         assert r.status_code == 404
         r = client.delete(f"/api/deadlines/{dl_id}", headers=user_a)
         assert r.status_code == 404
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Comment endpoints — caller must have notebook access
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestCommentNotebookAccess:
+    """`/api/comments` endpoints must verify that the caller owns or
+    is a member of the org for the targeted notebook before reading or
+    posting comments."""
+
+    def _create_notebook(self, client, headers, name: str = "NB") -> str:
+        r = client.post("/api/notebooks", json={"name": name}, headers=headers)
+        assert r.status_code in (200, 201), r.text
+        return r.json()["id"]
+
+    def test_list_comments_other_user_notebook_returns_404(
+        self, client, user_a, user_b
+    ):
+        nb_id = self._create_notebook(client, user_a, "A's NB")
+        r = client.get(f"/api/comments?notebook_id={nb_id}", headers=user_b)
+        assert r.status_code == 404
+
+    def test_create_comment_on_other_user_notebook_returns_404(
+        self, client, user_a, user_b
+    ):
+        nb_id = self._create_notebook(client, user_a, "A's NB")
+        r = client.post(
+            "/api/comments",
+            json={"content": "hi", "notebook_id": nb_id},
+            headers=user_b,
+        )
+        assert r.status_code == 404
