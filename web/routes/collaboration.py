@@ -458,6 +458,8 @@ async def list_comments(
     notebook_id: str | None = None,
     source_id: str | None = None,
     note_id: str | None = None,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     _user: dict = Depends(get_current_user),
 ):
     """List top-level comments for a specific target.
@@ -501,7 +503,8 @@ async def list_comments(
             LEFT JOIN users u ON c.user_id = u.id
             WHERE {where_clause} AND c.parent_id IS NULL
             ORDER BY c.created_at DESC
-        """, params).fetchall()
+            LIMIT ? OFFSET ?
+        """, [*params, limit, offset]).fetchall()
 
     return {"comments": [dict(r) for r in rows]}
 

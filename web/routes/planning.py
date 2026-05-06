@@ -123,9 +123,15 @@ async def list_deadlines(
     notebook_id: str | None = None,
     status: str | None = None,
     upcoming_days: int = Query(default=30, ge=1, le=365),
+    limit: int = Query(default=200, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
     _user: dict = Depends(get_current_user),
 ):
-    """List deadlines, optionally filtered."""
+    """List deadlines, optionally filtered.
+
+    A hard ``limit`` is enforced so a single user with many deadlines
+    cannot pull an unbounded result set.
+    """
     until = (datetime.now(UTC) + timedelta(days=upcoming_days)).isoformat()
 
     query = "SELECT * FROM deadlines WHERE due_date <= ? AND user_id = ?"
@@ -138,7 +144,8 @@ async def list_deadlines(
         query += " AND status = ?"
         params.append(status)
 
-    query += " ORDER BY due_date ASC"
+    query += " ORDER BY due_date ASC LIMIT ? OFFSET ?"
+    params.extend([limit, offset])
 
     with get_conn() as conn:
         rows = conn.execute(query, params).fetchall()
