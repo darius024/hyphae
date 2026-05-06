@@ -26,12 +26,17 @@ def configure(*, gemini_fn):
 
 
 def _check_nb_owner(nb_id: str, user_id: str) -> None:
-    """Raise 404 if notebook not found, 403 if it belongs to a different user."""
+    """Raise 404 if notebook is missing or unowned, 403 if owned by another user.
+
+    Unowned (``user_id IS NULL``) rows are surfaced as 404 so that legacy /
+    pre-migration notebooks cannot be reached by random callers who happen
+    to know the ID.
+    """
     with get_conn() as conn:
         nb = conn.execute("SELECT user_id FROM notebooks WHERE id=?", (nb_id,)).fetchone()
-    if nb is None:
+    if nb is None or nb["user_id"] is None:
         raise HTTPException(404, "Notebook not found")
-    if nb["user_id"] and nb["user_id"] != user_id:
+    if nb["user_id"] != user_id:
         raise HTTPException(403, "Access denied")
 
 
@@ -242,7 +247,9 @@ async def writing_assist(body: WritingAssistRequest, _user: dict = Depends(get_c
             ).fetchone()
         if nb is None:
             raise HTTPException(404, "Notebook not found")
-        if nb["user_id"] and nb["user_id"] != _user["id"]:
+        if nb["user_id"] is None:
+            raise HTTPException(404, "Notebook not found")
+        if nb["user_id"] != _user["id"]:
             raise HTTPException(403, "Access denied")
         if not nb["allow_cloud"]:
             raise HTTPException(

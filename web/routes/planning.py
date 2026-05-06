@@ -164,9 +164,9 @@ async def update_deadline(dl_id: str, body: DeadlineUpdate, _user: dict = Depend
     """Update a deadline."""
     with get_conn() as conn:
         existing = conn.execute("SELECT * FROM deadlines WHERE id=?", (dl_id,)).fetchone()
-        if not existing:
+        if not existing or existing["user_id"] is None:
             raise HTTPException(404, "Deadline not found")
-        if existing["user_id"] and existing["user_id"] != _user["id"]:
+        if existing["user_id"] != _user["id"]:
             raise HTTPException(403, "Access denied")
 
         _ALLOWED = ("title", "due_date", "priority", "status", "note")
@@ -182,9 +182,9 @@ async def delete_deadline(dl_id: str, _user: dict = Depends(get_current_user)):
     """Delete a deadline."""
     with get_conn() as conn:
         existing = conn.execute("SELECT user_id FROM deadlines WHERE id=?", (dl_id,)).fetchone()
-        if not existing:
+        if not existing or existing["user_id"] is None:
             raise HTTPException(404, "Deadline not found")
-        if existing["user_id"] and existing["user_id"] != _user["id"]:
+        if existing["user_id"] != _user["id"]:
             raise HTTPException(403, "Access denied")
         conn.execute("DELETE FROM deadlines WHERE id=?", (dl_id,))
     return {"deleted": dl_id}
@@ -198,9 +198,9 @@ async def create_reminder(body: ReminderCreate, _user: dict = Depends(get_curren
     rem_id = str(uuid.uuid4())
     with get_conn() as conn:
         dl = conn.execute("SELECT id, user_id FROM deadlines WHERE id=?", (body.deadline_id,)).fetchone()
-        if not dl:
+        if not dl or dl["user_id"] is None:
             raise HTTPException(404, "Deadline not found")
-        if dl["user_id"] and dl["user_id"] != _user["id"]:
+        if dl["user_id"] != _user["id"]:
             raise HTTPException(403, "Access denied")
 
         conn.execute("""

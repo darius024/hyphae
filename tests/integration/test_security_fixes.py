@@ -137,3 +137,41 @@ class TestWritingSessionOwnership:
     def test_nonexistent_session_returns_404(self, client, user_a):
         r = client.get("/api/writing/session/ghost-id", headers=user_a)
         assert r.status_code == 404
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Legacy unowned-row IDOR — direct-ID access must not leak NULL-owner data
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestUnownedRowIsolation:
+    """Pre-migration rows have ``user_id IS NULL``; ensure direct-ID access
+    does not surface them to authenticated users."""
+
+    def _insert_unowned(self, table: str, **cols) -> str:
+        from notebook.db import get_conn
+        row_id = "unowned-" + table
+        cols.setdefault("id", row_id)
+        cols.setdefault("user_id", None)
+        keys = ", ".join(cols.keys())
+        placeholders = ", ".join("?" * len(cols))
+        with get_conn() as conn:
+            conn.execute(
+                f"INSERT INTO {table} ({keys}) VALUES ({placeholders})",  # noqa: S608 - test-only
+                tuple(cols.values()),
+            )
+        return row_id
+
+    def test_unowned_notebook_returns_404(self, client, user_a):
+        nb_id = self._insert_unowned("notebooks", name="Legacy NB")
+        r = client.get(f"/api/notebooks/{nb_id}", headers=user_a)
+        assert r.status_code == 404
+
+    def test_unowned_deadline_cannot_be_read_or_deleted(self, client, user_a):
+        dl_id = self._insert_unowned(
+            "deadlines", title="Legacy", due_date="2099-01-01"
+        )
+        # PATCH/DELETE on a NULL-owned deadline must look like 'not found'.
+        r = client.patch(f"/api/deadlines/{dl_id}", json={"title": "x"}, headers=user_a)
+        assert r.status_code == 404
+        r = client.delete(f"/api/deadlines/{dl_id}", headers=user_a)
+        assert r.status_code == 404
