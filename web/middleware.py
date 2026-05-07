@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import logging
-import re
 import time
 from collections import defaultdict, deque
 from collections.abc import Sequence
@@ -55,14 +55,21 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     # address, meaning a real reverse proxy is sitting in front.  Requests
     # arriving directly from public IPs must use the TCP peer address so that
     # clients cannot spoof an arbitrary IP to bypass per-IP rate limiting.
-    _PRIVATE_IP_RE = re.compile(
-        r'^(127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|::1$|localhost$)',
-        re.IGNORECASE,
-    )
+    @staticmethod
+    def _is_trusted_peer(peer: str) -> bool:
+        if not peer:
+            return False
+        if peer in ("localhost", "unknown"):
+            return peer == "localhost"
+        try:
+            addr = ipaddress.ip_address(peer)
+        except ValueError:
+            return False
+        return addr.is_loopback or addr.is_private
 
     def _client_ip(self, request: Request) -> str:
         peer = request.client.host if request.client else ""
-        if peer and self._PRIVATE_IP_RE.match(peer):
+        if self._is_trusted_peer(peer):
             # Behind a trusted reverse proxy — use the first forwarded address.
             forwarded = request.headers.get("x-forwarded-for")
             if forwarded:

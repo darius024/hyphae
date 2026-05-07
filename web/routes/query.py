@@ -178,12 +178,19 @@ async def api_privacy_log(_user: dict = Depends(get_current_user)):
     return {"entries": entries[-100:]}
 
 
+_PRIVACY_TOOLS_LIMIT = 10
+
+
 def _log_privacy_event(user_id: str, query: str, tools_used: list, data_local: bool, routing_ms: float):
+    # Cap the per-entry tools list so a runaway agent loop can't bloat the
+    # privacy log into MBs of memory, even though the deque itself is bounded.
+    tool_names = [t["tool"] for t in tools_used[:_PRIVACY_TOOLS_LIMIT]]
     _privacy_log.append({
         "ts": datetime.now(UTC).isoformat(),
         "user_id": user_id,
         "query": query[:120],
-        "tools": [t["tool"] for t in tools_used],
+        "tools": tool_names,
+        "tools_truncated": len(tools_used) > _PRIVACY_TOOLS_LIMIT,
         "data_local": data_local,
         "routing_ms": routing_ms,
     })
