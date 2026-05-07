@@ -12,7 +12,6 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
-import re as _re
 import secrets
 from datetime import UTC, datetime, timedelta
 
@@ -20,6 +19,7 @@ import bcrypt
 from fastapi import APIRouter, Depends, Header, HTTPException
 from notebook.db import get_conn
 from pydantic import BaseModel, Field
+from routes._validators import is_valid_email
 
 log = logging.getLogger(__name__)
 
@@ -38,8 +38,6 @@ _LOCKOUT_MINUTES = int(os.environ.get("LOCKOUT_MINUTES", "15"))
 # Session lifetime + sliding-window refresh.
 _SESSION_LIFETIME_DAYS = int(os.environ.get("SESSION_LIFETIME_DAYS", "30"))
 _SESSION_REFRESH_WINDOW_DAYS = int(os.environ.get("SESSION_REFRESH_WINDOW_DAYS", "7"))
-
-_EMAIL_RE = _re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 class SignupRequest(BaseModel):
@@ -166,7 +164,7 @@ require_user = Depends(get_current_user)
 async def signup(req: SignupRequest):
     """Create a new user account."""
     user_id = secrets.token_hex(16)
-    if not _EMAIL_RE.match(req.email):
+    if not is_valid_email(req.email):
         raise HTTPException(400, "Invalid email address")
     password_hash = hash_password(req.password)
 

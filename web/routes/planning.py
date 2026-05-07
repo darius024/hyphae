@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
 from notebook.db import get_conn, safe_update
 from pydantic import BaseModel, Field
+from routes._validators import DATE_OR_DATETIME_PATTERN as _DATE_OR_DATETIME_RE
 from routes.auth import get_current_user
 
 log = logging.getLogger(__name__)
@@ -78,15 +79,6 @@ router = APIRouter(prefix="/api", tags=["planning"])
 
 
 # ── Pydantic models ──────────────────────────────────────────────────────
-
-# Accept either a plain calendar date (``YYYY-MM-DD``) or an ISO-8601
-# timestamp (``YYYY-MM-DDTHH:MM[:SS][.ffffff][Z|±HH:MM]``).  The frontend
-# emits full timestamps via ``Date.prototype.toISOString()``, so the previous
-# date-only pattern silently 422-rejected every UI submission.
-_DATE_OR_DATETIME_RE = (
-    r"^\d{4}-\d{2}-\d{2}"
-    r"(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+\-]\d{2}:?\d{2})?)?$"
-)
 
 
 class DeadlineCreate(BaseModel):

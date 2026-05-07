@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import re as _re
 import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -12,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from notebook.db import get_conn, safe_update
 from pydantic import BaseModel, Field, field_validator
 from routes._authz import can_access_notebook, resolve_notebook_for_target
+from routes._validators import is_valid_email
 from routes.auth import get_current_user
 
 log = logging.getLogger(__name__)
@@ -37,7 +37,7 @@ class OrgInvite(BaseModel):
     @field_validator("email")
     @classmethod
     def validate_email(cls, v: str) -> str:
-        if not _re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", v):
+        if not is_valid_email(v):
             raise ValueError("Invalid email address")
         return v.lower()
 
