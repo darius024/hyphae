@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from routes._authz import notebook_or_404 as _nb_or_404
 from routes.auth import get_current_user
 
-from core.config import GEMINI_MODEL
+from core.config import GEMINI_MODEL, MAX_UPLOAD_BYTES
 
 router = APIRouter(prefix="/api", tags=["notebooks"])
 log = logging.getLogger(__name__)
@@ -88,7 +88,6 @@ def configure(*, conn_fn, ingest_fn, upload_dir, search_fn, delete_idx_fn,
 
 # ── Helpers ────────────────────────────────────────────────────────────
 
-MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 
 _BAD_FILENAME_CHARS = re.compile(r'[\x00-\x1f\x7f/\\:]')
 _RESERVED_NAMES = frozenset(

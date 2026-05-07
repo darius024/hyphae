@@ -16,6 +16,8 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from routes.auth import get_current_user
 
+from core.config import MAX_UPLOAD_BYTES
+
 router = APIRouter(prefix="/api", tags=["corpus"])
 
 
@@ -25,7 +27,6 @@ class _SensitivityBody(BaseModel):
 # Module-level state populated once at startup by configure().
 CORPUS_DIR: str = ""
 add_file: Callable | None = None
-MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 
 _HIDDEN_SUFFIXES = {".bin", ".idx", ".faiss", ".npy", ".pkl"}
 _sensitivity_lock = threading.Lock()

@@ -12,6 +12,8 @@ import re
 import uuid
 from pathlib import Path
 
+from core.config import MAX_FETCH_BYTES
+
 log = logging.getLogger(__name__)
 
 # ── SSRF protection ───────────────────────────────────────────────────────
@@ -52,9 +54,6 @@ def extract_pdf(file_path: str) -> tuple[str, int]:
 
 def extract_text_file(file_path: str) -> str:
     return Path(file_path).read_text(errors="replace")
-
-
-MAX_FETCH_BYTES = 50 * 1024 * 1024  # 50 MB — hard cap on URL response size
 
 
 def extract_url_sync(url: str) -> str:

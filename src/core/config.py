@@ -25,6 +25,13 @@ CORPUS_DIR = os.environ.get("HYPHAE_CORPUS", os.path.join(PROJECT_ROOT, "corpus"
 
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash-lite")
 
+# ── Upload / fetch size limits ────────────────────────────────────────
+# Single source of truth so notebook attachments, corpus uploads, and
+# remote URL ingestion all agree on the cap (and so an operator can
+# tune them via env without grepping).
+MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", str(50 * 1024 * 1024)))
+MAX_FETCH_BYTES = int(os.environ.get("MAX_FETCH_BYTES", str(50 * 1024 * 1024)))
+
 if CACTUS_SRC not in sys.path:
     sys.path.insert(0, CACTUS_SRC)
 

@@ -11,14 +11,13 @@ os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
 os.environ.setdefault("RATE_LIMIT_RPM", "0")
 
+# Reuse the production sys.path bootstrap so tests cannot drift away from
+# how the real server resolves ``core``/``notebook``/``web`` imports.
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-for _p in (
-    os.path.join(_project_root, "src"),
-    os.path.join(_project_root, "web"),
-    _project_root,
-):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
+sys.path.insert(0, os.path.join(_project_root, "web"))
+from bootstrap import bootstrap as _bootstrap
+
+_bootstrap()
 
 
 import pytest
