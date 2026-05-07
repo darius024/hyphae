@@ -9,6 +9,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from notebook.db import get_conn, safe_update
 from pydantic import BaseModel, Field
+from routes._authz import assert_notebook_owner
 from routes.auth import get_current_user
 
 log = logging.getLogger(__name__)
@@ -38,15 +39,8 @@ class LinkCreate(BaseModel):
 
 
 def _check_nb_owner(nb_id: str, user_id: str, conn) -> None:
-    """Raise 404 if the notebook is missing or unowned, 403 if owned by
-    another user.  Unowned legacy rows are treated as missing to avoid
-    cross-tenant disclosure via direct-ID access.
-    """
-    nb = conn.execute("SELECT user_id FROM notebooks WHERE id=?", (nb_id,)).fetchone()
-    if not nb or nb["user_id"] is None:
-        raise HTTPException(404, "Notebook not found")
-    if nb["user_id"] != user_id:
-        raise HTTPException(403, "Access denied")
+    """Connection-bound wrapper around :func:`assert_notebook_owner`."""
+    assert_notebook_owner(conn, nb_id, user_id)
 
 @router.get("/tags")
 async def list_tags(_user: dict = Depends(get_current_user)):

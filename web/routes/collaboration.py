@@ -11,59 +11,14 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
 from notebook.db import get_conn, safe_update
 from pydantic import BaseModel, Field, field_validator
+from routes._authz import can_access_notebook, resolve_notebook_for_target
 from routes.auth import get_current_user
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["collaboration"])
 
 
-def _can_access_notebook(conn, nb_id: str, user_id: str) -> bool:
-    """Return ``True`` when *user_id* may read/write notebook *nb_id*.
-
-    Access is granted when the caller owns the notebook directly, or when
-    the notebook belongs to an organisation the caller is a member of.
-    Notebooks with both ``user_id`` and ``org_id`` NULL (legacy / unowned)
-    are not accessible to anyone via comment endpoints.
-    """
-    nb = conn.execute(
-        "SELECT user_id, org_id FROM notebooks WHERE id=?", (nb_id,)
-    ).fetchone()
-    if nb is None:
-        return False
-    if nb["user_id"] == user_id:
-        return True
-    if nb["org_id"]:
-        member = conn.execute(
-            "SELECT 1 FROM org_members WHERE org_id=? AND user_id=?",
-            (nb["org_id"], user_id),
-        ).fetchone()
-        if member:
-            return True
-    return False
-
-
-def _resolve_notebook_for_filter(
-    conn, *, notebook_id: str | None, source_id: str | None, note_id: str | None
-) -> str | None:
-    """Resolve the parent notebook for a comment filter.  Returns the
-    notebook id when one of the filters can be mapped to a notebook, or
-    ``None`` if nothing matches (caller should treat as 404)."""
-    if notebook_id:
-        return notebook_id
-    if source_id:
-        row = conn.execute(
-            "SELECT notebook_id FROM sources WHERE id=?", (source_id,)
-        ).fetchone()
-        return row["notebook_id"] if row else None
-    if note_id:
-        row = conn.execute(
-            "SELECT notebook_id FROM notes WHERE id=?", (note_id,)
-        ).fetchone()
-        return row["notebook_id"] if row else None
-    return None
-
-
-# ── Pydantic models ──────────────────────────────────────────────────────
+# ── Pydantic models ─────────────────────────────────────────────────────
 
 class OrgCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
@@ -486,10 +441,10 @@ async def list_comments(
         if not conditions:
             raise HTTPException(400, "At least one filter (notebook_id, source_id, or note_id) is required")
 
-        target_nb = _resolve_notebook_for_filter(
+        target_nb = resolve_notebook_for_target(
             conn, notebook_id=notebook_id, source_id=source_id, note_id=note_id,
         )
-        if target_nb is None or not _can_access_notebook(conn, target_nb, _user["id"]):
+        if target_nb is None or not can_access_notebook(conn, target_nb, _user["id"]):
             # Mirror the not-found contract used elsewhere so we don't
             # confirm existence of resources the caller cannot see.
             raise HTTPException(404, "Not found")
@@ -545,13 +500,13 @@ async def create_comment(body: CommentCreate, user: dict = Depends(get_current_u
                 raise HTTPException(404, "Parent comment not found")
             notebook_id = parent["notebook_id"]
 
-        target_nb = _resolve_notebook_for_filter(
+        target_nb = resolve_notebook_for_target(
             conn,
             notebook_id=notebook_id,
             source_id=body.source_id,
             note_id=body.note_id,
         )
-        if target_nb is not None and not _can_access_notebook(conn, target_nb, user["id"]):
+        if target_nb is not None and not can_access_notebook(conn, target_nb, user["id"]):
             raise HTTPException(404, "Not found")
 
         conn.execute("""

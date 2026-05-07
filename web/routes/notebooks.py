@@ -14,6 +14,7 @@ from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from routes._authz import notebook_or_404 as _nb_or_404
 from routes.auth import get_current_user
 
 from core.config import GEMINI_MODEL
@@ -107,31 +108,6 @@ def _safe_filename(name: str) -> str:
     if clean.split(".")[0].upper() in _RESERVED_NAMES:
         raise HTTPException(400, "Invalid filename")
     return clean
-
-
-def _nb_or_404(nb_id: str, user_id: str | None = None) -> dict:
-    """Fetch a notebook or raise 404.
-
-    When *user_id* is given, ownership is enforced: a 403 is raised if the
-    notebook belongs to another user, and a 404 is raised when the row is
-    unowned (``user_id IS NULL``).  Treating NULL-owner rows as 404 closes
-    a soft-IDOR where any authenticated user could read or mutate legacy /
-    migrated notebooks if they obtained the ID, even though the listing
-    endpoint never exposed them.
-    """
-    with get_conn() as conn:
-        row = conn.execute("SELECT * FROM notebooks WHERE id=?", (nb_id,)).fetchone()
-    if row is None:
-        raise HTTPException(404, f"Notebook {nb_id} not found")
-    nb = dict(row)
-    if user_id is not None:
-        owner = nb.get("user_id")
-        if owner is None:
-            # Unowned legacy row — invisible to everyone via the API.
-            raise HTTPException(404, f"Notebook {nb_id} not found")
-        if owner != user_id:
-            raise HTTPException(403, "Access denied")
-    return nb
 
 
 def _src_or_404(src_id: str, nb_id: str) -> dict:
